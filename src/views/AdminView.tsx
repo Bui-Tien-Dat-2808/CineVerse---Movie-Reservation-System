@@ -40,14 +40,6 @@ interface ShowtimeItem {
   room?: { name?: string; room_type?: string }
 }
 
-interface TMDBResultItem {
-  tmdb_id: number
-  title: string
-  release_date?: string
-  poster_path?: string
-  overview?: string
-}
-
 interface PaginationControlProps {
   currentPage: number
   totalItems: number
@@ -378,13 +370,6 @@ export default function AdminView() {
   const [vMaxPerUser, setVMaxPerUser] = useState<number>(1)
   const [vLoading, setVLoading] = useState(false)
 
-  // TMDB Import Modal State
-  const [tmdbModalOpen, setTmdbModalOpen] = useState(false)
-  const [tmdbQuery, setTmdbQuery] = useState('')
-  const [tmdbResults, setTmdbResults] = useState<TMDBResultItem[]>([])
-  const [tmdbLoading, setTmdbLoading] = useState(false)
-  const [syncingId, setSyncingId] = useState<number | null>(null)
-
 
   // Create Showtime Form State
   const [stMovieId, setStMovieId] = useState<number>(0)
@@ -546,38 +531,6 @@ export default function AdminView() {
     }
   }
 
-  // Handle TMDB Search
-  async function handleTmdbSearch(e: React.FormEvent) {
-    e.preventDefault()
-    if (!tmdbQuery.trim()) return
-    setTmdbLoading(true)
-    try {
-      const { data } = await apiClient.get<any>(`/api/v1/movies/tmdb/search?query=${encodeURIComponent(tmdbQuery)}`)
-      setTmdbResults(data.results ?? [])
-    } catch (err) {
-      console.error('TMDB search error:', err)
-    } finally {
-      setTmdbLoading(false)
-    }
-  }
-
-  // Handle TMDB Sync / Import Movie
-  async function handleImportTmdbMovie(tmdbId: number) {
-    setSyncingId(tmdbId)
-    setActionMsg(null)
-    try {
-      await apiClient.post(`/api/v1/movies/tmdb/sync/${tmdbId}`)
-      setActionMsg({ type: 'success', text: `Đã đồng bộ thành công phim từ TMDB (ID: ${tmdbId})!` })
-      await loadAllData()
-      setTmdbModalOpen(false)
-    } catch (err: any) {
-      const msg = err.response?.data?.detail ?? 'Đồng bộ phim thất bại.'
-      setActionMsg({ type: 'error', text: typeof msg === 'string' ? msg : JSON.stringify(msg) })
-    } finally {
-      setSyncingId(null)
-    }
-  }
-
   // Toggle Movie Status
   async function handleToggleMovieStatus(movie: MovieItem) {
     const nextStatus =
@@ -678,7 +631,12 @@ export default function AdminView() {
       const { data } = await apiClient.post<any>(`/api/v1/movies/tmdb/auto-sync?limit=${syncLimit}`)
       let msgText = data.message ?? 'Đã đồng bộ tự động thành công từ TMDB!'
       if (data.failed_items && data.failed_items.length > 0) {
-        msgText += ` (${data.failed_items.length} phim bị bỏ qua do thiếu thông tin)`
+        const reasons = data.failed_items
+          .slice(0, 5)
+          .map((f: any) => `• ${f.title ?? f.tmdb_id}: ${f.reason}`)
+          .join('\n')
+        msgText += `\n${data.failed_items.length} phim bị bỏ qua:\n${reasons}` +
+          (data.failed_items.length > 5 ? `\n... và ${data.failed_items.length - 5} phim khác` : '')
       }
       setActionMsg({ type: 'success', text: msgText })
       await loadAllData()
@@ -993,19 +951,6 @@ export default function AdminView() {
               >
                 <span>🚀</span>
                 <span>{autoSyncLoading ? 'Đang quét TMDB...' : 'Tự Động Lấy Phim Từ TMDB'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setTmdbQuery('')
-                  setTmdbResults([])
-                  setTmdbModalOpen(true)
-                }}
-                className="bg-white/5 hover:bg-white/10 text-[#f0ede8] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-bold cursor-pointer transition-all flex items-center gap-2"
-              >
-                <span>🔍</span>
-                <span>Tìm Phim TMDB...</span>
               </button>
             </div>
           </div>
@@ -1951,79 +1896,6 @@ export default function AdminView() {
         </div>
       )}
 
-      {/* TMDB IMPORT MODAL */}
-      {tmdbModalOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
-          <div className="bg-[#111118] border border-white/10 rounded-2xl p-6 max-w-2xl w-full shadow-2xl max-h-[85vh] flex flex-col">
-            <div className="flex justify-between items-center pb-4 border-b border-white/10">
-              <div>
-                <h3 className="font-display font-bold text-xl text-[#f0ede8]">Tìm & Nhập Phim Từ TMDB API</h3>
-                <p className="text-xs text-[#a09e9a]">Nhập tên phim để tra cứu cơ sở dữ liệu điện ảnh toàn cầu TMDB.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setTmdbModalOpen(false)}
-                className="text-[#a09e9a] hover:text-[#f0ede8] text-xl bg-transparent border-0 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleTmdbSearch} className="py-4 flex gap-2">
-              <input
-                type="text"
-                required
-                value={tmdbQuery}
-                onChange={(e) => setTmdbQuery(e.target.value)}
-                placeholder="Nhập tên phim tiếng Anh hoặc Việt (VD: Batman, Marvel, Avatar...)"
-                className="flex-1 px-4 py-2.5 bg-[#09090e] border border-white/10 rounded-xl text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none"
-              />
-              <button
-                type="submit"
-                disabled={tmdbLoading}
-                className="bg-[#e8b84b] text-[#09090e] px-6 py-2.5 rounded-xl text-xs font-bold cursor-pointer disabled:opacity-50"
-              >
-                {tmdbLoading ? 'Đang tìm...' : 'Tìm kiếm'}
-              </button>
-            </form>
-
-            <div className="flex-1 overflow-y-auto space-y-3 py-2 pr-1">
-              {tmdbResults.map((item) => {
-                const posterUrl = item.poster_path
-                  ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
-                  : 'https://images.unsplash.com/photo-1534996858221-380b92700493?w=100'
-
-                const isSyncing = syncingId === item.tmdb_id
-
-                return (
-                  <div
-                    key={item.tmdb_id}
-                    className="bg-[#09090e] border border-white/10 rounded-xl p-3.5 flex justify-between items-center gap-4"
-                  >
-                    <div className="flex items-center gap-3">
-                      <img src={posterUrl} alt={item.title} className="w-10 h-14 object-cover rounded-lg border border-white/10 shrink-0" />
-                      <div>
-                        <h4 className="font-display font-bold text-sm text-[#f0ede8]">{item.title}</h4>
-                        <p className="text-xs text-[#a09e9a]">📅 Khởi chiếu: {item.release_date || 'N/A'}</p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      disabled={isSyncing}
-                      onClick={() => handleImportTmdbMovie(item.tmdb_id)}
-                      className="bg-[#e8b84b] text-[#09090e] px-4 py-2 rounded-lg text-xs font-bold cursor-pointer disabled:opacity-50 shrink-0"
-                    >
-                      {isSyncing ? 'Đang nhập...' : '+ Nhập Phim Này'}
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* AUTO-SCHEDULE MODAL (PHƯƠNG ÁN A) */}
       {autoModalOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
@@ -2255,7 +2127,7 @@ export default function AdminView() {
 
               {/* Room Selection Section */}
               <div className="bg-[#09090e] p-4 rounded-xl border border-white/5 space-y-3 text-xs">
-                <div className="flex justify-between items-center">
+                <div className="flex flex-wrap justify-between items-center gap-2">
                   <label className="font-bold text-[#f0ede8] flex items-center gap-1.5">
                     <span>🏛️</span>
                     <span>Chọn Phòng Chiếu Áp Dụng</span>
@@ -2279,83 +2151,139 @@ export default function AdminView() {
                         onChange={() => setAutoRoomSelectionMode('custom')}
                         className="accent-[#e8b84b] cursor-pointer"
                       />
-                      <span>Tự chọn phòng cụ thể {autoRoomSelectionMode === 'custom' && `(${autoSelectedRoomIds.length})`}</span>
+                      <span>Tự chọn phòng cụ thể {autoRoomSelectionMode === 'custom' && `(${autoSelectedRoomIds.length}/${rooms.length})`}</span>
                     </label>
                   </div>
                 </div>
 
                 {autoRoomSelectionMode === 'custom' && (
-                  <div className="pt-2 border-t border-white/10 space-y-3">
-                    {/* Quick group toggle buttons */}
-                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                      <span className="text-[#a09e9a]">Chọn nhanh loại phòng:</span>
-                      {['standard', 'vip', 'imax', '3d', '4d', 'kids'].map((typeKey) => {
-                        const typeRooms = rooms.filter((r) => (r.room_type || 'standard') === typeKey)
-                        if (typeRooms.length === 0) return null
-                        const typeIds = typeRooms.map((r) => r.id)
-                        const allSelected = typeIds.every((id) => autoSelectedRoomIds.includes(id))
-                        const label =
-                          typeKey === 'standard'
-                            ? 'Standard'
-                            : typeKey === 'vip'
-                            ? 'VIP'
-                            : typeKey === 'imax'
-                            ? 'IMAX'
-                            : typeKey === '3d'
-                            ? '3D'
-                            : typeKey === '4d'
-                            ? '4DX'
-                            : 'Kids'
+                  <div className="pt-3 border-t border-white/10 space-y-3">
+                    {/* Quick Category Action Bar */}
+                    <div className="flex flex-wrap justify-between items-center gap-2 bg-[#111118] p-2.5 rounded-xl border border-white/5">
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                        <span className="text-[#a09e9a] font-medium mr-1">Lọc loại phòng:</span>
+                        {['standard', 'vip', 'imax', '3d', '4d', 'kids'].map((typeKey) => {
+                          const typeRooms = rooms.filter((r) => (r.room_type || 'standard') === typeKey)
+                          if (typeRooms.length === 0) return null
+                          const typeIds = typeRooms.map((r) => r.id)
+                          const selectedCount = typeIds.filter((id) => autoSelectedRoomIds.includes(id)).length
+                          const isAllSelected = selectedCount === typeIds.length
 
-                        return (
-                          <button
-                            key={typeKey}
-                            type="button"
-                            onClick={() => {
-                              if (allSelected) {
-                                setAutoSelectedRoomIds(autoSelectedRoomIds.filter((id) => !typeIds.includes(id)))
-                              } else {
-                                const newSet = new Set([...autoSelectedRoomIds, ...typeIds])
-                                setAutoSelectedRoomIds(Array.from(newSet))
-                              }
-                            }}
-                            className={`px-2 py-0.5 rounded border transition-colors cursor-pointer font-medium ${
-                              allSelected
-                                ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
-                                : 'bg-white/5 text-[#a09e9a] border-white/10 hover:text-[#f0ede8]'
-                            }`}
-                          >
-                            {allSelected ? `✓ ${label} (${typeRooms.length})` : `+ tất cả ${label} (${typeRooms.length})`}
-                          </button>
-                        )
-                      })}
+                          const label =
+                            typeKey === 'standard'
+                              ? 'Standard'
+                              : typeKey === 'vip'
+                              ? 'VIP'
+                              : typeKey === 'imax'
+                              ? 'IMAX'
+                              : typeKey === '3d'
+                              ? '3D'
+                              : typeKey === '4d'
+                              ? '4DX'
+                              : 'Kids'
+
+                          return (
+                            <button
+                              key={typeKey}
+                              type="button"
+                              onClick={() => {
+                                if (isAllSelected) {
+                                  setAutoSelectedRoomIds(autoSelectedRoomIds.filter((id) => !typeIds.includes(id)))
+                                } else {
+                                  const newSet = new Set([...autoSelectedRoomIds, ...typeIds])
+                                  setAutoSelectedRoomIds(Array.from(newSet))
+                                }
+                              }}
+                              className={`px-2.5 py-1 rounded-lg border transition-all cursor-pointer font-bold text-[11px] flex items-center gap-1 ${
+                                isAllSelected
+                                  ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
+                                  : selectedCount > 0
+                                  ? 'bg-[#e8b84b]/20 text-[#e8b84b] border-[#e8b84b]/40'
+                                  : 'bg-white/5 text-[#a09e9a] border-white/10 hover:text-[#f0ede8] hover:border-white/20'
+                              }`}
+                            >
+                              <span>{isAllSelected ? '✓' : selectedCount > 0 ? '•' : '+'}</span>
+                              <span>{label}</span>
+                              <span className="opacity-75">({selectedCount}/{typeRooms.length})</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      {/* Select All / Deselect All Shortcuts */}
+                      <div className="flex items-center gap-2 text-[11px] ml-auto">
+                        <button
+                          type="button"
+                          onClick={() => setAutoSelectedRoomIds(rooms.map((r) => r.id))}
+                          className="text-[#e8b84b] hover:underline font-medium cursor-pointer"
+                        >
+                          ✓ Chọn tất cả
+                        </button>
+                        <span className="text-white/20">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setAutoSelectedRoomIds([])}
+                          className="text-[#a09e9a] hover:text-[#f0ede8] hover:underline cursor-pointer"
+                        >
+                          ✕ Bỏ chọn
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-h-[160px] overflow-y-auto pr-1">
+                    {/* Room Grid Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-[220px] overflow-y-auto pr-1">
                       {rooms.map((r) => {
                         const isChecked = autoSelectedRoomIds.includes(r.id)
+                        const roomTypeUpper = (r.room_type || 'standard').toUpperCase()
+
+                        // Clean title: Avoid redundant (imax) (imax)
+                        const cleanName = r.name.replace(new RegExp(`\\(${r.room_type}\\)`, 'gi'), '').trim()
+
+                        const typeBadgeStyle =
+                          r.room_type === 'imax'
+                            ? 'text-amber-400 bg-amber-400/10 border-amber-400/30'
+                            : r.room_type === 'vip'
+                            ? 'text-purple-400 bg-purple-400/10 border-purple-400/30'
+                            : r.room_type === '4d'
+                            ? 'text-blue-400 bg-blue-400/10 border-blue-400/30'
+                            : r.room_type === '3d'
+                            ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30'
+                            : r.room_type === 'kids'
+                            ? 'text-pink-400 bg-pink-400/10 border-pink-400/30'
+                            : 'text-slate-400 bg-slate-400/10 border-slate-400/30'
+
                         return (
                           <label
                             key={r.id}
-                            className={`flex items-center gap-2 p-2 rounded-lg border transition-colors cursor-pointer select-none ${
+                            className={`p-2.5 rounded-xl border transition-all cursor-pointer select-none flex items-center justify-between gap-2.5 ${
                               isChecked
-                                ? 'bg-[rgba(232,184,75,0.12)] border-[#e8b84b] text-[#f0ede8]'
+                                ? 'bg-[#e8b84b]/15 border-[#e8b84b] text-[#f0ede8] shadow-md shadow-[#e8b84b]/5'
                                 : 'bg-[#111118] border-white/10 text-[#a09e9a] hover:border-white/20'
                             }`}
                           >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setAutoSelectedRoomIds([...autoSelectedRoomIds, r.id])
-                                } else {
-                                  setAutoSelectedRoomIds(autoSelectedRoomIds.filter((id) => id !== r.id))
-                                }
-                              }}
-                              className="accent-[#e8b84b] cursor-pointer"
-                            />
-                            <span className="truncate font-medium">{r.name} ({r.room_type})</span>
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setAutoSelectedRoomIds([...autoSelectedRoomIds, r.id])
+                                  } else {
+                                    setAutoSelectedRoomIds(autoSelectedRoomIds.filter((id) => id !== r.id))
+                                  }
+                                }}
+                                className="accent-[#e8b84b] w-4 h-4 cursor-pointer shrink-0"
+                              />
+                              <div className="min-w-0">
+                                <div className="font-bold text-xs truncate text-[#f0ede8]">{cleanName}</div>
+                                <div className="text-[10px] text-[#a09e9a] flex items-center gap-1.5 mt-0.5">
+                                  <span className={`px-1.5 py-0.2 rounded border text-[9px] font-mono-data font-bold ${typeBadgeStyle}`}>
+                                    {roomTypeUpper}
+                                  </span>
+                                  <span>🪑 {r.total_seats || r.total_rows * r.total_cols} ghế</span>
+                                </div>
+                              </div>
+                            </div>
                           </label>
                         )
                       })}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../api/client'
+import { useTheme } from '../context/ThemeContext'
 import type { Movie } from '../types'
 
 interface ComingSoonMovieItem {
@@ -16,6 +17,9 @@ interface ComingSoonMovieItem {
 
 export default function ComingSoonView() {
   const navigate = useNavigate()
+  const { theme } = useTheme()
+  const isLight = theme === 'light'
+
   const [movies, setMovies] = useState<ComingSoonMovieItem[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -45,50 +49,84 @@ export default function ComingSoonView() {
   return (
     <div className="max-w-[1280px] mx-auto px-6 py-10 pb-20">
       {/* Header Banner */}
-      <div className="relative bg-gradient-to-r from-[#161622] via-[#111118] to-[#1a1405] border border-[#e8b84b]/20 rounded-2xl p-8 mb-10 overflow-hidden shadow-2xl">
+      <div
+        className={`relative border rounded-2xl p-8 mb-10 overflow-hidden shadow-2xl transition-colors ${
+          isLight
+            ? 'bg-gradient-to-r from-amber-500/10 via-amber-50/80 to-amber-100/50 border-amber-500/30 text-slate-900 shadow-amber-500/5'
+            : 'bg-gradient-to-r from-[#161622] via-[#111118] to-[#1a1405] border-[#e8b84b]/20 text-[#f0ede8]'
+        }`}
+      >
         <div className="relative z-10 max-w-2xl">
-          <span className="text-xs font-mono-data font-bold text-[#e8b84b] uppercase tracking-widest bg-[#e8b84b]/15 border border-[#e8b84b]/30 rounded-full px-3 py-1 inline-block mb-3">
+          <span
+            className={`text-xs font-mono-data font-bold uppercase tracking-widest border rounded-full px-3 py-1 inline-block mb-3 ${
+              isLight
+                ? 'text-amber-800 bg-amber-500/15 border-amber-500/30'
+                : 'text-[#e8b84b] bg-[#e8b84b]/15 border-[#e8b84b]/30'
+            }`}
+          >
             🎬 Bom Tấn Khởi Chiếu Rạp
           </span>
-          <h1 className="font-display font-black text-3xl sm:text-4xl text-[#f0ede8] mb-3 tracking-tight">
+          <h1
+            className={`font-display font-black text-3xl sm:text-4xl mb-3 tracking-tight ${
+              isLight ? 'text-slate-900' : 'text-[#f0ede8]'
+            }`}
+          >
             Phim Sắp Ra Mắt
           </h1>
-          <p className="text-sm text-[#a09e9a] leading-relaxed">
+          <p className={`text-sm leading-relaxed ${isLight ? 'text-slate-600 font-medium' : 'text-[#a09e9a]'}`}>
             Đón chờ những siêu phẩm điện ảnh bom tấn thế giới sắp đổ bộ rạp CineVerse. Đăng ký thông báo ngay để không bỏ lỡ ngày mở bán vé đầu tiên!
           </p>
         </div>
 
         {/* Decorative background ambient */}
-        <div className="absolute top-0 right-0 bottom-0 w-1/2 bg-gradient-to-l from-[#e8b84b]/10 to-transparent pointer-events-none" />
+        <div
+          className={`absolute top-0 right-0 bottom-0 w-1/2 bg-gradient-to-l pointer-events-none ${
+            isLight ? 'from-amber-400/20 to-transparent' : 'from-[#e8b84b]/10 to-transparent'
+          }`}
+        />
       </div>
 
       {/* Search Bar */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-8">
         <div className="relative w-full sm:w-80">
-          <span className="absolute left-3 top-2.5 text-[#6e6c68] text-sm">🔍</span>
+          <span className={`absolute left-3 top-2.5 text-sm ${isLight ? 'text-slate-400' : 'text-[#6e6c68]'}`}>🔍</span>
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Tìm kiếm phim sắp chiếu..."
-            className="w-full pl-9 pr-4 py-2.5 bg-[#111118] border border-white/10 rounded-xl text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none"
+            className={`w-full pl-9 pr-4 py-2.5 border rounded-xl text-sm outline-none transition-colors ${
+              isLight
+                ? 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-amber-500'
+                : 'bg-[#111118] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
+            }`}
           />
         </div>
 
-        <div className="text-xs text-[#a09e9a] font-mono-data">
-          Hiển thị <span className="text-[#e8b84b] font-bold">{filteredMovies.length}</span> phim sắp khởi chiếu
+        <div className={`text-xs font-mono-data ${isLight ? 'text-slate-600' : 'text-[#a09e9a]'}`}>
+          Hiển thị{' '}
+          <span className={`font-bold ${isLight ? 'text-amber-700' : 'text-[#e8b84b]'}`}>
+            {filteredMovies.length}
+          </span>{' '}
+          phim sắp khởi chiếu
         </div>
       </div>
 
       {/* Movies Grid */}
       {loading ? (
-        <div className="text-center py-20 text-xs text-[#a09e9a] font-mono-data animate-pulse">
+        <div className={`text-center py-20 text-xs font-mono-data animate-pulse ${isLight ? 'text-slate-500' : 'text-[#a09e9a]'}`}>
           Đang tải danh sách phim sắp ra mắt...
         </div>
       ) : filteredMovies.length === 0 ? (
-        <div className="bg-[#111118] border border-white/10 rounded-2xl p-16 text-center text-[#a09e9a]">
+        <div
+          className={`border rounded-2xl p-16 text-center ${
+            isLight ? 'bg-white border-slate-200 text-slate-600' : 'bg-[#111118] border-white/10 text-[#a09e9a]'
+          }`}
+        >
           <span className="text-5xl block mb-4">🎥</span>
-          <h3 className="font-display font-bold text-xl text-[#f0ede8] mb-2">Chưa tìm thấy phim phù hợp</h3>
+          <h3 className={`font-display font-bold text-xl mb-2 ${isLight ? 'text-slate-900' : 'text-[#f0ede8]'}`}>
+            Chưa tìm thấy phim phù hợp
+          </h3>
           <p className="text-xs">Vui lòng nhập từ khóa tìm kiếm khác.</p>
         </div>
       ) : (
@@ -106,10 +144,14 @@ export default function ComingSoonView() {
             return (
               <div
                 key={m.id}
-                className="bg-[#111118] border border-white/10 hover:border-[#e8b84b]/40 rounded-2xl overflow-hidden shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col group"
+                className={`border rounded-2xl overflow-hidden shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col group ${
+                  isLight
+                    ? 'bg-white border-slate-200 hover:border-amber-500/40 shadow-slate-200/60'
+                    : 'bg-[#111118] border-white/10 hover:border-[#e8b84b]/40 shadow-xl'
+                }`}
               >
                 {/* Poster Card */}
-                <div className="relative aspect-[2/3] overflow-hidden bg-[#09090e]">
+                <div className={`relative aspect-[2/3] overflow-hidden ${isLight ? 'bg-slate-100' : 'bg-[#09090e]'}`}>
                   <img
                     src={
                       m.poster_url ??
@@ -120,7 +162,13 @@ export default function ComingSoonView() {
                   />
 
                   {/* Release Date Badge */}
-                  <div className="absolute top-3 left-3 bg-[#09090e]/90 backdrop-blur-md border border-[#e8b84b]/40 rounded-lg px-2.5 py-1 text-[11px] font-mono-data text-[#e8b84b] font-bold shadow-lg">
+                  <div
+                    className={`absolute top-3 left-3 backdrop-blur-md border rounded-lg px-2.5 py-1 text-[11px] font-mono-data font-bold shadow-lg ${
+                      isLight
+                        ? 'bg-white/95 text-amber-800 border-amber-500/40'
+                        : 'bg-[#09090e]/90 text-[#e8b84b] border-[#e8b84b]/40'
+                    }`}
+                  >
                     📅 {releaseDateFmt}
                   </div>
 
@@ -135,10 +183,16 @@ export default function ComingSoonView() {
                 {/* Info Container */}
                 <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                   <div>
-                    <h3 className="font-display font-bold text-lg text-[#f0ede8] group-hover:text-[#e8b84b] transition-colors line-clamp-1 mb-1">
+                    <h3
+                      className={`font-display font-bold text-lg transition-colors line-clamp-1 mb-1 ${
+                        isLight
+                          ? 'text-slate-900 group-hover:text-amber-700'
+                          : 'text-[#f0ede8] group-hover:text-[#e8b84b]'
+                      }`}
+                    >
                       {m.title}
                     </h3>
-                    <p className="text-xs text-[#a09e9a] line-clamp-2 leading-relaxed">
+                    <p className={`text-xs line-clamp-2 leading-relaxed ${isLight ? 'text-slate-600' : 'text-[#a09e9a]'}`}>
                       {m.description || 'Siêu phẩm điện ảnh đáng mong chờ nhất năm tại rạp CineVerse.'}
                     </p>
                   </div>
@@ -161,7 +215,11 @@ export default function ComingSoonView() {
                     <button
                       type="button"
                       onClick={() => navigate(`/movie/${m.id}`)}
-                      className="w-full py-2 bg-white/5 hover:bg-white/10 text-[#a09e9a] hover:text-[#f0ede8] border border-white/10 rounded-lg text-xs font-medium cursor-pointer transition-colors"
+                      className={`w-full py-2 border rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                        isLight
+                          ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                          : 'bg-white/5 hover:bg-white/10 text-[#a09e9a] hover:text-[#f0ede8] border-white/10'
+                      }`}
                     >
                       ▶ Xem thông tin chi tiết
                     </button>

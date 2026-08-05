@@ -6,21 +6,25 @@ function isLoopbackHost(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
 }
 
-function resolveApiBaseUrl(): string {
-  if (!rawApiBaseUrl) return ''
+function getDefaultApiBaseUrl(): string {
+  if (typeof window === 'undefined') return ''
+  return `http://${window.location.hostname}:8000`
+}
 
-  // When the app is opened from a remote host, a localhost API URL would
-  // point to the viewer's machine instead of the app server. Fall back to
-  // same-origin requests so Vite can proxy them server-side.
+function resolveApiBaseUrl(): string {
+  if (!rawApiBaseUrl) return getDefaultApiBaseUrl()
+
   if (typeof window !== 'undefined') {
     try {
       const configuredUrl = new URL(rawApiBaseUrl, window.location.origin)
+      // If the configured URL still points to localhost while the UI is opened
+      // from a remote host, that URL would target the wrong machine. Prefer the
+      // backend that runs on the same host as the current UI.
       if (!isLoopbackHost(window.location.hostname) && isLoopbackHost(configuredUrl.hostname)) {
-        return ''
+        return getDefaultApiBaseUrl()
       }
     } catch {
-      // Keep the configured value if it is already a relative URL or otherwise
-      // valid for the current runtime.
+      return getDefaultApiBaseUrl()
     }
   }
 
