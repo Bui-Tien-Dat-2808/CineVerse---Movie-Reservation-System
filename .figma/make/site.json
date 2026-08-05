@@ -1,0 +1,12 @@
+{
+  "title": "CineVerse",
+  "description": "Đặt vé xem phim trực tuyến — Chọn phim, suất chiếu, ghế ngồi và thanh toán dễ dàng.",
+  "language": "vi",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
