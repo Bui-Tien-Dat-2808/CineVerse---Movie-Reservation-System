@@ -460,6 +460,48 @@ export default function AdminView() {
   const [autoGenerating, setAutoGenerating] = useState(false)
   const [autoConfirming, setAutoConfirming] = useState(false)
 
+  // Auto-Schedule Inline Preview Edit State
+  const [editingPreviewIdx, setEditingPreviewIdx] = useState<number | null>(null)
+  const [editPreviewRoomId, setEditPreviewRoomId] = useState<number>(0)
+  const [editPreviewStartStr, setEditPreviewStartStr] = useState<string>('')
+  const [editPreviewBasePrice, setEditPreviewBasePrice] = useState<number>(90000)
+  const [editPreviewVipPrice, setEditPreviewVipPrice] = useState<number>(120000)
+
+  const handleStartEditPreview = (idx: number, item: ProposedShowtimeItem) => {
+    setEditingPreviewIdx(idx)
+    setEditPreviewRoomId(item.room_id)
+    const d = new Date(item.start_time)
+    const pad = (n: number) => n.toString().padStart(2, '0')
+    const localIso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    setEditPreviewStartStr(localIso)
+    setEditPreviewBasePrice(Number(item.base_price))
+    setEditPreviewVipPrice(Number(item.vip_price))
+  }
+
+  const handleSaveEditPreview = (idx: number) => {
+    if (!autoPreviewList) return
+    const targetRoom = rooms.find((r) => r.id === editPreviewRoomId)
+    const startDt = new Date(editPreviewStartStr)
+    const item = autoPreviewList[idx]
+    const targetMovie = movies.find((m) => m.id === item.movie_id)
+    const durationMins = targetMovie?.duration_minutes || 120
+    const endDt = new Date(startDt.getTime() + durationMins * 60 * 1000)
+
+    const updated = [...autoPreviewList]
+    updated[idx] = {
+      ...item,
+      room_id: editPreviewRoomId,
+      room_name: targetRoom?.name || item.room_name,
+      room_type: targetRoom?.room_type || item.room_type,
+      start_time: startDt.toISOString(),
+      end_time: endDt.toISOString(),
+      base_price: editPreviewBasePrice,
+      vip_price: editPreviewVipPrice,
+    }
+    setAutoPreviewList(updated)
+    setEditingPreviewIdx(null)
+  }
+
   const [liveAnalytics, setLiveAnalytics] = useState<{
     total_revenue: number
     total_reservations: number
@@ -2494,6 +2536,7 @@ export default function AdminView() {
                         </thead>
                         <tbody className={`divide-y ${isDark ? 'divide-white/5 text-[#f0ede8]' : 'divide-slate-200 text-slate-900'}`}>
                           {autoPreviewList.map((item, idx) => {
+                            const isEditing = editingPreviewIdx === idx
                             const startDateObj = new Date(item.start_time)
                             const endDateObj = new Date(item.end_time)
                             const dateStr = startDateObj.toLocaleDateString('vi-VN', {
@@ -2510,6 +2553,83 @@ export default function AdminView() {
                               hour: '2-digit',
                               minute: '2-digit',
                             })
+
+                            if (isEditing) {
+                              return (
+                                <tr key={idx} className={isDark ? 'bg-amber-500/10' : 'bg-amber-50'}>
+                                  <td className="py-3 px-3 font-mono-data text-center text-[#e8b84b] font-bold">{idx + 1}</td>
+                                  <td className="py-3 px-3 font-medium">
+                                    <div className={`font-semibold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{item.movie_title}</div>
+                                  </td>
+                                  <td className="py-3 px-3">
+                                    <select
+                                      value={editPreviewRoomId}
+                                      onChange={(e) => setEditPreviewRoomId(Number(e.target.value))}
+                                      className={`w-full p-1 rounded border text-xs font-semibold ${
+                                        isDark ? 'bg-[#111118] border-white/20 text-[#f0ede8]' : 'bg-white border-slate-300 text-slate-900'
+                                      }`}
+                                    >
+                                      {rooms.map((r) => (
+                                        <option key={r.id} value={r.id}>
+                                          {r.name} ({r.room_type})
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </td>
+                                  <td colSpan={2} className="py-3 px-3">
+                                    <input
+                                      type="datetime-local"
+                                      value={editPreviewStartStr}
+                                      onChange={(e) => setEditPreviewStartStr(e.target.value)}
+                                      className={`w-full p-1 rounded border text-xs font-mono-data font-semibold ${
+                                        isDark ? 'bg-[#111118] border-white/20 text-[#f0ede8]' : 'bg-white border-slate-300 text-slate-900'
+                                      }`}
+                                    />
+                                  </td>
+                                  <td className="py-3 px-3">
+                                    <div className="flex gap-1 items-center">
+                                      <input
+                                        type="number"
+                                        step="1000"
+                                        value={editPreviewBasePrice}
+                                        onChange={(e) => setEditPreviewBasePrice(Number(e.target.value))}
+                                        className={`w-20 p-1 rounded border text-xs font-mono-data ${
+                                          isDark ? 'bg-[#111118] border-white/20 text-[#f0ede8]' : 'bg-white border-slate-300 text-slate-900'
+                                        }`}
+                                      />
+                                      <span>/</span>
+                                      <input
+                                        type="number"
+                                        step="1000"
+                                        value={editPreviewVipPrice}
+                                        onChange={(e) => setEditPreviewVipPrice(Number(e.target.value))}
+                                        className={`w-20 p-1 rounded border text-xs font-mono-data ${
+                                          isDark ? 'bg-[#111118] border-white/20 text-[#f0ede8]' : 'bg-white border-slate-300 text-slate-900'
+                                        }`}
+                                      />
+                                    </div>
+                                  </td>
+                                  <td className="py-2.5 text-right pr-2">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveEditPreview(idx)}
+                                        className="text-[#2ecc71] font-bold hover:underline text-[11px] cursor-pointer"
+                                      >
+                                        ✓ Lưu
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingPreviewIdx(null)}
+                                        className="text-[#a09e9a] hover:underline text-[11px] cursor-pointer"
+                                      >
+                                        ✕ Hủy
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            }
 
                             return (
                               <tr key={idx} className={isDark ? 'hover:bg-white/5 transition-colors' : 'hover:bg-slate-50 transition-colors'}>
@@ -2544,15 +2664,24 @@ export default function AdminView() {
                                   {fmt(item.base_price)} / {fmt(item.vip_price)}
                                 </td>
                               <td className="py-2.5 text-right pr-2">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setAutoPreviewList(autoPreviewList.filter((_, i) => i !== idx))
-                                  }}
-                                  className="text-[#e07060] hover:underline text-[11px] cursor-pointer"
-                                >
-                                  Bỏ Qua
-                                </button>
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditPreview(idx, item)}
+                                    className="text-[#e8b84b] hover:underline text-[11px] cursor-pointer font-semibold"
+                                  >
+                                    ✏️ Sửa
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setAutoPreviewList(autoPreviewList.filter((_, i) => i !== idx))
+                                    }}
+                                    className="text-[#e07060] hover:underline text-[11px] cursor-pointer"
+                                  >
+                                    Bỏ Qua
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           )
