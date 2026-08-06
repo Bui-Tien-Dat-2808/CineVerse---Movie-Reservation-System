@@ -1,5 +1,6 @@
 import type { SeatItem } from '../../../types'
 import { cn } from '../../../lib/utils'
+import { useTheme } from '../../../context/ThemeContext'
 
 interface SeatMapProps {
   selectedSeats: Set<string>
@@ -9,9 +10,12 @@ interface SeatMapProps {
 }
 
 export default function SeatMap({ selectedSeats, onToggle, seats, isLoading }: SeatMapProps) {
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
+
   if (isLoading) {
     return (
-      <div className="py-20 text-center text-xs font-mono-data text-[#a09e9a] animate-pulse">
+      <div className={`py-20 text-center text-xs font-mono-data ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'} animate-pulse`}>
         ⏳ Đang cập nhật sơ đồ ghế từ hệ thống...
       </div>
     )
@@ -47,7 +51,7 @@ export default function SeatMap({ selectedSeats, onToggle, seats, isLoading }: S
             boxShadow: '0 4px 30px rgba(232,184,75,0.2)',
           }}
         />
-        <p className="font-mono-data text-[10px] text-[#6e6c68] tracking-[3px] uppercase">
+        <p className={`font-mono-data text-[10px] ${isDark ? 'text-[#6e6c68]' : 'text-slate-600 font-bold'} tracking-[3px] uppercase`}>
           Màn hình
         </p>
       </div>
@@ -59,7 +63,7 @@ export default function SeatMap({ selectedSeats, onToggle, seats, isLoading }: S
 
           return (
             <div key={row} className="flex justify-center items-center gap-1.5 mb-1.5">
-              <span className="font-mono-data text-[11px] text-[#6e6c68] w-5 text-right select-none">
+              <span className={`font-mono-data text-[11px] ${isDark ? 'text-[#6e6c68]' : 'text-slate-600 font-bold'} w-5 text-right select-none`}>
                 {row}
               </span>
 
@@ -78,14 +82,20 @@ export default function SeatMap({ selectedSeats, onToggle, seats, isLoading }: S
                       disabled={taken}
                       title={`${key}${isVip ? ' (VIP)' : ''}${taken ? ' (Đã được giữ/đặt)' : ''}`}
                       className={cn(
-                        'w-8 h-7 rounded-sm font-mono-data text-[9px] transition-all duration-[120ms] border',
+                        'w-8 h-7 rounded-sm font-mono-data text-[9px] transition-all duration-[120ms] border font-bold',
                         taken
-                          ? 'bg-[#2e1f1f] border-[#3a2a2a] text-[#5a3a3a] cursor-not-allowed'
+                          ? isDark
+                            ? 'bg-[#2e1f1f] border-[#3a2a2a] text-[#5a3a3a] cursor-not-allowed'
+                            : 'bg-slate-200 border-slate-300 text-slate-400 cursor-not-allowed opacity-70'
                           : selected
-                            ? 'bg-[#e8b84b] border-[#e8b84b] border-2 text-[#09090e] scale-105'
+                            ? 'bg-[#e8b84b] border-[#e8b84b] border-2 text-[#09090e] scale-105 shadow-sm'
                             : isVip
-                              ? 'bg-[rgba(232,184,75,0.15)] border-[rgba(232,184,75,0.5)] text-[#e8b84b] cursor-pointer hover:bg-[rgba(232,184,75,0.3)]'
-                              : 'bg-[#2a2a3a] border-[rgba(240,237,232,0.3)] text-[#c0bdb8] cursor-pointer hover:bg-[#3e3e52]',
+                              ? isDark
+                                ? 'bg-[rgba(232,184,75,0.15)] border-[rgba(232,184,75,0.5)] text-[#e8b84b] cursor-pointer hover:bg-[rgba(232,184,75,0.3)]'
+                                : 'bg-amber-100/90 border-amber-400 text-amber-900 cursor-pointer hover:bg-amber-200 shadow-xs'
+                              : isDark
+                                ? 'bg-[#2a2a3a] border-[rgba(240,237,232,0.3)] text-[#c0bdb8] cursor-pointer hover:bg-[#3e3e52]'
+                                : 'bg-slate-100 border-slate-300 text-slate-700 cursor-pointer hover:bg-slate-200 hover:border-slate-400 shadow-xs',
                       )}
                     >
                       {seat.col_number}
@@ -94,7 +104,7 @@ export default function SeatMap({ selectedSeats, onToggle, seats, isLoading }: S
                 })}
               </div>
 
-              <span className="font-mono-data text-[11px] text-[#6e6c68] w-5 select-none">
+              <span className={`font-mono-data text-[11px] ${isDark ? 'text-[#6e6c68]' : 'text-slate-600 font-bold'} w-5 select-none`}>
                 {row}
               </span>
             </div>

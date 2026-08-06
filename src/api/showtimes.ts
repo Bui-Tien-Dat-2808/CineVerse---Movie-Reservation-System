@@ -69,7 +69,7 @@ export function mapShowtimeResponse(st: ShowtimeAPIResponse): ShowTime {
 
 /** GET /api/v1/showtimes/?movie_id=X */
 export async function fetchShowtimesByMovie(movieId: number, dateStr?: string): Promise<ShowTime[]> {
-  let url = `/api/v1/showtimes/?movie_id=${movieId}`
+  let url = `/api/v1/showtimes/?movie_id=${movieId}&page_size=500`
   if (dateStr) {
     url += `&date=${dateStr}`
   }

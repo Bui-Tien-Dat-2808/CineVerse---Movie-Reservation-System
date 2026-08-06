@@ -2,19 +2,29 @@ import { cn } from '../../../lib/utils'
 import { getDateList } from '../../../lib/utils'
 
 interface DatePickerProps {
+  dates?: Date[]
   selectedDate: number
   onDateChange: (i: number) => void
 }
 
-const DATES = getDateList(7)
+const DEFAULT_DATES = getDateList(7)
 
-export default function DatePicker({ selectedDate, onDateChange }: DatePickerProps) {
+function formatYYYYMMDD(d: Date): string {
+  const year = d.getFullYear()
+  const month = (d.getMonth() + 1).toString().padStart(2, '0')
+  const day = d.getDate().toString().padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+export default function DatePicker({ dates = DEFAULT_DATES, selectedDate, onDateChange }: DatePickerProps) {
+  const todayStr = formatYYYYMMDD(new Date())
+
   return (
     <div>
       <h3 className="font-display text-lg font-semibold mb-4">Chọn ngày chiếu</h3>
       <div className="flex gap-2 flex-wrap">
-        {DATES.map((d, i) => {
-          const isToday = i === 0
+        {dates.map((d, i) => {
+          const isToday = formatYYYYMMDD(d) === todayStr
           const active = selectedDate === i
           return (
             <button
@@ -23,14 +33,14 @@ export default function DatePicker({ selectedDate, onDateChange }: DatePickerPro
               className={cn(
                 'px-3.5 py-2.5 rounded text-center min-w-[64px] cursor-pointer border transition-all duration-150',
                 active
-                  ? 'border-[#e8b84b] bg-[rgba(232,184,75,0.12)] text-[#e8b84b]'
-                  : 'border-white/[0.08] bg-[#111118] text-[#a09e9a] hover:border-white/20',
+                  ? 'border-[#e8b84b] bg-[rgba(232,184,75,0.12)] text-[#e8b84b] font-bold shadow-sm'
+                  : 'border-white/[0.08] bg-[#111118] text-[#a09e9a] hover:border-white/20 hover:text-[#f0ede8]',
               )}
             >
               <div className="font-mono-data text-lg font-semibold leading-none">
                 {d.getDate()}
               </div>
-              <div className="text-[10px] mt-1 uppercase tracking-wide">
+              <div className="text-[10px] mt-1 uppercase tracking-wide font-medium">
                 {isToday ? 'Hôm nay' : d.toLocaleDateString('vi-VN', { weekday: 'short' })}
               </div>
             </button>

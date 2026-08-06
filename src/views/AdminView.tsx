@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { apiClient } from '../api/client'
 import { fmt } from '../lib/utils'
 
@@ -23,6 +24,19 @@ interface RoomItem {
   total_rows: number
   total_cols: number
   total_seats: number
+}
+
+interface ProposedShowtimeItem {
+  movie_id: number
+  movie_title: string
+  room_id: number
+  room_name: string
+  room_type?: string
+  matched_genre?: string
+  start_time: string
+  end_time: string
+  base_price: number
+  vip_price: number
 }
 
 interface ShowtimeItem {
@@ -303,6 +317,8 @@ export default function AdminView() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { user, isAuthenticated, isAuthLoading } = useAuth()
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
 
   const tabParam = searchParams.get('tab') as
     | 'movies'
@@ -315,14 +331,26 @@ export default function AdminView() {
 
   const [activeTabState, setActiveTabState] = useState<
     'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'analytics' | 'users'
-  >(tabParam || 'movies')
+  >(() => {
+    if (tabParam) return tabParam
+    const stored = localStorage.getItem('admin_active_tab')
+    return (stored as any) || 'movies'
+  })
 
   const activeTab = tabParam || activeTabState
 
   const setActiveTab = (tab: 'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'analytics' | 'users') => {
     setActiveTabState(tab)
+    localStorage.setItem('admin_active_tab', tab)
     setSearchParams({ tab })
   }
+
+  // Ensure URL query param stays updated with tab
+  useEffect(() => {
+    if (activeTab && !searchParams.get('tab')) {
+      setSearchParams({ tab: activeTab }, { replace: true })
+    }
+  }, [activeTab, searchParams, setSearchParams])
 
   // Sub-tab filter for Movies management (Đang chiếu vs Sắp ra mắt)
   const [movieSubTab, setMovieSubTab] = useState<'now_showing' | 'coming_soon' | 'all'>('now_showing')
@@ -339,6 +367,8 @@ export default function AdminView() {
     if (isAuthLoading) return
 
     if (!isAuthenticated || user?.role !== 'admin') {
+      // If access_token exists, do not kick out while loading credentials
+      if (localStorage.getItem('access_token')) return
       navigate('/')
       return
     }
@@ -383,6 +413,21 @@ export default function AdminView() {
   const [stFilterMovieId, setStFilterMovieId] = useState<number | 'all'>('all')
   const [stFilterRoomId, setStFilterRoomId] = useState<number | 'all'>('all')
 
+  // Create Room Form State
+  const [rName, setRName] = useState('')
+  const [rType, setRType] = useState('standard')
+  const [rRows, setRRows] = useState(8)
+  const [rCols, setRCols] = useState(10)
+  const [rLoading, setRLoading] = useState(false)
+
+  const safeRooms = useMemo(() => (Array.isArray(rooms) ? rooms : []), [rooms])
+
+  const nextRoomNum = useMemo(() => {
+    const targetRooms = safeRooms.filter((r) => (r?.room_type || 'standard') === rType)
+    const maxNum = targetRooms.reduce((max, r) => Math.max(max, Number(r?.room_number) || 1), 0)
+    return maxNum + 1
+  }, [safeRooms, rType])
+
   const filteredShowtimes = useMemo(() => {
     return showtimes.filter((st) => {
       if (stFilterMovieId !== 'all' && st.movie_id !== stFilterMovieId) return false
@@ -405,6 +450,8 @@ export default function AdminView() {
   const [autoBasePrice, setAutoBasePrice] = useState(90000)
   const [autoVipPrice, setAutoVipPrice] = useState(120000)
   const [autoReplaceExisting, setAutoReplaceExisting] = useState(true)
+  const [autoSmartGenre, setAutoSmartGenre] = useState(true)
+  const [autoPricingByRoom, setAutoPricingByRoom] = useState(true)
   const [autoMovieSelectionMode, setAutoMovieSelectionMode] = useState<'all' | 'custom'>('all')
   const [autoSelectedMovieIds, setAutoSelectedMovieIds] = useState<number[]>([])
   const [autoRoomSelectionMode, setAutoRoomSelectionMode] = useState<'all' | 'custom'>('all')
@@ -412,13 +459,6 @@ export default function AdminView() {
   const [autoPreviewList, setAutoPreviewList] = useState<ProposedShowtimeItem[] | null>(null)
   const [autoGenerating, setAutoGenerating] = useState(false)
   const [autoConfirming, setAutoConfirming] = useState(false)
-
-  // Create Room Form State
-  const [rName, setRName] = useState('')
-  const [rType, setRType] = useState('standard')
-  const [rRows, setRRows] = useState(8)
-  const [rCols, setRCols] = useState(10)
-  const [rLoading, setRLoading] = useState(false)
 
   const [liveAnalytics, setLiveAnalytics] = useState<{
     total_revenue: number
@@ -473,7 +513,13 @@ export default function AdminView() {
       ])
 
       if (movRes?.data?.items) setMovies(movRes.data.items)
-      if (rmRes?.data) setRooms(rmRes.data)
+      if (rmRes?.data) {
+        if (Array.isArray(rmRes.data)) {
+          setRooms(rmRes.data)
+        } else if (Array.isArray((rmRes.data as any).items)) {
+          setRooms((rmRes.data as any).items)
+        }
+      }
       if (stRes?.data?.items) setShowtimes(stRes.data.items)
       if (anaRes?.data) setLiveAnalytics(anaRes.data)
       if (capRes?.data) setCapacityReport(capRes.data)
@@ -561,6 +607,21 @@ export default function AdminView() {
     }
   }
 
+  // Handle Delete Room
+  async function handleDeleteRoom(roomId: number, roomName: string) {
+    if (!confirm(`Bạn có chắc chắn muốn xóa phòng "${roomName}"?\nLưu ý: Bạn cần hủy các suất chiếu của phòng này trước khi xóa.`)) return
+    try {
+      const res = await apiClient.delete(`/api/v1/rooms/${roomId}`)
+      const msg = res.data?.message ?? `Đã xóa phòng "${roomName}" thành công!`
+      setActionMsg({ type: 'success', text: msg })
+      await loadAllData()
+    } catch (err: any) {
+      const msg = err.response?.data?.detail ?? 'Xóa phòng thất bại.'
+      setActionMsg({ type: 'error', text: typeof msg === 'string' ? msg : JSON.stringify(msg) })
+      alert(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    }
+  }
+
   // Handle Create Showtime
   async function handleCreateShowtime(e: React.FormEvent) {
     e.preventDefault()
@@ -597,19 +658,20 @@ export default function AdminView() {
   // Handle Create Room
   async function handleCreateRoom(e: React.FormEvent) {
     e.preventDefault()
-    if (!rName.trim()) return
 
     setRLoading(true)
     setActionMsg(null)
     try {
-      await apiClient.post('/api/v1/rooms/', {
-        name: rName.trim(),
+      const payloadName = rName.trim() ? rName.trim() : undefined
+      const res = await apiClient.post('/api/v1/rooms/', {
+        name: payloadName,
         room_type: rType,
         total_rows: Number(rRows),
         total_cols: Number(rCols),
       })
 
-      setActionMsg({ type: 'success', text: `Tạo phòng chiếu "${rName}" thành công với ${rRows * rCols} ghế!` })
+      const createdName = res.data?.name || payloadName || 'Phòng chiếu mới'
+      setActionMsg({ type: 'success', text: `Tạo phòng chiếu "${createdName}" thành công với ${rRows * rCols} ghế!` })
       setRName('')
       await loadAllData()
     } catch (err: any) {
@@ -686,6 +748,8 @@ export default function AdminView() {
         base_price: autoBasePrice,
         vip_price: autoVipPrice,
         replace_existing: autoReplaceExisting,
+        smart_genre_matching: autoSmartGenre,
+        auto_pricing_by_room_type: autoPricingByRoom,
       })
       setAutoPreviewList(res.data)
     } catch (err: any) {
@@ -1310,11 +1374,11 @@ export default function AdminView() {
                   onChange={(e) => setRName(e.target.value)}
                   placeholder={`Ví dụ: ${
                     rType === 'standard' ? 'Standard' : rType === 'vip' ? 'VIP' : rType === 'imax' ? 'IMAX' : rType === '4d' ? '4DX' : rType === 'kids' ? 'Kids' : '3D'
-                  } ${rooms.filter((r) => r.room_type === rType).length + 1}`}
+                  } ${nextRoomNum}`}
                   className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none"
                 />
                 <span className="text-[11px] text-[#e8b84b] font-mono-data mt-1 block">
-                  💡 Gợi ý: Đây sẽ là phòng thứ {rooms.filter((r) => r.room_type === rType).length + 1} của loại{' '}
+                  💡 Gợi ý: Đây sẽ là phòng thứ {nextRoomNum} của loại{' '}
                   {rType === 'standard'
                     ? 'Standard'
                     : rType === 'imax'
@@ -1337,7 +1401,9 @@ export default function AdminView() {
                   onChange={(e) => {
                     const newType = e.target.value
                     setRType(newType)
-                    const count = rooms.filter((r) => r.room_type === newType).length
+                    const targetRooms = (rooms || []).filter((r) => r.room_type === newType)
+                    const maxNum = targetRooms.reduce((max, r) => Math.max(max, r.room_number || 1), 0)
+                    const nextNum = maxNum + 1
                     const label =
                       newType === 'standard'
                         ? 'Standard'
@@ -1350,7 +1416,7 @@ export default function AdminView() {
                         : newType === 'kids'
                         ? 'Kids'
                         : '3D'
-                    setRName(`${label} ${count + 1}`)
+                    setRName(`${label} ${nextNum}`)
                   }}
                   className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none cursor-pointer"
                 >
@@ -1403,7 +1469,7 @@ export default function AdminView() {
           {/* Rooms Grid Grouped By Room Type */}
           <div className="lg:col-span-7 space-y-6">
             {['standard', 'vip', 'imax', '3d', '4d', 'kids'].map((typeKey) => {
-              const typeRooms = rooms.filter((r) => (r.room_type || 'standard') === typeKey)
+              const typeRooms = (rooms || []).filter((r) => (r?.room_type || 'standard') === typeKey)
               if (typeRooms.length === 0) return null
 
               const typeInfo =
@@ -1435,7 +1501,7 @@ export default function AdminView() {
                     {typeRooms.map((r) => (
                       <div
                         key={r.id}
-                        className="bg-[#111118] border border-white/10 rounded-2xl p-4 shadow-xl flex justify-between items-center hover:border-white/20 transition-colors"
+                        className="bg-[#111118] border border-white/10 rounded-2xl p-4 shadow-xl flex flex-wrap justify-between items-center gap-3 hover:border-white/20 transition-colors"
                       >
                         <div>
                           <div className="flex items-center gap-2 mb-1">
@@ -1447,6 +1513,18 @@ export default function AdminView() {
                           <p className="text-xs text-[#a09e9a]">
                             Bố trí: <strong className="text-[#f0ede8]">{r.total_rows} hàng × {r.total_cols} cột</strong> · Tổng sức chứa: <strong className="text-[#e8b84b]">{r.total_seats} ghế</strong>
                           </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRoom(r.id, r.name)}
+                            title={`Xóa phòng ${r.name}`}
+                            className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 shadow-sm"
+                          >
+                            <span>🗑️</span>
+                            <span>Xóa phòng</span>
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -1898,16 +1976,18 @@ export default function AdminView() {
 
       {/* AUTO-SCHEDULE MODAL (PHƯƠNG ÁN A) */}
       {autoModalOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
-          <div className="bg-[#111118] border border-white/10 rounded-2xl max-w-4xl w-full p-6 shadow-2xl max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
+          <div className={`rounded-2xl max-w-4xl w-full p-6 shadow-2xl max-h-[90vh] flex flex-col border transition-colors ${
+            isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
             {/* Modal Header */}
-            <div className="flex justify-between items-center border-b border-white/10 pb-4 shrink-0">
+            <div className={`flex justify-between items-center border-b pb-4 shrink-0 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
               <div>
-                <h3 className="font-display font-bold text-xl text-[#f0ede8] flex items-center gap-2">
+                <h3 className={`font-display font-bold text-xl flex items-center gap-2 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
                   <span>⚡</span>
                   <span>Tự Động Xếp Lịch Chiếu (Auto-Schedule Engine)</span>
                 </h3>
-                <p className="text-xs text-[#a09e9a] mt-0.5">
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
                   Thuật toán tự động tìm khung giờ trống trong phòng chiếu và sắp xếp lịch chiếu tối ưu không bị trùng giờ.
                 </p>
               </div>
@@ -1917,17 +1997,19 @@ export default function AdminView() {
                   setAutoModalOpen(false)
                   setAutoPreviewList(null)
                 }}
-                className="text-white/60 hover:text-white text-lg p-2 rounded-lg hover:bg-white/10 cursor-pointer"
+                className={`text-lg p-2 rounded-lg cursor-pointer transition-colors ${
+                  isDark ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                }`}
               >
                 ✕
               </button>
             </div>
 
             {/* Scrollable Modal Body */}
-            <div className="flex-1 overflow-y-auto pr-2 space-y-4 font-sans my-4 [color-scheme:dark]">
+            <div className={`flex-1 overflow-y-auto pr-2 space-y-4 font-sans my-4 ${isDark ? '[color-scheme:dark]' : '[color-scheme:light]'}`}>
               {/* Date Preset Shortcuts */}
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[#a09e9a]">
-                <span>Phím tắt chọn ngày nhanh:</span>
+              <div className={`flex flex-wrap items-center gap-2 text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                <span className="font-medium">Phím tắt chọn ngày nhanh:</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -1936,7 +2018,11 @@ export default function AdminView() {
                     setAutoStartDate(start.toISOString().split('T')[0])
                     setAutoEndDate(end.toISOString().split('T')[0])
                   }}
-                  className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-[#e8b84b] rounded-lg border border-white/10 cursor-pointer font-medium"
+                  className={`px-2.5 py-1 rounded-lg border cursor-pointer font-semibold text-xs transition-all ${
+                    isDark
+                      ? 'bg-white/5 hover:bg-white/10 text-[#e8b84b] border-white/10'
+                      : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-sm'
+                  }`}
                 >
                   + 7 Ngày (Từ {new Date().getDate()}/{new Date().getMonth() + 1} Đến {new Date(Date.now() + 7 * 86400000).getDate()}/{new Date(Date.now() + 7 * 86400000).getMonth() + 1})
                 </button>
@@ -1948,7 +2034,11 @@ export default function AdminView() {
                     setAutoStartDate(start.toISOString().split('T')[0])
                     setAutoEndDate(end.toISOString().split('T')[0])
                   }}
-                  className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-[#e8b84b] rounded-lg border border-white/10 cursor-pointer font-medium"
+                  className={`px-2.5 py-1 rounded-lg border cursor-pointer font-semibold text-xs transition-all ${
+                    isDark
+                      ? 'bg-white/5 hover:bg-white/10 text-[#e8b84b] border-white/10'
+                      : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-sm'
+                  }`}
                 >
                   + 14 Ngày
                 </button>
@@ -1960,26 +2050,32 @@ export default function AdminView() {
                     setAutoStartDate(start.toISOString().split('T')[0])
                     setAutoEndDate(end.toISOString().split('T')[0])
                   }}
-                  className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-[#e8b84b] rounded-lg border border-white/10 cursor-pointer font-medium"
+                  className={`px-2.5 py-1 rounded-lg border cursor-pointer font-semibold text-xs transition-all ${
+                    isDark
+                      ? 'bg-white/5 hover:bg-white/10 text-[#e8b84b] border-white/10'
+                      : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-sm'
+                  }`}
                 >
                   Đến Cuối Tháng
                 </button>
               </div>
 
               {/* Clean Old Showtimes Checkbox Option */}
-              <div className="bg-[#09090e] p-3 rounded-xl border border-[#e8b84b]/20 flex items-center justify-between">
-                <label className="flex items-center gap-2.5 cursor-pointer text-xs text-[#f0ede8]">
+              <div className={`p-3 rounded-xl border flex items-center justify-between transition-colors ${
+                isDark ? 'bg-[#09090e] border-[#e8b84b]/20 text-[#f0ede8]' : 'bg-amber-50/80 border-amber-300 text-slate-900 shadow-sm'
+              }`}>
+                <label className="flex items-center gap-2.5 cursor-pointer text-xs">
                   <input
                     type="checkbox"
                     checked={autoReplaceExisting}
                     onChange={(e) => setAutoReplaceExisting(e.target.checked)}
-                    className="w-4 h-4 rounded border-white/20 accent-[#e8b84b] cursor-pointer"
+                    className="w-4 h-4 rounded accent-[#e8b84b] cursor-pointer"
                   />
-                  <span className="font-semibold text-[#e8b84b]">
+                  <span className={`font-semibold ${isDark ? 'text-[#e8b84b]' : 'text-amber-900'}`}>
                     🧹 Tự động dọn dẹp & xóa suất chiếu cũ trùng khoảng ngày trước khi xếp mới (Khuyên dùng)
                   </span>
                 </label>
-                <span className="text-[10px] text-[#6e6c68] hidden sm:inline">Chống trùng lặp tuyệt đối</span>
+                <span className={`text-[10px] hidden sm:inline ${isDark ? 'text-[#6e6c68]' : 'text-amber-700 font-semibold'}`}>Chống trùng lặp tuyệt đối</span>
               </div>
 
               {/* Start > End Date Validation Warning */}
@@ -1991,7 +2087,9 @@ export default function AdminView() {
               )}
 
               {/* Input Controls Form */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-[#09090e] p-4 rounded-xl border border-white/5 text-xs">
+              <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl border text-xs transition-colors ${
+                isDark ? 'bg-[#09090e] border-white/5 text-[#f0ede8]' : 'bg-slate-50 border-slate-200 text-slate-900 shadow-sm'
+              }`}>
                 <div>
                   <CleanDatePicker
                     label="Từ Ngày (Start Date)"
@@ -2011,65 +2109,109 @@ export default function AdminView() {
                 </div>
 
                 <div>
-                  <label className="block text-[#a09e9a] mb-1 font-medium">Thời Gian Dọn Phòng (Phút)</label>
+                  <label className={`block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Thời Gian Dọn Phòng (Phút)</label>
                   <input
                     type="number"
                     value={autoBufferMins}
                     onChange={(e) => setAutoBufferMins(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-[#111118] border border-white/10 rounded-lg text-[#f0ede8] outline-none font-mono-data"
+                    className={`w-full px-3 py-2 border rounded-lg outline-none font-mono-data transition-colors ${
+                      isDark
+                        ? 'bg-[#111118] border-white/10 text-[#f0ede8]'
+                        : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-sm font-semibold'
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[#a09e9a] mb-1 font-medium">Giờ Rạp Mở Cửa (Giờ : Phút)</label>
+                  <label className={`block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Giờ Rạp Mở Cửa (Giờ : Phút)</label>
                   <input
                     type="time"
                     value={autoStartTimeStr}
                     onChange={(e) => setAutoStartTimeStr(e.target.value)}
                     onClick={(e) => e.currentTarget.showPicker?.()}
-                    className="w-full px-3 py-2 bg-[#111118] border border-white/10 rounded-lg text-[#f0ede8] outline-none font-mono-data [color-scheme:dark] cursor-pointer"
+                    className={`w-full px-3 py-2 border rounded-lg outline-none font-mono-data cursor-pointer transition-colors ${
+                      isDark
+                        ? 'bg-[#111118] border-white/10 text-[#f0ede8] [color-scheme:dark]'
+                        : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 [color-scheme:light] shadow-sm font-semibold'
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[#a09e9a] mb-1 font-medium">Giờ Rạp Đóng Cửa (Giờ : Phút)</label>
+                  <label className={`block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Giờ Rạp Đóng Cửa (Giờ : Phút)</label>
                   <input
                     type="time"
                     value={autoEndTimeStr}
                     onChange={(e) => setAutoEndTimeStr(e.target.value)}
                     onClick={(e) => e.currentTarget.showPicker?.()}
-                    className="w-full px-3 py-2 bg-[#111118] border border-white/10 rounded-lg text-[#f0ede8] outline-none font-mono-data [color-scheme:dark] cursor-pointer"
+                    className={`w-full px-3 py-2 border rounded-lg outline-none font-mono-data cursor-pointer transition-colors ${
+                      isDark
+                        ? 'bg-[#111118] border-white/10 text-[#f0ede8] [color-scheme:dark]'
+                        : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 [color-scheme:light] shadow-sm font-semibold'
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[#a09e9a] mb-1 font-medium">Giá Vé Thường / VIP (VNĐ)</label>
+                  <label className={`block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Giá Vé Thường / VIP (VNĐ)</label>
                   <div className="flex gap-2">
                     <input
                       type="number"
                       value={autoBasePrice}
                       onChange={(e) => setAutoBasePrice(Number(e.target.value))}
-                      className="w-1/2 px-2 py-2 bg-[#111118] border border-white/10 rounded-lg text-[#f0ede8] outline-none font-mono-data"
+                      className={`w-1/2 px-2 py-2 border rounded-lg outline-none font-mono-data transition-colors ${
+                        isDark
+                          ? 'bg-[#111118] border-white/10 text-[#f0ede8]'
+                          : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-sm font-semibold'
+                      }`}
                     />
                     <input
                       type="number"
                       value={autoVipPrice}
                       onChange={(e) => setAutoVipPrice(Number(e.target.value))}
-                      className="w-1/2 px-2 py-2 bg-[#111118] border border-white/10 rounded-lg text-[#f0ede8] outline-none font-mono-data"
+                      className={`w-1/2 px-2 py-2 border rounded-lg outline-none font-mono-data transition-colors ${
+                        isDark
+                          ? 'bg-[#111118] border-white/10 text-[#f0ede8]'
+                          : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-sm font-semibold'
+                      }`}
                     />
                   </div>
+                </div>
+
+                <div className={`md:col-span-3 pt-3 border-t flex flex-col sm:flex-row flex-wrap gap-4 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
+                  <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium ${isDark ? 'text-[#f0ede8]' : 'text-slate-800 font-semibold'}`}>
+                    <input
+                      type="checkbox"
+                      checked={autoSmartGenre}
+                      onChange={(e) => setAutoSmartGenre(e.target.checked)}
+                      className="accent-[#e8b84b] w-4 h-4 cursor-pointer"
+                    />
+                    <span>🧠 Smart Genre Matching (Tự động ưu tiên xếp phim theo thể loại vào đúng loại phòng)</span>
+                  </label>
+
+                  <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium ${isDark ? 'text-[#f0ede8]' : 'text-slate-800 font-semibold'}`}>
+                    <input
+                      type="checkbox"
+                      checked={autoPricingByRoom}
+                      onChange={(e) => setAutoPricingByRoom(e.target.checked)}
+                      className="accent-[#e8b84b] w-4 h-4 cursor-pointer"
+                    />
+                    <span>💰 Tự động tính giá vé theo loại phòng (Standard 1.0x, IMAX 1.7x, VIP 1.8x, 3D 1.3x...)</span>
+                  </label>
                 </div>
               </div>
 
               {/* Movie Selection Section */}
-              <div className="bg-[#09090e] p-4 rounded-xl border border-white/5 space-y-3 text-xs">
+              <div className={`p-4 rounded-xl border space-y-3 text-xs transition-colors ${
+                isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-50 border-slate-200 shadow-sm'
+              }`}>
                 <div className="flex justify-between items-center">
-                  <label className="font-bold text-[#f0ede8] flex items-center gap-1.5">
+                  <label className={`font-bold flex items-center gap-1.5 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
                     <span>🎬</span>
                     <span>Chọn Phim Áp Dụng Xếp Lịch</span>
                   </label>
                   <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-1.5 cursor-pointer text-[#a09e9a] hover:text-[#f0ede8]">
+                    <label className={`flex items-center gap-1.5 cursor-pointer ${isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900 font-medium'}`}>
                       <input
                         type="radio"
                         name="movieSelectMode"
@@ -2079,7 +2221,7 @@ export default function AdminView() {
                       />
                       <span>Tất cả phim đang/sắp chiếu ({movies.length})</span>
                     </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer text-[#a09e9a] hover:text-[#f0ede8]">
+                    <label className={`flex items-center gap-1.5 cursor-pointer ${isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900 font-medium'}`}>
                       <input
                         type="radio"
                         name="movieSelectMode"
@@ -2093,7 +2235,7 @@ export default function AdminView() {
                 </div>
 
                 {autoMovieSelectionMode === 'custom' && (
-                  <div className="pt-2 border-t border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-2 max-h-[150px] overflow-y-auto pr-1">
+                  <div className={`pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-2 max-h-[150px] overflow-y-auto pr-1 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
                     {movies.map((m) => {
                       const isChecked = autoSelectedMovieIds.includes(m.id)
                       return (
@@ -2101,8 +2243,12 @@ export default function AdminView() {
                           key={m.id}
                           className={`flex items-center gap-2 p-2 rounded-lg border transition-colors cursor-pointer select-none ${
                             isChecked
-                              ? 'bg-[rgba(232,184,75,0.12)] border-[#e8b84b] text-[#f0ede8]'
-                              : 'bg-[#111118] border-white/10 text-[#a09e9a] hover:border-white/20'
+                              ? isDark
+                                ? 'bg-[rgba(232,184,75,0.12)] border-[#e8b84b] text-[#f0ede8]'
+                                : 'bg-amber-50 border-amber-500 text-amber-900 shadow-sm font-semibold'
+                              : isDark
+                                ? 'bg-[#111118] border-white/10 text-[#a09e9a] hover:border-white/20'
+                                : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
                           }`}
                         >
                           <input
@@ -2126,14 +2272,16 @@ export default function AdminView() {
               </div>
 
               {/* Room Selection Section */}
-              <div className="bg-[#09090e] p-4 rounded-xl border border-white/5 space-y-3 text-xs">
+              <div className={`p-4 rounded-xl border space-y-3 text-xs transition-colors ${
+                isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-50 border-slate-200 shadow-sm'
+              }`}>
                 <div className="flex flex-wrap justify-between items-center gap-2">
-                  <label className="font-bold text-[#f0ede8] flex items-center gap-1.5">
+                  <label className={`font-bold flex items-center gap-1.5 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
                     <span>🏛️</span>
                     <span>Chọn Phòng Chiếu Áp Dụng</span>
                   </label>
                   <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-1.5 cursor-pointer text-[#a09e9a] hover:text-[#f0ede8]">
+                    <label className={`flex items-center gap-1.5 cursor-pointer ${isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900 font-medium'}`}>
                       <input
                         type="radio"
                         name="roomSelectMode"
@@ -2143,7 +2291,7 @@ export default function AdminView() {
                       />
                       <span>Tất cả phòng chiếu ({rooms.length})</span>
                     </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer text-[#a09e9a] hover:text-[#f0ede8]">
+                    <label className={`flex items-center gap-1.5 cursor-pointer ${isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900 font-medium'}`}>
                       <input
                         type="radio"
                         name="roomSelectMode"
@@ -2157,11 +2305,13 @@ export default function AdminView() {
                 </div>
 
                 {autoRoomSelectionMode === 'custom' && (
-                  <div className="pt-3 border-t border-white/10 space-y-3">
+                  <div className={`pt-3 border-t space-y-3 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
                     {/* Quick Category Action Bar */}
-                    <div className="flex flex-wrap justify-between items-center gap-2 bg-[#111118] p-2.5 rounded-xl border border-white/5">
+                    <div className={`flex flex-wrap justify-between items-center gap-2 p-2.5 rounded-xl border ${
+                      isDark ? 'bg-[#111118] border-white/5' : 'bg-white border-slate-200 shadow-sm'
+                    }`}>
                       <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                        <span className="text-[#a09e9a] font-medium mr-1">Lọc loại phòng:</span>
+                        <span className={`font-medium mr-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>Lọc loại phòng:</span>
                         {['standard', 'vip', 'imax', '3d', '4d', 'kids'].map((typeKey) => {
                           const typeRooms = rooms.filter((r) => (r.room_type || 'standard') === typeKey)
                           if (typeRooms.length === 0) return null
@@ -2198,8 +2348,12 @@ export default function AdminView() {
                                 isAllSelected
                                   ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
                                   : selectedCount > 0
-                                  ? 'bg-[#e8b84b]/20 text-[#e8b84b] border-[#e8b84b]/40'
-                                  : 'bg-white/5 text-[#a09e9a] border-white/10 hover:text-[#f0ede8] hover:border-white/20'
+                                  ? isDark
+                                    ? 'bg-[#e8b84b]/20 text-[#e8b84b] border-[#e8b84b]/40'
+                                    : 'bg-amber-100 text-amber-900 border-amber-300 font-bold'
+                                  : isDark
+                                    ? 'bg-white/5 text-[#a09e9a] border-white/10 hover:text-[#f0ede8]'
+                                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:text-slate-900'
                               }`}
                             >
                               <span>{isAllSelected ? '✓' : selectedCount > 0 ? '•' : '+'}</span>
@@ -2219,11 +2373,11 @@ export default function AdminView() {
                         >
                           ✓ Chọn tất cả
                         </button>
-                        <span className="text-white/20">|</span>
+                        <span className={isDark ? 'text-white/20' : 'text-slate-300'}>|</span>
                         <button
                           type="button"
                           onClick={() => setAutoSelectedRoomIds([])}
-                          className="text-[#a09e9a] hover:text-[#f0ede8] hover:underline cursor-pointer"
+                          className={isDark ? 'text-[#a09e9a] hover:text-[#f0ede8] hover:underline cursor-pointer' : 'text-slate-500 hover:text-slate-800 hover:underline cursor-pointer'}
                         >
                           ✕ Bỏ chọn
                         </button>
@@ -2235,30 +2389,32 @@ export default function AdminView() {
                       {rooms.map((r) => {
                         const isChecked = autoSelectedRoomIds.includes(r.id)
                         const roomTypeUpper = (r.room_type || 'standard').toUpperCase()
-
-                        // Clean title: Avoid redundant (imax) (imax)
                         const cleanName = r.name.replace(new RegExp(`\\(${r.room_type}\\)`, 'gi'), '').trim()
 
                         const typeBadgeStyle =
                           r.room_type === 'imax'
-                            ? 'text-amber-400 bg-amber-400/10 border-amber-400/30'
+                            ? 'text-amber-500 bg-amber-500/10 border-amber-500/30'
                             : r.room_type === 'vip'
-                            ? 'text-purple-400 bg-purple-400/10 border-purple-400/30'
+                            ? 'text-purple-500 bg-purple-500/10 border-purple-500/30'
                             : r.room_type === '4d'
-                            ? 'text-blue-400 bg-blue-400/10 border-blue-400/30'
+                            ? 'text-blue-500 bg-blue-500/10 border-blue-500/30'
                             : r.room_type === '3d'
-                            ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30'
+                            ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/30'
                             : r.room_type === 'kids'
-                            ? 'text-pink-400 bg-pink-400/10 border-pink-400/30'
-                            : 'text-slate-400 bg-slate-400/10 border-slate-400/30'
+                            ? 'text-pink-500 bg-pink-500/10 border-pink-500/30'
+                            : 'text-slate-500 bg-slate-500/10 border-slate-500/30'
 
                         return (
                           <label
                             key={r.id}
                             className={`p-2.5 rounded-xl border transition-all cursor-pointer select-none flex items-center justify-between gap-2.5 ${
                               isChecked
-                                ? 'bg-[#e8b84b]/15 border-[#e8b84b] text-[#f0ede8] shadow-md shadow-[#e8b84b]/5'
-                                : 'bg-[#111118] border-white/10 text-[#a09e9a] hover:border-white/20'
+                                ? isDark
+                                  ? 'bg-[#e8b84b]/15 border-[#e8b84b] text-[#f0ede8] shadow-md shadow-[#e8b84b]/5'
+                                  : 'bg-amber-50 border-amber-500 text-amber-900 shadow-sm font-semibold'
+                                : isDark
+                                  ? 'bg-[#111118] border-white/10 text-[#a09e9a] hover:border-white/20'
+                                  : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 shadow-sm'
                             }`}
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
@@ -2275,8 +2431,8 @@ export default function AdminView() {
                                 className="accent-[#e8b84b] w-4 h-4 cursor-pointer shrink-0"
                               />
                               <div className="min-w-0">
-                                <div className="font-bold text-xs truncate text-[#f0ede8]">{cleanName}</div>
-                                <div className="text-[10px] text-[#a09e9a] flex items-center gap-1.5 mt-0.5">
+                                <div className={`font-bold text-xs truncate ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{cleanName}</div>
+                                <div className={`text-[10px] flex items-center gap-1.5 mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
                                   <span className={`px-1.5 py-0.2 rounded border text-[9px] font-mono-data font-bold ${typeBadgeStyle}`}>
                                     {roomTypeUpper}
                                   </span>
@@ -2294,7 +2450,9 @@ export default function AdminView() {
 
               {/* Preview Results Table */}
               {autoPreviewList !== null && (
-                <div className="border border-white/10 rounded-xl bg-[#09090e] p-4 space-y-3">
+                <div className={`border rounded-xl p-4 space-y-3 transition-colors ${
+                  isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-50 border-slate-200 shadow-sm'
+                }`}>
                   <div className="flex justify-between items-center">
                     <h4 className="font-display font-bold text-sm text-[#2ecc71] flex items-center gap-1.5">
                       <span>✓</span>
@@ -2305,7 +2463,7 @@ export default function AdminView() {
                         type="button"
                         disabled={autoConfirming}
                         onClick={handleConfirmAutoSchedule}
-                        className="bg-[#2ecc71] text-[#09090e] px-4 py-2 rounded-lg text-xs font-bold hover:brightness-110 cursor-pointer disabled:opacity-50"
+                        className="bg-[#2ecc71] text-[#09090e] px-4 py-2 rounded-lg text-xs font-bold hover:brightness-110 cursor-pointer disabled:opacity-50 shadow-sm"
                       >
                         {autoConfirming ? '⏳ Đang lưu...' : `✓ Xác Nhận Lưu (${autoPreviewList.length} Suất)`}
                       </button>
@@ -2313,44 +2471,78 @@ export default function AdminView() {
                   </div>
 
                   {autoPreviewList.length === 0 ? (
-                    <p className="text-xs text-[#a09e9a] italic py-2">
+                    <p className={`text-xs italic py-2 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
                       Không tìm thấy khoảng thời gian trống phù hợp nào trong khoảng ngày đã chọn.
                     </p>
                   ) : (
-                    <div className="max-h-[240px] overflow-y-auto pr-1">
-                      <table className="w-full text-left text-xs border-collapse">
+                    <div className={`max-h-[300px] overflow-x-auto overflow-y-auto pr-1 border rounded-xl ${
+                      isDark ? 'border-white/10' : 'border-slate-200 bg-white'
+                    }`}>
+                      <table className="w-full min-w-[850px] text-left text-xs border-collapse">
                         <thead>
-                          <tr className="border-b border-white/10 text-[#a09e9a]">
-                            <th className="py-2 pl-2">STT</th>
-                            <th className="py-2">Phim</th>
-                            <th className="py-2">Phòng</th>
-                            <th className="py-2">Bắt Đầu ➔ Kết Thúc</th>
-                            <th className="py-2">Giá Vé (Thường/VIP)</th>
-                            <th className="py-2 text-right pr-2">Hành Động</th>
+                          <tr className={`border-b sticky top-0 font-medium ${
+                            isDark ? 'border-white/10 text-[#a09e9a] bg-[#111118]' : 'border-slate-200 text-slate-600 bg-slate-100'
+                          }`}>
+                            <th className="py-2.5 px-3 font-mono-data w-12 text-center">STT</th>
+                            <th className="py-2.5 px-3 min-w-[200px]">Phim</th>
+                            <th className="py-2.5 px-3 w-[130px]">Phòng Chiếu</th>
+                            <th className="py-2.5 px-3 w-[150px]">Ngày Chiếu</th>
+                            <th className="py-2.5 px-3 w-[160px]">Khung Giờ</th>
+                            <th className="py-2.5 px-3 w-[170px]">Giá Vé (Thường/VIP)</th>
+                            <th className="py-2.5 px-3 w-[90px] text-right">Hành Động</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-white/5 text-[#f0ede8]">
-                          {autoPreviewList.map((item, idx) => (
-                            <tr key={idx} className="hover:bg-white/5">
-                              <td className="py-2.5 pl-2 font-mono-data text-[#a09e9a]">{idx + 1}</td>
-                              <td className="py-2.5 font-medium">{item.movie_title}</td>
-                              <td className="py-2.5 text-[#e8b84b]">{item.room_name}</td>
-                              <td className="py-2.5 font-mono-data text-xs">
-                                {new Date(item.start_time).toLocaleString('vi-VN', {
-                                  day: '2-digit',
-                                  month: '2-digit',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
-                                {' ➔ '}
-                                {new Date(item.end_time).toLocaleTimeString('vi-VN', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
-                              </td>
-                              <td className="py-2.5 font-mono-data">
-                                {fmt(item.base_price)} / {fmt(item.vip_price)}
-                              </td>
+                        <tbody className={`divide-y ${isDark ? 'divide-white/5 text-[#f0ede8]' : 'divide-slate-200 text-slate-900'}`}>
+                          {autoPreviewList.map((item, idx) => {
+                            const startDateObj = new Date(item.start_time)
+                            const endDateObj = new Date(item.end_time)
+                            const dateStr = startDateObj.toLocaleDateString('vi-VN', {
+                              weekday: 'short',
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                            })
+                            const startTimeStr = startDateObj.toLocaleTimeString('vi-VN', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                            const endTimeStr = endDateObj.toLocaleTimeString('vi-VN', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+
+                            return (
+                              <tr key={idx} className={isDark ? 'hover:bg-white/5 transition-colors' : 'hover:bg-slate-50 transition-colors'}>
+                                <td className={`py-3 px-3 font-mono-data text-center ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>{idx + 1}</td>
+                                <td className="py-3 px-3 font-medium">
+                                  <div className={`font-semibold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{item.movie_title}</div>
+                                  {item.matched_genre && (
+                                    <span className="text-[10px] text-[#2ecc71] bg-[#2ecc71]/10 border border-[#2ecc71]/20 px-1.5 py-0.5 rounded font-mono-data inline-block mt-1 font-semibold">
+                                      ✨ Thể loại: {item.matched_genre}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3 text-[#e8b84b]">
+                                  <div className="font-bold">{item.room_name}</div>
+                                  <span className={`text-[10px] font-mono-data uppercase px-1.5 py-0.5 rounded border inline-block mt-0.5 ${
+                                    isDark ? 'text-[#a09e9a] bg-white/5 border-white/5' : 'text-slate-600 bg-slate-100 border-slate-200'
+                                  }`}>
+                                    {item.room_type || 'standard'}
+                                  </span>
+                                </td>
+                                <td className={`py-3 px-3 font-mono-data text-xs ${isDark ? 'text-[#f0ede8]' : 'text-slate-800'}`}>
+                                  {dateStr}
+                                </td>
+                                <td className="py-3 px-3 font-mono-data text-xs text-[#e8b84b]">
+                                  <span className={`px-2.5 py-1 rounded-md border inline-block font-bold ${
+                                    isDark ? 'bg-white/5 border-white/10' : 'bg-amber-50 border-amber-200 text-amber-800'
+                                  }`}>
+                                    {startTimeStr} ➔ {endTimeStr}
+                                  </span>
+                                </td>
+                                <td className={`py-3 px-3 font-mono-data text-xs ${isDark ? 'text-[#f0ede8]' : 'text-slate-900 font-semibold'}`}>
+                                  {fmt(item.base_price)} / {fmt(item.vip_price)}
+                                </td>
                               <td className="py-2.5 text-right pr-2">
                                 <button
                                   type="button"
@@ -2363,7 +2555,8 @@ export default function AdminView() {
                                 </button>
                               </td>
                             </tr>
-                          ))}
+                          )
+                        })}
                         </tbody>
                       </table>
                     </div>

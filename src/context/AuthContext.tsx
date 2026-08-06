@@ -19,9 +19,18 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null)
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    try {
+      const cached = localStorage.getItem('cached_user')
+      return cached ? JSON.parse(cached) : null
+    } catch {
+      return null
+    }
+  })
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(() => {
-    return Boolean(localStorage.getItem('access_token'))
+    const token = localStorage.getItem('access_token')
+    const cached = localStorage.getItem('cached_user')
+    return Boolean(token && !cached)
   })
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
@@ -30,17 +39,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = localStorage.getItem('access_token')
     if (token) {
-      setIsAuthLoading(true)
       fetchMeAPI()
-        .then((u) => setUser(u))
+        .then((u) => {
+          setUser(u)
+          localStorage.setItem('cached_user', JSON.stringify(u))
+        })
         .catch(() => {
           logoutAPI()
           setUser(null)
+          localStorage.removeItem('cached_user')
         })
         .finally(() => {
           setIsAuthLoading(false)
         })
     } else {
+      localStorage.removeItem('cached_user')
       setIsAuthLoading(false)
     }
   }, [])
@@ -49,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loginAPI(account, pass)
     const u = await fetchMeAPI()
     setUser(u)
+    localStorage.setItem('cached_user', JSON.stringify(u))
     setIsAuthModalOpen(false)
   }
 
@@ -61,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function logout() {
     await logoutAPI()
     setUser(null)
+    localStorage.removeItem('cached_user')
   }
 
   function openAuthModal(mode: 'login' | 'register' = 'login') {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { updateProfileAPI } from '../api/auth'
 import { fetchMyReservationsAPI, cancelReservationAPI, type ReservationItem } from '../api/showtimes'
 import { fmt } from '../lib/utils'
@@ -8,6 +9,8 @@ import { fmt } from '../lib/utils'
 export default function ProfileView() {
   const navigate = useNavigate()
   const { user, isAuthenticated, logout } = useAuth()
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
 
   const [activeTab, setActiveTab] = useState<'profile' | 'history'>('profile')
   const [isEditing, setIsEditing] = useState(false) // Toggle view vs edit mode
@@ -142,23 +145,31 @@ export default function ProfileView() {
       {/* Back button */}
       <button
         onClick={() => navigate('/')}
-        className="flex items-center gap-1.5 bg-transparent border-0 text-[#a09e9a] text-sm cursor-pointer mb-6 hover:text-[#f0ede8] transition-colors"
+        className={`flex items-center gap-1.5 bg-transparent border-0 text-sm cursor-pointer mb-6 transition-colors ${
+          isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-500 hover:text-slate-900 font-medium'
+        }`}
       >
         ← Trang chủ
       </button>
 
       {/* User Header Profile Card */}
-      <div className="bg-[#111118] border border-white/10 rounded-xl p-6 mb-8 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xl">
+      <div className={`rounded-xl p-6 mb-8 flex flex-col sm:flex-row items-center justify-between gap-6 transition-colors ${
+        isDark ? 'bg-[#111118] border border-white/10 shadow-xl' : 'bg-white border border-slate-200 shadow-lg'
+      }`}>
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-[#e8b84b]/15 border border-[#e8b84b]/40 flex items-center justify-center text-[#e8b84b] font-bold text-2xl">
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center font-bold text-2xl border ${
+            isDark ? 'bg-[#e8b84b]/15 border-[#e8b84b]/40 text-[#e8b84b]' : 'bg-amber-500/10 border-amber-500/30 text-amber-600'
+          }`}>
             {user?.full_name ? user.full_name.charAt(0).toUpperCase() : '👤'}
           </div>
           <div>
-            <h2 className="font-display text-2xl font-bold text-[#f0ede8]">
+            <h2 className={`font-display text-2xl font-bold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
               {user?.full_name ?? 'Thành viên CineVerse'}
             </h2>
-            <p className="text-xs text-[#a09e9a] font-mono-data mt-0.5">{user?.email}</p>
-            <div className="mt-2 inline-block px-2.5 py-0.5 rounded bg-white/5 border border-white/10 text-[10px] font-mono-data text-[#e8b84b] uppercase">
+            <p className={`text-xs font-mono-data mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>{user?.email}</p>
+            <div className={`mt-2 inline-block px-2.5 py-0.5 rounded text-[10px] font-mono-data uppercase border ${
+              isDark ? 'bg-white/5 border-white/10 text-[#e8b84b]' : 'bg-amber-500/10 border-amber-500/20 text-amber-700 font-semibold'
+            }`}>
               {user?.role === 'admin' ? '⚡ Quản trị viên (Admin)' : ' Hạng Thành viên'}
             </div>
           </div>
@@ -166,21 +177,25 @@ export default function ProfileView() {
 
         <button
           onClick={logout}
-          className="bg-white/5 hover:bg-[rgba(192,57,43,0.2)] text-[#a09e9a] hover:text-[#e07060] border border-white/10 hover:border-[rgba(192,57,43,0.4)] rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer"
+          className={`px-4 py-2 text-xs font-bold rounded-lg transition-all border cursor-pointer ${
+            isDark
+              ? 'bg-white/5 hover:bg-[rgba(192,57,43,0.2)] text-[#a09e9a] hover:text-[#e07060] border-white/10 hover:border-[rgba(192,57,43,0.4)]'
+              : 'bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 border-slate-200 hover:border-red-200'
+          }`}
         >
           Đăng xuất
         </button>
       </div>
 
       {/* Tab Controls */}
-      <div className="flex border-b border-white/10 mb-8 gap-8">
+      <div className={`flex border-b mb-8 gap-8 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
         <button
           type="button"
           onClick={() => setActiveTab('profile')}
           className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'profile'
-              ? 'border-[#e8b84b] text-[#e8b84b]'
-              : 'border-transparent text-[#a09e9a] hover:text-[#f0ede8]'
+              ? isDark ? 'border-[#e8b84b] text-[#e8b84b]' : 'border-amber-500 text-amber-600'
+              : isDark ? 'border-transparent text-[#a09e9a] hover:text-[#f0ede8]' : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
           👤 Thông tin cá nhân
@@ -190,8 +205,8 @@ export default function ProfileView() {
           onClick={() => setActiveTab('history')}
           className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'history'
-              ? 'border-[#e8b84b] text-[#e8b84b]'
-              : 'border-transparent text-[#a09e9a] hover:text-[#f0ede8]'
+              ? isDark ? 'border-[#e8b84b] text-[#e8b84b]' : 'border-amber-500 text-amber-600'
+              : isDark ? 'border-transparent text-[#a09e9a] hover:text-[#f0ede8]' : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
           🎟️ Lịch sử đặt vé & Hủy vé
@@ -200,13 +215,15 @@ export default function ProfileView() {
 
       {/* TAB 1: PROFILE INFO & EDIT FORM */}
       {activeTab === 'profile' && (
-        <div className="bg-[#111118] border border-white/10 rounded-xl p-6 sm:p-8 shadow-xl">
+        <div className={`rounded-xl p-6 sm:p-8 border transition-colors ${
+          isDark ? 'bg-[#111118] border-white/10 shadow-xl' : 'bg-white border-slate-200 shadow-xl'
+        }`}>
           <div className="flex justify-between items-start mb-6">
             <div>
-              <h3 className="font-display text-xl font-bold text-[#f0ede8] mb-1">
+              <h3 className={`font-display text-xl font-bold mb-1 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
                 Quản lý thông tin tài khoản
               </h3>
-              <p className="text-xs text-[#a09e9a]">
+              <p className={`text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
                 {isEditing
                   ? 'Chỉnh sửa các thông tin cá nhân dưới đây và nhấn Lưu.'
                   : 'Xem thông tin tài khoản cá nhân của bạn.'}
@@ -221,7 +238,11 @@ export default function ProfileView() {
                   setUpdateMsg(null)
                   setIsEditing(true)
                 }}
-                className="bg-[#e8b84b]/15 hover:bg-[#e8b84b]/30 text-[#e8b84b] border border-[#e8b84b]/30 rounded-lg px-4 py-2 text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5"
+                className={`px-4 py-2 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
+                  isDark
+                    ? 'bg-[#e8b84b]/15 hover:bg-[#e8b84b]/30 text-[#e8b84b] border-[#e8b84b]/30'
+                    : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 border-amber-500/30'
+                }`}
               >
                 <span>✏️</span>
                 <span>Chỉnh sửa thông tin</span>
@@ -245,39 +266,41 @@ export default function ProfileView() {
 
           {/* VIEW MODE */}
           {!isEditing ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-[#09090e]/60 p-6 rounded-xl border border-white/5">
+            <div className={`grid grid-cols-1 sm:grid-cols-2 gap-6 p-6 rounded-xl border transition-colors ${
+              isDark ? 'bg-[#09090e]/60 border-white/5' : 'bg-slate-50 border-slate-200'
+            }`}>
               <div>
-                <span className="text-xs text-[#a09e9a] block mb-1 font-medium">Họ và tên</span>
-                <p className="text-sm font-semibold text-[#f0ede8]">{user?.full_name || 'Chưa cập nhật'}</p>
+                <span className={`text-xs block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Họ và tên</span>
+                <p className={`text-sm font-semibold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{user?.full_name || 'Chưa cập nhật'}</p>
               </div>
 
               <div>
-                <span className="text-xs text-[#a09e9a] block mb-1 font-medium">Email</span>
-                <p className="text-sm font-semibold text-[#f0ede8] font-mono-data">{user?.email || 'Chưa cập nhật'}</p>
+                <span className={`text-xs block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Email</span>
+                <p className={`text-sm font-semibold font-mono-data ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{user?.email || 'Chưa cập nhật'}</p>
               </div>
 
               <div>
-                <span className="text-xs text-[#a09e9a] block mb-1 font-medium">Số điện thoại</span>
-                <p className="text-sm font-semibold text-[#f0ede8] font-mono-data">
+                <span className={`text-xs block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Số điện thoại</span>
+                <p className={`text-sm font-semibold font-mono-data ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
                   {user?.phone_number || 'Chưa cập nhật'}
                 </p>
               </div>
 
               <div>
-                <span className="text-xs text-[#a09e9a] block mb-1 font-medium">Ngày sinh</span>
-                <p className="text-sm font-semibold text-[#f0ede8] font-mono-data">
+                <span className={`text-xs block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Ngày sinh</span>
+                <p className={`text-sm font-semibold font-mono-data ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
                   {user?.date_of_birth || 'Chưa cập nhật'}
                 </p>
               </div>
 
               <div>
-                <span className="text-xs text-[#a09e9a] block mb-1 font-medium">Giới tính</span>
-                <p className="text-sm font-semibold text-[#f0ede8]">{user?.gender || 'Chưa cập nhật'}</p>
+                <span className={`text-xs block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Giới tính</span>
+                <p className={`text-sm font-semibold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{user?.gender || 'Chưa cập nhật'}</p>
               </div>
 
               <div>
-                <span className="text-xs text-[#a09e9a] block mb-1 font-medium">Khu vực sinh sống</span>
-                <p className="text-sm font-semibold text-[#f0ede8]">{user?.region || 'Chưa cập nhật'}</p>
+                <span className={`text-xs block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Khu vực sinh sống</span>
+                <p className={`text-sm font-semibold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{user?.region || 'Chưa cập nhật'}</p>
               </div>
             </div>
           ) : (
@@ -285,42 +308,54 @@ export default function ProfileView() {
             <form onSubmit={handleUpdateProfile} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Họ và tên</label>
+                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>Họ và tên</label>
                   <input
                     type="text"
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none"
+                    className={`w-full px-3 py-2.5 rounded-lg text-sm outline-none transition-colors border ${
+                      isDark
+                        ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500 focus:bg-white'
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Email</label>
+                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>Email</label>
                   <input
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none font-mono-data"
+                    className={`w-full px-3 py-2.5 rounded-lg text-sm outline-none font-mono-data transition-colors border ${
+                      isDark
+                        ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500 focus:bg-white'
+                    }`}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Số điện thoại</label>
+                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>Số điện thoại</label>
                   <input
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="0987654321"
-                    className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none font-mono-data"
+                    className={`w-full px-3 py-2.5 rounded-lg text-sm outline-none font-mono-data transition-colors border ${
+                      isDark
+                        ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500 focus:bg-white'
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Ngày sinh</label>
+                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>Ngày sinh</label>
                   <input
                     type="date"
                     value={dob}
@@ -330,18 +365,26 @@ export default function ProfileView() {
                       } catch {}
                     }}
                     onChange={(e) => setDob(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none font-mono-data cursor-pointer"
+                    className={`w-full px-3 py-2.5 rounded-lg text-sm outline-none font-mono-data cursor-pointer transition-colors border ${
+                      isDark
+                        ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500 focus:bg-white'
+                    }`}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Giới tính</label>
+                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>Giới tính</label>
                   <select
                     value={gender}
                     onChange={(e) => setGender(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none cursor-pointer"
+                    className={`w-full px-3 py-2.5 rounded-lg text-sm outline-none cursor-pointer transition-colors border ${
+                      isDark
+                        ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500 focus:bg-white'
+                    }`}
                   >
                     <option value="Nam">Nam</option>
                     <option value="Nữ">Nữ</option>
@@ -350,11 +393,15 @@ export default function ProfileView() {
                 </div>
 
                 <div>
-                  <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Khu vực sinh sống</label>
+                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>Khu vực sinh sống</label>
                   <select
                     value={region}
                     onChange={(e) => setRegion(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none cursor-pointer"
+                    className={`w-full px-3 py-2.5 rounded-lg text-sm outline-none cursor-pointer transition-colors border ${
+                      isDark
+                        ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500 focus:bg-white'
+                    }`}
                   >
                     <option value="TP. Hồ Chí Minh">TP. Hồ Chí Minh</option>
                     <option value="Hà Nội">Hà Nội</option>
@@ -370,7 +417,9 @@ export default function ProfileView() {
                 <button
                   type="button"
                   onClick={handleCancelEdit}
-                  className="bg-white/5 hover:bg-white/15 text-[#f0ede8] px-6 py-2.5 rounded-lg font-bold text-xs border border-white/10 cursor-pointer transition-all"
+                  className={`px-6 py-2.5 rounded-lg font-bold text-xs border transition-all cursor-pointer ${
+                    isDark ? 'bg-white/5 hover:bg-white/15 text-[#f0ede8] border-white/10' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                  }`}
                 >
                   Hủy
                 </button>
@@ -391,8 +440,10 @@ export default function ProfileView() {
       {activeTab === 'history' && (
         <div className="space-y-6">
           {/* Sub-filter */}
-          <div className="flex justify-between items-center bg-[#111118] border border-white/10 rounded-xl p-4">
-            <h3 className="font-display font-bold text-base text-[#f0ede8]">Danh sách vé đã đặt</h3>
+          <div className={`flex justify-between items-center rounded-xl p-4 border transition-colors ${
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-md'
+          }`}>
+            <h3 className={`font-display font-bold text-base ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Danh sách vé đã đặt</h3>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -400,7 +451,7 @@ export default function ProfileView() {
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer border transition-all ${
                   historyFilter === 'all'
                     ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
-                    : 'bg-white/5 border-white/10 text-[#a09e9a]'
+                    : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a]' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'
                 }`}
               >
                 Tất cả ({reservations.length})
@@ -411,7 +462,7 @@ export default function ProfileView() {
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer border transition-all ${
                   historyFilter === 'confirmed'
                     ? 'bg-[#2ecc71] text-[#09090e] border-[#2ecc71]'
-                    : 'bg-white/5 border-white/10 text-[#a09e9a]'
+                    : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a]' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'
                 }`}
               >
                 Đã xác nhận ({reservations.filter((r) => r.status === 'confirmed').length})
@@ -422,7 +473,7 @@ export default function ProfileView() {
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer border transition-all ${
                   historyFilter === 'cancelled'
                     ? 'bg-[#e07060] text-white border-[#e07060]'
-                    : 'bg-white/5 border-white/10 text-[#a09e9a]'
+                    : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a]' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'
                 }`}
               >
                 Đã hủy ({reservations.filter((r) => r.status === 'cancelled').length})
@@ -432,13 +483,15 @@ export default function ProfileView() {
 
           {/* Ticket List */}
           {historyLoading ? (
-            <div className="text-center py-16 text-xs text-[#a09e9a] font-mono-data animate-pulse">
+            <div className={`text-center py-16 text-xs font-mono-data animate-pulse ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
               Đang tải lịch sử đặt vé...
             </div>
           ) : filteredReservations.length === 0 ? (
-            <div className="bg-[#111118] border border-white/10 rounded-xl p-12 text-center text-[#a09e9a]">
+            <div className={`rounded-xl p-12 text-center border transition-colors ${
+              isDark ? 'bg-[#111118] border-white/10 text-[#a09e9a]' : 'bg-white border-slate-200 text-slate-500 shadow-md'
+            }`}>
               <span className="text-4xl block mb-3">🎟️</span>
-              <p className="font-display font-semibold text-lg text-[#f0ede8] mb-1">Chưa có lịch sử đặt vé</p>
+              <p className={`font-display font-semibold text-lg mb-1 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Chưa có lịch sử đặt vé</p>
               <p className="text-xs">Bạn chưa có đơn đặt vé nào phù hợp với bộ lọc này.</p>
             </div>
           ) : (
@@ -466,9 +519,10 @@ export default function ProfileView() {
                 return (
                   <div
                     key={item.id}
-                    className="bg-[#111118] border border-white/10 rounded-xl p-5 shadow-lg flex flex-col md:flex-row justify-between gap-5 relative overflow-hidden"
+                    className={`rounded-xl p-5 shadow-lg flex flex-col md:flex-row justify-between gap-5 relative overflow-hidden border transition-colors ${
+                      isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+                    }`}
                   >
-                    {/* Status side bar indicator */}
                     <div
                       className={`absolute top-0 left-0 bottom-0 w-1.5 ${
                         isCancelled ? 'bg-[#e07060]' : 'bg-[#2ecc71]'
@@ -476,14 +530,13 @@ export default function ProfileView() {
                     />
 
                     <div className="flex gap-4 items-start pl-2">
-                      {/* Movie poster thumbnail */}
                       <img
                         src={
                           item.showtime?.movie_poster_url ??
                           'https://images.unsplash.com/photo-1634733049839-0292be607569?w=120&h=180&fit=crop'
                         }
                         alt={item.showtime?.movie_title ?? 'Phim'}
-                        className="w-16 h-24 object-cover rounded-lg border border-white/10 shrink-0"
+                        className="w-16 h-24 object-cover rounded-lg border border-slate-200/20 shrink-0 shadow-sm"
                       />
 
                       <div>
@@ -497,30 +550,31 @@ export default function ProfileView() {
                           >
                             {isCancelled ? 'Đã hủy' : 'Đã xác nhận'}
                           </span>
-                          <span className="text-[11px] text-[#6e6c68] font-mono-data">
+                          <span className={`text-[11px] font-mono-data ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>
                             Mã vé: #{item.id}
                           </span>
                         </div>
 
-                        <h4 className="font-display font-bold text-lg text-[#f0ede8] mb-1">
+                        <h4 className={`font-display font-bold text-lg mb-1 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
                           {item.showtime?.movie_title ?? 'Xem phim trực tuyến'}
                         </h4>
 
-                        <p className="text-xs text-[#a09e9a] mb-1">
+                        <p className={`text-xs mb-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
                           🕒 {startTimeFormatted} · 🎬 {item.showtime?.room_name ?? 'Rạp CineVerse'}
                         </p>
 
-                        <p className="text-xs text-[#e8b84b] font-medium">
+                        <p className={`text-xs font-medium ${isDark ? 'text-[#e8b84b]' : 'text-amber-700'}`}>
                           💺 Ghế đã chọn: <span className="font-bold">{seatsList || 'N/A'}</span>
                         </p>
                       </div>
                     </div>
 
-                    {/* Price and Cancel action */}
-                    <div className="flex flex-row md:flex-col justify-between items-end border-t md:border-t-0 md:border-l border-white/10 pt-3 md:pt-0 md:pl-5 shrink-0">
+                    <div className={`flex flex-row md:flex-col justify-between items-end border-t md:border-t-0 md:border-l pt-3 md:pt-0 md:pl-5 shrink-0 ${
+                      isDark ? 'border-white/10' : 'border-slate-200'
+                    }`}>
                       <div className="text-left md:text-right">
-                        <span className="text-[10px] text-[#a09e9a] block font-mono-data">Tổng tiền</span>
-                        <span className="font-mono-data text-xl font-bold text-[#e8b84b]">
+                        <span className={`text-[10px] block font-mono-data ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Tổng tiền</span>
+                        <span className={`font-mono-data text-xl font-bold ${isDark ? 'text-[#e8b84b]' : 'text-amber-600'}`}>
                           {fmt(totalPriceNum)}
                         </span>
                       </div>
@@ -529,7 +583,11 @@ export default function ProfileView() {
                         <button
                           type="button"
                           onClick={() => setCancelTarget(item)}
-                          className="bg-white/5 hover:bg-[rgba(192,57,43,0.2)] text-[#a09e9a] hover:text-[#e07060] border border-white/10 hover:border-[rgba(192,57,43,0.4)] rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer"
+                          className={`border rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
+                            isDark
+                              ? 'bg-white/5 hover:bg-[rgba(192,57,43,0.2)] text-[#a09e9a] hover:text-[#e07060] border-white/10'
+                              : 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
+                          }`}
                         >
                           Hủy vé này
                         </button>
@@ -546,18 +604,22 @@ export default function ProfileView() {
       {/* CANCEL RESERVATION CONFIRM MODAL */}
       {cancelTarget && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#111118] border border-white/10 rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <h3 className="font-display text-xl font-bold text-[#f0ede8]">Xác nhận hủy vé xem phim</h3>
-            <p className="text-xs text-[#a09e9a] leading-relaxed">
-              Bạn có chắc chắn muốn hủy đơn đặt vé <strong className="text-[#f0ede8]">#{cancelTarget.id}</strong> cho phim{' '}
-              <strong className="text-[#e8b84b]">{cancelTarget.showtime?.movie_title}</strong>? Ghế ngồi sẽ được giải phóng ngay sau khi hủy.
+          <div className={`rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4 border ${
+            isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <h3 className={`font-display text-xl font-bold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Xác nhận hủy vé xem phim</h3>
+            <p className={`text-xs leading-relaxed ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+              Bạn có chắc chắn muốn hủy đơn đặt vé <strong className={isDark ? 'text-[#f0ede8]' : 'text-slate-900'}>#{cancelTarget.id}</strong> cho phim{' '}
+              <strong className={isDark ? 'text-[#e8b84b]' : 'text-amber-600'}>{cancelTarget.showtime?.movie_title}</strong>? Ghế ngồi sẽ được giải phóng ngay sau khi hủy.
             </p>
 
             <div className="flex gap-3 justify-end pt-2">
               <button
                 type="button"
                 onClick={() => setCancelTarget(null)}
-                className="bg-white/10 hover:bg-white/20 text-[#f0ede8] px-4 py-2 rounded-lg text-xs font-bold border-0 cursor-pointer"
+                className={`px-4 py-2 rounded-lg text-xs font-bold border-0 cursor-pointer ${
+                  isDark ? 'bg-white/10 hover:bg-white/20 text-[#f0ede8]' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
               >
                 Giữ vé
               </button>
