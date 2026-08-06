@@ -37,6 +37,7 @@ interface BookingState {
   selectedDate: number
   selectedShowtime: ShowTime | null
   selectedSeats: Set<string>
+  createdReservation?: any
 }
 
 const initialState: BookingState = {
@@ -44,6 +45,7 @@ const initialState: BookingState = {
   selectedDate: 0,
   selectedShowtime: null,
   selectedSeats: new Set(),
+  createdReservation: null,
 }
 
 function getInitialBookingState(): BookingState {
@@ -56,6 +58,7 @@ function getInitialBookingState(): BookingState {
         selectedDate: parsed.selectedDate || 0,
         selectedShowtime: parsed.selectedShowtime || null,
         selectedSeats: new Set(parsed.selectedSeats || []),
+        createdReservation: parsed.createdReservation || null,
       }
     }
   } catch (e) {
@@ -71,6 +74,7 @@ type BookingAction =
   | { type: 'SELECT_SHOWTIME'; payload: ShowTime }
   | { type: 'TOGGLE_SEAT'; payload: string }
   | { type: 'CLEAR_SEATS' }
+  | { type: 'SET_CREATED_RESERVATION'; payload: any }
   | { type: 'RESET' }
 
 function bookingReducer(state: BookingState, action: BookingAction): BookingState {
@@ -108,6 +112,8 @@ function bookingReducer(state: BookingState, action: BookingAction): BookingStat
     }
     case 'CLEAR_SEATS':
       return { ...state, selectedSeats: new Set() }
+    case 'SET_CREATED_RESERVATION':
+      return { ...state, createdReservation: action.payload }
     case 'RESET':
       try {
         sessionStorage.removeItem('cineverse_booking_state')

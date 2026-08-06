@@ -69,7 +69,7 @@ export function mapShowtimeResponse(st: ShowtimeAPIResponse): ShowTime {
 
 /** GET /api/v1/showtimes/?movie_id=X */
 export async function fetchShowtimesByMovie(movieId: number, dateStr?: string): Promise<ShowTime[]> {
-  let url = `/api/v1/showtimes/?movie_id=${movieId}&page_size=500`
+  let url = `/api/v1/showtimes/?movie_id=${movieId}&page_size=5000&upcoming_only=true`
   if (dateStr) {
     url += `&date=${dateStr}`
   }
@@ -87,10 +87,12 @@ export async function fetchSeatMap(
 
   // Transform seats list
   const seats: SeatItem[] = (data.seats ?? []).map((ss: any) => {
+    const isCouple = ss.seat?.seat_type === 'couple'
     const isVip = ss.seat?.seat_type === 'vip'
     const defaultBase = basePrice ?? 90000
     const defaultVip = vipPrice ?? (basePrice ? basePrice * 1.3 : 120000)
-    const price = isVip ? defaultVip : defaultBase
+    const defaultCouple = basePrice ? basePrice * 1.8 : 180000
+    const price = isCouple ? defaultCouple : isVip ? defaultVip : defaultBase
 
     return {
       id: ss.id,                  // showtime_seat_id
@@ -98,6 +100,7 @@ export async function fetchSeatMap(
       row_label: ss.seat?.row_label ?? 'A',
       col_number: ss.seat?.col_number ?? 1,
       seat_type: ss.seat?.seat_type ?? 'standard',
+      width: ss.seat?.width ?? (isCouple ? 2 : 1),
       status: ss.status ?? 'available',
       price,
     }
@@ -170,7 +173,20 @@ export async function fetchMyReservationsAPI(): Promise<ReservationItem[]> {
 }
 
 /** DELETE /api/v1/reservations/{id} */
-export async function cancelReservationAPI(reservationId: number): Promise<ReservationItem> {
-  const { data } = await apiClient.delete<ReservationItem>(`/api/v1/reservations/${reservationId}`)
+export async function cancelReservationAPI(reservationId: number): Promise<any> {
+  const { data } = await apiClient.delete(`/api/v1/reservations/${reservationId}`)
+  return data
+}
+
+/** POST /api/v1/reservations/{id}/exchange */
+export async function exchangeReservationAPI(
+  reservationId: number,
+  newShowtimeId: number,
+  newSeatIds: number[]
+): Promise<any> {
+  const { data } = await apiClient.post(`/api/v1/reservations/${reservationId}/exchange`, {
+    new_showtime_id: newShowtimeId,
+    new_seat_ids: newSeatIds,
+  })
   return data
 }

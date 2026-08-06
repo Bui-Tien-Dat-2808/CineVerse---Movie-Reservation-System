@@ -1,7 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useBooking } from '../context/BookingContext'
+import { useAuth } from '../context/AuthContext'
 import { getDateList } from '../lib/utils'
+import { ETicketModal } from '../components/features/ticket/ETicketModal'
 
 const BOOKING_CODE = 'CVN-' + Math.random().toString(36).slice(2, 8).toUpperCase()
 const DATES = getDateList(7)
@@ -9,6 +11,8 @@ const DATES = getDateList(7)
 export default function ConfirmedView() {
   const navigate = useNavigate()
   const { state, reset } = useBooking()
+  const { user } = useAuth()
+  const [showQRModal, setShowQRModal] = useState(false)
 
   // Guard: must have a completed booking
   useEffect(() => {
@@ -21,7 +25,32 @@ export default function ConfirmedView() {
     return null
   }
 
-  const { selectedMovie: movie, selectedShowtime: showtime, selectedDate, selectedSeats } = state
+  const { selectedMovie: movie, selectedShowtime: showtime, selectedDate, selectedSeats, createdReservation } = state
+  const bookingCode = createdReservation?.ticket_code || 'CVN-' + Math.random().toString(36).slice(2, 8).toUpperCase()
+
+  const reservationForModal = createdReservation || {
+    id: 1,
+    showtime_id: showtime.id,
+    user_id: user?.id || 1,
+    ticket_code: bookingCode,
+    total_price: 180000,
+    status: 'confirmed',
+    reservation_seats: [...selectedSeats].map((seatStr, idx) => ({
+      id: idx + 1,
+      showtime_seat_id: idx + 1,
+      price: 90000,
+      seat_label: seatStr,
+    })),
+    showtime: {
+      id: showtime.id,
+      movie_title: movie.title,
+      movie_poster_url: movie.posterUrl,
+      room_name: showtime.hall,
+      start_time: `${DATES[selectedDate].toISOString().split('T')[0]}T${showtime.time}:00Z`,
+      end_time: `${DATES[selectedDate].toISOString().split('T')[0]}T${showtime.time}:00Z`,
+    },
+    created_at: new Date().toISOString(),
+  }
 
   const ticketInfo = [
     ['Ngày chiếu', DATES[selectedDate].toLocaleDateString('vi-VN')],
@@ -29,7 +58,7 @@ export default function ConfirmedView() {
     ['Rạp / Phòng', showtime.hall],
     ['Loại phòng', showtime.type],
     ['Ghế', [...selectedSeats].sort().join(', ')],
-    ['Mã đặt vé', BOOKING_CODE],
+    ['Mã đặt vé', bookingCode],
   ]
 
   function handleReset() {
@@ -59,15 +88,26 @@ export default function ConfirmedView() {
       </p>
 
       {/* Ticket card */}
-      <div className="bg-[#111118] border border-white/10 rounded-lg p-7 mb-8 relative overflow-hidden text-left">
+      <div className="bg-[#111118] border border-white/10 rounded-lg p-7 mb-8 relative overflow-hidden text-left shadow-xl">
         <div
           className="absolute top-0 left-0 right-0 h-[3px]"
           style={{ background: 'linear-gradient(90deg, #e8b84b, #c0392b, #e8b84b)' }}
         />
 
-        <h3 className="font-display font-bold text-xl mb-6 pb-4 border-b border-white/10 text-[#e8b84b]">
-          Thông tin vé đã thanh toán
-        </h3>
+        <div className="flex justify-between items-center mb-6 pb-4 border-b border-white/10">
+          <h3 className="font-display font-bold text-xl text-[#e8b84b]">
+            Thông tin vé đã thanh toán
+          </h3>
+
+          <button
+            type="button"
+            onClick={() => setShowQRModal(true)}
+            className="bg-[#e8b84b] hover:bg-[#f0c868] text-[#09090e] font-bold px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1 shadow-md"
+          >
+            <span>📱</span>
+            <span>Xem Vé QR</span>
+          </button>
+        </div>
 
         <div className="space-y-3">
           {ticketInfo.map(([label, val]) => (
@@ -79,12 +119,31 @@ export default function ConfirmedView() {
         </div>
       </div>
 
-      <button
-        onClick={handleReset}
-        className="w-full bg-[#e8b84b] text-[#09090e] border-0 rounded py-3.5 text-sm font-bold cursor-pointer hover:shadow-[0_8px_30px_rgba(232,184,75,0.4)] transition-all"
-      >
-        Về trang chủ →
-      </button>
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={() => setShowQRModal(true)}
+          className="flex-1 bg-white/10 hover:bg-white/20 text-[#f0ede8] font-bold py-3.5 rounded text-sm transition-all border border-white/10 flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <span>📱</span>
+          <span>Mở Vé QR Vào Cổng</span>
+        </button>
+
+        <button
+          onClick={handleReset}
+          className="flex-1 bg-[#e8b84b] text-[#09090e] border-0 rounded py-3.5 text-sm font-bold cursor-pointer hover:shadow-[0_8px_30px_rgba(232,184,75,0.4)] transition-all"
+        >
+          Về trang chủ →
+        </button>
+      </div>
+
+      {/* E-TICKET QR MODAL */}
+      <ETicketModal
+        isOpen={showQRModal}
+        onClose={() => setShowQRModal(false)}
+        reservation={reservationForModal as any}
+        userName={user?.full_name}
+      />
     </div>
   )
 }

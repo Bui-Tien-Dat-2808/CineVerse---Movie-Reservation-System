@@ -16,6 +16,11 @@ export default function SeatLegend() {
       label: 'Ghế VIP',
     },
     {
+      bg: isDark ? 'rgba(236,72,153,0.15)' : '#fce7f3',
+      border: isDark ? 'rgba(236,72,153,0.5)' : '#f472b6',
+      label: 'Ghế đôi (💑)',
+    },
+    {
       bg: '#e8b84b',
       border: '#e8b84b',
       label: 'Đang chọn',

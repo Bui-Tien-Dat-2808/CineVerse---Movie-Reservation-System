@@ -1,6 +1,7 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { BookingProvider } from './context/BookingContext'
-import { AuthProvider } from './context/AuthContext'
+import { AuthProvider, useAuth } from './context/AuthContext'
 import Navbar from './components/layout/Navbar'
 import Footer from './components/layout/Footer'
 import AuthModal from './components/features/auth/AuthModal'
@@ -38,7 +39,19 @@ export default function App() {
  */
 function AppShell() {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { user, isAuthenticated, isAuthLoading } = useAuth()
+
   const isHome = location.pathname === '/'
+  const isAdmin = isAuthenticated && user?.role === 'admin'
+
+  // Admin Guard: Admins live strictly in /admin interface.
+  // Any attempt to open public client routes redirects to /admin.
+  useEffect(() => {
+    if (!isAuthLoading && isAdmin && !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/profile')) {
+      navigate('/admin', { replace: true })
+    }
+  }, [isAdmin, isAuthLoading, location.pathname, navigate])
 
   return (
     <div className="min-h-screen relative bg-cinema-pattern text-[#f0ede8] selection:bg-[#e8b84b] selection:text-[#09090e]">
@@ -53,26 +66,26 @@ function AppShell() {
 
       <main className="relative z-10 pt-16">
         <Routes>
-          <Route path="/" element={<HomeView />} />
+          <Route path="/" element={isAdmin ? <Navigate to="/admin" replace /> : <HomeView />} />
           <Route path="/admin" element={<AdminView />} />
           <Route path="/profile" element={<ProfileView />} />
-          <Route path="/sap-ra-mat" element={<ComingSoonView />} />
-          <Route path="/rap-chieu" element={<TheatersView />} />
-          <Route path="/khuyen-mai" element={<PromotionsView />} />
-          <Route path="/movie/:id" element={<DetailView />} />
-          <Route path="/movie/:id/seats" element={<SeatsView />} />
-          <Route path="/movie/:id/checkout" element={<CheckoutView />} />
-          <Route path="/confirmed" element={<ConfirmedView />} />
-          {/* Catch-all: redirect về home */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/sap-ra-mat" element={isAdmin ? <Navigate to="/admin" replace /> : <ComingSoonView />} />
+          <Route path="/rap-chieu" element={isAdmin ? <Navigate to="/admin" replace /> : <TheatersView />} />
+          <Route path="/khuyen-mai" element={isAdmin ? <Navigate to="/admin" replace /> : <PromotionsView />} />
+          <Route path="/movie/:id" element={isAdmin ? <Navigate to="/admin" replace /> : <DetailView />} />
+          <Route path="/movie/:id/seats" element={isAdmin ? <Navigate to="/admin" replace /> : <SeatsView />} />
+          <Route path="/movie/:id/checkout" element={isAdmin ? <Navigate to="/admin" replace /> : <CheckoutView />} />
+          <Route path="/confirmed" element={isAdmin ? <Navigate to="/admin" replace /> : <ConfirmedView />} />
+          {/* Catch-all: redirect về admin nếu là Admin, hoặc home nếu là User */}
+          <Route path="*" element={<Navigate to={isAdmin ? "/admin" : "/"} replace />} />
         </Routes>
       </main>
 
       {/* Auth Modal popup */}
       <AuthModal />
 
-      {/* Footer chỉ hiện trên trang chủ */}
-      {isHome && <Footer />}
+      {/* Footer chỉ hiện trên trang chủ cho khách hàng */}
+      {isHome && !isAdmin && <Footer />}
     </div>
   )
 }

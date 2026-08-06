@@ -1,18 +1,32 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { updateProfileAPI } from '../api/auth'
-import { fetchMyReservationsAPI, cancelReservationAPI, type ReservationItem } from '../api/showtimes'
+import { fetchMyReservationsAPI, cancelReservationAPI, exchangeReservationAPI, fetchShowtimesByMovie, fetchSeatMap, type ReservationItem } from '../api/showtimes'
+import { apiClient } from '../api/client'
 import { fmt } from '../lib/utils'
+import type { ShowTime, SeatItem } from '../types'
+
+import { ETicketModal } from '../components/features/ticket/ETicketModal'
 
 export default function ProfileView() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab') as 'profile' | 'history' | 'vouchers' | null
+
   const { user, isAuthenticated, logout } = useAuth()
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'history'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'history' | 'vouchers'>(tabParam || 'profile')
+  const [ticketModalReservation, setTicketModalReservation] = useState<ReservationItem | null>(null)
+
+  useEffect(() => {
+    if (tabParam && (tabParam === 'profile' || tabParam === 'history' || tabParam === 'vouchers')) {
+      setActiveTab(tabParam)
+    }
+  }, [tabParam])
   const [isEditing, setIsEditing] = useState(false) // Toggle view vs edit mode
 
   // Profile Form States
@@ -31,9 +45,112 @@ export default function ProfileView() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyFilter, setHistoryFilter] = useState<'all' | 'confirmed' | 'cancelled'>('all')
 
+  // User Vouchers States
+  const [userVouchers, setUserVouchers] = useState<any[]>([])
+  const [voucherLoading, setVoucherLoading] = useState(false)
+  const [copiedCode, setCopiedCode] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (activeTab === 'vouchers') {
+      loadUserVouchers()
+    }
+  }, [activeTab])
+
+  async function loadUserVouchers() {
+    setVoucherLoading(true)
+    try {
+      const { data } = await apiClient.get<any[]>('/api/v1/vouchers/')
+      setUserVouchers(data)
+    } catch (err) {
+      console.error('Failed to load user vouchers:', err)
+    } finally {
+      setVoucherLoading(false)
+    }
+  }
+
+  function handleCopyVoucher(code: string) {
+    navigator.clipboard.writeText(code)
+    setCopiedCode(code)
+    setTimeout(() => setCopiedCode(null), 2500)
+  }
+
   // Cancel Confirmation Modal State
   const [cancelTarget, setCancelTarget] = useState<ReservationItem | null>(null)
   const [cancelLoading, setCancelLoading] = useState(false)
+
+  // Exchange Ticket Modal State
+  const [exchangeTarget, setExchangeTarget] = useState<ReservationItem | null>(null)
+  const [exchangeStep, setExchangeStep] = useState<'showtime' | 'seats'>('showtime')
+  const [exchangeShowtimes, setExchangeShowtimes] = useState<ShowTime[]>([])
+  const [exchangeSelectedShowtime, setExchangeSelectedShowtime] = useState<ShowTime | null>(null)
+  const [exchangeSeatsMap, setExchangeSeatsMap] = useState<SeatItem[]>([])
+  const [exchangeSelectedSeats, setExchangeSelectedSeats] = useState<Set<number>>(new Set())
+  const [exchangeLoading, setExchangeLoading] = useState(false)
+  const [exchangeError, setExchangeError] = useState<string | null>(null)
+
+  const handleStartExchange = async (item: ReservationItem) => {
+    setExchangeTarget(item)
+    setExchangeStep('showtime')
+    setExchangeError(null)
+    setExchangeLoading(true)
+    setExchangeSelectedShowtime(null)
+    setExchangeSelectedSeats(new Set())
+
+    try {
+      if (item.showtime) {
+        // Fetch showtimes for movie
+        const movieId = (item.showtime as any).movie_id || item.showtime.id
+        const list = await fetchShowtimesByMovie(movieId)
+        const nowMs = Date.now()
+        const available = list.filter((st) => {
+          const stMs = new Date(`${st.date}T${st.time}`).getTime()
+          return st.id !== item.showtime_id && (stMs - nowMs >= 30 * 60 * 1000)
+        })
+        setExchangeShowtimes(available)
+      }
+    } catch (err: any) {
+      setExchangeError(err.response?.data?.detail || 'Không thể tải danh sách suất chiếu mới.')
+    } finally {
+      setExchangeLoading(false)
+    }
+  }
+
+  const handleSelectExchangeShowtime = async (st: ShowTime) => {
+    setExchangeSelectedShowtime(st)
+    setExchangeStep('seats')
+    setExchangeLoading(true)
+    setExchangeError(null)
+    try {
+      if (st.id) {
+        const mapRes = await fetchSeatMap(st.id, st.price, st.vipPrice)
+        setExchangeSeatsMap(mapRes.seats)
+      }
+    } catch (err: any) {
+      setExchangeError(err.response?.data?.detail || 'Không thể tải sơ đồ ghế.')
+    } finally {
+      setExchangeLoading(false)
+    }
+  }
+
+  const handleConfirmExchange = async () => {
+    if (!exchangeTarget || !exchangeSelectedShowtime?.id || exchangeSelectedSeats.size === 0) return
+    setExchangeLoading(true)
+    setExchangeError(null)
+    try {
+      await exchangeReservationAPI(
+        exchangeTarget.id,
+        exchangeSelectedShowtime.id,
+        Array.from(exchangeSelectedSeats)
+      )
+      setExchangeTarget(null)
+      loadHistory()
+      setUpdateMsg({ type: 'success', text: 'Đổi suất chiếu thành công! Thông tin vé mới đã được cập nhật.' })
+    } catch (err: any) {
+      setExchangeError(err.response?.data?.detail || 'Đổi suất chiếu thất bại. Vui lòng thử lại.')
+    } finally {
+      setExchangeLoading(false)
+    }
+  }
 
   // Hydrate user data when user object changes
   useEffect(() => {
@@ -144,12 +261,12 @@ export default function ProfileView() {
     <div className="max-w-[1000px] mx-auto px-6 py-10 pb-20">
       {/* Back button */}
       <button
-        onClick={() => navigate('/')}
+        onClick={() => (user?.role === 'admin' ? navigate('/admin') : navigate('/'))}
         className={`flex items-center gap-1.5 bg-transparent border-0 text-sm cursor-pointer mb-6 transition-colors ${
           isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-500 hover:text-slate-900 font-medium'
         }`}
       >
-        ← Trang chủ
+        {user?.role === 'admin' ? '← Trang Quản Trị' : '← Trang Chủ'}
       </button>
 
       {/* User Header Profile Card */}
@@ -170,47 +287,10 @@ export default function ProfileView() {
             <div className={`mt-2 inline-block px-2.5 py-0.5 rounded text-[10px] font-mono-data uppercase border ${
               isDark ? 'bg-white/5 border-white/10 text-[#e8b84b]' : 'bg-amber-500/10 border-amber-500/20 text-amber-700 font-semibold'
             }`}>
-              {user?.role === 'admin' ? '⚡ Quản trị viên (Admin)' : ' Hạng Thành viên'}
+              {user?.role === 'admin' ? '⚡ Quản trị viên (Admin)' : ' Hạng Thành viên Bạc'}
             </div>
           </div>
         </div>
-
-        <button
-          onClick={logout}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition-all border cursor-pointer ${
-            isDark
-              ? 'bg-white/5 hover:bg-[rgba(192,57,43,0.2)] text-[#a09e9a] hover:text-[#e07060] border-white/10 hover:border-[rgba(192,57,43,0.4)]'
-              : 'bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 border-slate-200 hover:border-red-200'
-          }`}
-        >
-          Đăng xuất
-        </button>
-      </div>
-
-      {/* Tab Controls */}
-      <div className={`flex border-b mb-8 gap-8 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
-        <button
-          type="button"
-          onClick={() => setActiveTab('profile')}
-          className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer ${
-            activeTab === 'profile'
-              ? isDark ? 'border-[#e8b84b] text-[#e8b84b]' : 'border-amber-500 text-amber-600'
-              : isDark ? 'border-transparent text-[#a09e9a] hover:text-[#f0ede8]' : 'border-transparent text-slate-500 hover:text-slate-900'
-          }`}
-        >
-          👤 Thông tin cá nhân
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('history')}
-          className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer ${
-            activeTab === 'history'
-              ? isDark ? 'border-[#e8b84b] text-[#e8b84b]' : 'border-amber-500 text-amber-600'
-              : isDark ? 'border-transparent text-[#a09e9a] hover:text-[#f0ede8]' : 'border-transparent text-slate-500 hover:text-slate-900'
-          }`}
-        >
-          🎟️ Lịch sử đặt vé & Hủy vé
-        </button>
       </div>
 
       {/* TAB 1: PROFILE INFO & EDIT FORM */}
@@ -502,6 +582,10 @@ export default function ProfileView() {
                   .join(', ')
 
                 const isCancelled = item.status === 'cancelled'
+                const isExchanged = item.status === 'exchanged'
+                const isConfirmed = item.status === 'confirmed'
+                const startTimeMs = item.showtime?.start_time ? new Date(item.showtime.start_time).getTime() : 0
+                const isUpcoming = isConfirmed && startTimeMs > 0 && (startTimeMs - Date.now() >= 30 * 60 * 1000)
                 const totalPriceNum =
                   typeof item.total_price === 'string' ? parseFloat(item.total_price) : item.total_price
 
@@ -525,7 +609,7 @@ export default function ProfileView() {
                   >
                     <div
                       className={`absolute top-0 left-0 bottom-0 w-1.5 ${
-                        isCancelled ? 'bg-[#e07060]' : 'bg-[#2ecc71]'
+                        isCancelled ? 'bg-[#e07060]' : isExchanged ? 'bg-purple-500' : 'bg-[#2ecc71]'
                       }`}
                     />
 
@@ -545,13 +629,15 @@ export default function ProfileView() {
                             className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono-data ${
                               isCancelled
                                 ? 'bg-[rgba(224,112,96,0.15)] text-[#e07060] border border-[rgba(224,112,96,0.3)]'
+                                : isExchanged
+                                ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
                                 : 'bg-[rgba(46,204,113,0.15)] text-[#2ecc71] border border-[rgba(46,204,113,0.3)]'
                             }`}
                           >
-                            {isCancelled ? 'Đã hủy' : 'Đã xác nhận'}
+                            {isCancelled ? 'Đã hủy' : isExchanged ? 'Đã đổi suất' : 'Đã xác nhận'}
                           </span>
-                          <span className={`text-[11px] font-mono-data ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>
-                            Mã vé: #{item.id}
+                          <span className={`text-[11px] font-mono-data font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                            Mã vé: {item.ticket_code || `#${item.id}`}
                           </span>
                         </div>
 
@@ -579,19 +665,44 @@ export default function ProfileView() {
                         </span>
                       </div>
 
-                      {!isCancelled && (
-                        <button
-                          type="button"
-                          onClick={() => setCancelTarget(item)}
-                          className={`border rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
-                            isDark
-                              ? 'bg-white/5 hover:bg-[rgba(192,57,43,0.2)] text-[#a09e9a] hover:text-[#e07060] border-white/10'
-                              : 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
-                          }`}
-                        >
-                          Hủy vé này
-                        </button>
-                      )}
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {isConfirmed && (
+                          <button
+                            type="button"
+                            onClick={() => setTicketModalReservation(item)}
+                            className="bg-[#e8b84b] hover:bg-[#f0c868] text-[#09090e] font-bold px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                          >
+                            <span>📱</span>
+                            <span>Xem Vé QR</span>
+                          </button>
+                        )}
+                        {isUpcoming && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleStartExchange(item)}
+                              className={`border rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                                isDark
+                                  ? 'bg-[#e8b84b]/15 hover:bg-[#e8b84b]/30 text-[#e8b84b] border-[#e8b84b]/30'
+                                  : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                              }`}
+                            >
+                              🔄 Đổi suất
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCancelTarget(item)}
+                              className={`border rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                                isDark
+                                  ? 'bg-white/5 hover:bg-[rgba(192,57,43,0.2)] text-[#a09e9a] hover:text-[#e07060] border-white/10'
+                                  : 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
+                              }`}
+                            >
+                              Hủy vé
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )
@@ -635,6 +746,279 @@ export default function ProfileView() {
           </div>
         </div>
       )}
+
+      {/* EXCHANGE TICKET MODAL */}
+      {exchangeTarget && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className={`rounded-xl p-6 max-w-xl w-full shadow-2xl space-y-4 border max-h-[90vh] overflow-y-auto ${
+            isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className="flex justify-between items-center border-b pb-3 border-white/10">
+              <h3 className="font-display text-lg font-bold flex items-center gap-2 text-[#e8b84b]">
+                <span>🔄</span>
+                <span>Đổi Suất Chiếu Sang Suất Khác</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setExchangeTarget(null)}
+                className="text-slate-400 hover:text-white text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {exchangeError && (
+              <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/40 text-red-300 text-xs flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{exchangeError}</span>
+              </div>
+            )}
+
+            {/* STEP 1: SELECT NEW SHOWTIME */}
+            {exchangeStep === 'showtime' && (
+              <div className="space-y-3">
+                <p className={`text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                  Chọn suất chiếu mới cho phim <strong className="text-[#e8b84b]">{exchangeTarget.showtime?.movie_title}</strong>:
+                </p>
+
+                {exchangeLoading ? (
+                  <p className="text-xs text-amber-500 animate-pulse py-4 text-center">⏳ Đang tải danh sách suất chiếu...</p>
+                ) : exchangeShowtimes.length === 0 ? (
+                  <p className="text-xs italic text-slate-400 py-4 text-center">Không có suất chiếu nào khác sắp diễn ra cho phim này.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[300px] overflow-y-auto pr-1">
+                    {exchangeShowtimes.map((st) => (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => handleSelectExchangeShowtime(st)}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                          isDark
+                            ? 'bg-[#09090e] border-white/10 hover:border-[#e8b84b] hover:bg-white/5'
+                            : 'bg-slate-50 border-slate-200 hover:border-amber-400 hover:bg-amber-50'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-xs text-[#e8b84b]">🎬 {st.hall}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded border border-amber-500/30 text-amber-400 font-mono-data font-bold">
+                            {st.type}
+                          </span>
+                        </div>
+                        <div className="text-sm font-mono-data font-bold text-emerald-400">
+                          📅 {st.date} · 🕒 {st.time}
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono-data">
+                          Giá vé: {fmt(st.price)}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* STEP 2: SELECT NEW SEATS */}
+            {exchangeStep === 'seats' && exchangeSelectedShowtime && (
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <button
+                    type="button"
+                    onClick={() => setExchangeStep('showtime')}
+                    className="text-xs text-amber-400 hover:underline cursor-pointer font-bold"
+                  >
+                    ← Chọn lại suất chiếu
+                  </button>
+                  <span className="text-xs font-mono-data text-emerald-400 font-bold">
+                    Suất chiếu: {exchangeSelectedShowtime.date} ({exchangeSelectedShowtime.time})
+                  </span>
+                </div>
+
+                <p className={`text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                  Chọn ghế mới trong phòng <strong className="text-[#e8b84b]">{exchangeSelectedShowtime.hall}</strong>:
+                </p>
+
+                {exchangeLoading ? (
+                  <p className="text-xs text-amber-500 animate-pulse py-4 text-center">⏳ Đang tải sơ đồ ghế...</p>
+                ) : (
+                  <div className="max-h-[280px] overflow-y-auto p-3 border rounded-xl bg-black/30 border-white/10">
+                    <div className="grid grid-cols-8 gap-1.5 max-w-sm mx-auto">
+                      {exchangeSeatsMap.map((seat) => {
+                        const isTaken = seat.status === 'booked' || seat.status === 'held'
+                        const isSelected = exchangeSelectedSeats.has(seat.seat_id)
+
+                        return (
+                          <button
+                            key={seat.id}
+                            type="button"
+                            disabled={isTaken}
+                            onClick={() => {
+                              const newSet = new Set(exchangeSelectedSeats)
+                              if (newSet.has(seat.seat_id)) {
+                                newSet.delete(seat.seat_id)
+                              } else {
+                                newSet.add(seat.seat_id)
+                              }
+                              setExchangeSelectedSeats(newSet)
+                            }}
+                            className={`p-1.5 rounded text-[10px] font-mono-data font-bold border transition-all cursor-pointer ${
+                              isTaken
+                                ? 'bg-red-950/40 border-red-900 text-red-700 cursor-not-allowed'
+                                : isSelected
+                                ? 'bg-[#2ecc71] border-[#2ecc71] text-black font-extrabold scale-105'
+                                : 'bg-slate-800 border-white/20 text-slate-200 hover:border-amber-400'
+                            }`}
+                          >
+                            {seat.row_label}{seat.col_number}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center pt-3 border-t border-white/10">
+                  <span className="text-xs font-mono-data">
+                    Đã chọn: <strong className="text-emerald-400">{exchangeSelectedSeats.size}</strong> ghế
+                  </span>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setExchangeTarget(null)}
+                      className="px-4 py-2 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmExchange}
+                      disabled={exchangeLoading || exchangeSelectedSeats.size === 0}
+                      className="px-5 py-2 rounded-lg text-xs font-bold bg-[#2ecc71] text-black hover:brightness-110 cursor-pointer disabled:opacity-50"
+                    >
+                      {exchangeLoading ? '⏳ Đang xử lý...' : '✓ Xác Nhận Đổi Suất'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: USER VOUCHERS */}
+      {activeTab === 'vouchers' && (
+        <div className="space-y-6">
+          <div className={`rounded-xl p-6 sm:p-8 border transition-colors ${
+            isDark ? 'bg-[#111118] border-white/10 shadow-xl' : 'bg-white border-slate-200 shadow-lg'
+          }`}>
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className={`font-display text-xl font-bold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                  Kho Voucher & Mã Giảm Giá Của Tôi
+                </h3>
+                <p className={`text-xs mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                  Các mã khuyến mãi độc quyền đang có hiệu lực dành cho tài khoản của bạn.
+                </p>
+              </div>
+            </div>
+
+            {copiedCode && (
+              <div className="mb-4 p-3 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs rounded-xl font-semibold flex items-center justify-between animate-in fade-in">
+                <span>✓ Đã sao chép mã <strong className="font-mono-data underline">{copiedCode}</strong> vào khay nhớ tạm!</span>
+                <span className="text-[10px] opacity-80">Áp dụng khi thanh toán</span>
+              </div>
+            )}
+
+            {voucherLoading ? (
+              <div className={`py-12 text-center text-xs font-mono-data animate-pulse ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                ⏳ Đang kiểm tra kho voucher...
+              </div>
+            ) : userVouchers.length === 0 ? (
+              <div className={`py-12 text-center text-xs italic border rounded-xl ${
+                isDark ? 'text-[#a09e9a] bg-[#09090e] border-white/5' : 'text-slate-500 bg-slate-50 border-slate-200'
+              }`}>
+                🏷️ Hiện chưa có mã voucher nào trong kho. Hãy đón chờ các chương trình khuyến mãi mới nhất!
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {userVouchers.map((v) => {
+                  const discountDisplay =
+                    v.discount_type === 'percent'
+                      ? `Giảm ${v.discount_value}%`
+                      : `Giảm ${fmt(v.discount_value)}`
+
+                  const minSpendDisplay =
+                    v.min_spend > 0 ? `Đơn từ ${fmt(v.min_spend)}` : 'Mọi đơn hàng'
+
+                  return (
+                    <div
+                      key={v.id}
+                      className={`relative border rounded-2xl p-5 flex flex-col justify-between gap-4 overflow-hidden transition-all duration-200 hover:scale-[1.01] ${
+                        isDark
+                          ? 'bg-[#09090e] border-white/10 hover:border-[#e8b84b]/40 shadow-lg'
+                          : 'bg-white border-slate-200 hover:border-amber-400 shadow-md'
+                      }`}
+                    >
+                      {/* Left color bar decorative accent */}
+                      <div className="absolute top-0 left-0 bottom-0 w-2 bg-gradient-to-b from-[#e8b84b] to-[#c0392b]" />
+
+                      <div className="pl-2 space-y-2">
+                        <div className="flex justify-between items-start gap-2">
+                          <span className="font-mono-data font-bold text-sm text-[#e8b84b] bg-[#e8b84b]/10 border border-[#e8b84b]/30 px-3 py-1 rounded-lg tracking-wider">
+                            {v.code}
+                          </span>
+                          <span className="text-[10px] font-bold font-mono-data uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            Sẵn sàng dùng
+                          </span>
+                        </div>
+
+                        <div className="pt-1">
+                          <p className={`font-display font-bold text-base ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                            {discountDisplay}
+                          </p>
+                          <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                            {minSpendDisplay} {v.max_discount ? `(Giảm tối đa ${fmt(v.max_discount)})` : ''}
+                          </p>
+                        </div>
+
+                        {v.is_first_booking_only && (
+                          <span className="inline-block text-[10px] text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded font-semibold">
+                            ✨ Dành riêng cho đơn hàng đầu tiên
+                          </span>
+                        )}
+                      </div>
+
+                      <div className={`pl-2 pt-3 border-t flex items-center justify-between text-xs ${
+                        isDark ? 'border-white/5' : 'border-slate-100'
+                      }`}>
+                        <span className={`text-[11px] font-mono-data ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                          📅 {v.expiry_date ? `Hạn dùng: ${v.expiry_date}` : 'Vô thời hạn'}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCopyVoucher(v.code)}
+                          className="bg-[#e8b84b]/15 hover:bg-[#e8b84b]/30 text-[#e8b84b] border border-[#e8b84b]/40 font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-all active:scale-95"
+                        >
+                          {copiedCode === v.code ? '✓ Đã chép' : '📋 Sao chép mã'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* E-TICKET QR MODAL */}
+      <ETicketModal
+        isOpen={!!ticketModalReservation}
+        onClose={() => setTicketModalReservation(null)}
+        reservation={ticketModalReservation}
+        userName={user?.full_name}
+      />
     </div>
   )
 }

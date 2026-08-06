@@ -1,5 +1,6 @@
 import { cn } from '../../../lib/utils'
 import { getDateList } from '../../../lib/utils'
+import { useTheme } from '../../../context/ThemeContext'
 
 interface DatePickerProps {
   dates?: Date[]
@@ -18,10 +19,12 @@ function formatYYYYMMDD(d: Date): string {
 
 export default function DatePicker({ dates = DEFAULT_DATES, selectedDate, onDateChange }: DatePickerProps) {
   const todayStr = formatYYYYMMDD(new Date())
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
 
   return (
     <div>
-      <h3 className="font-display text-lg font-semibold mb-4">Chọn ngày chiếu</h3>
+      <h3 className={`font-display text-lg font-semibold mb-4 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Chọn ngày chiếu</h3>
       <div className="flex gap-2 flex-wrap">
         {dates.map((d, i) => {
           const isToday = formatYYYYMMDD(d) === todayStr
@@ -33,8 +36,12 @@ export default function DatePicker({ dates = DEFAULT_DATES, selectedDate, onDate
               className={cn(
                 'px-3.5 py-2.5 rounded text-center min-w-[64px] cursor-pointer border transition-all duration-150',
                 active
-                  ? 'border-[#e8b84b] bg-[rgba(232,184,75,0.12)] text-[#e8b84b] font-bold shadow-sm'
-                  : 'border-white/[0.08] bg-[#111118] text-[#a09e9a] hover:border-white/20 hover:text-[#f0ede8]',
+                  ? isDark
+                    ? 'border-[#e8b84b] bg-[rgba(232,184,75,0.12)] text-[#e8b84b] font-bold shadow-sm'
+                    : 'border-amber-500 bg-amber-500/10 text-amber-700 font-bold shadow-sm'
+                  : isDark
+                    ? 'border-white/[0.08] bg-[#111118] text-[#a09e9a] hover:border-white/20 hover:text-[#f0ede8]'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900 shadow-sm'
               )}
             >
               <div className="font-mono-data text-lg font-semibold leading-none">

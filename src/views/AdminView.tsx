@@ -327,10 +327,11 @@ export default function AdminView() {
     | 'vouchers'
     | 'analytics'
     | 'users'
+    | 'scanner'
     | null
 
   const [activeTabState, setActiveTabState] = useState<
-    'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'analytics' | 'users'
+    'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'analytics' | 'users' | 'scanner'
   >(() => {
     if (tabParam) return tabParam
     const stored = localStorage.getItem('admin_active_tab')
@@ -339,7 +340,7 @@ export default function AdminView() {
 
   const activeTab = tabParam || activeTabState
 
-  const setActiveTab = (tab: 'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'analytics' | 'users') => {
+  const setActiveTab = (tab: 'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'analytics' | 'users' | 'scanner') => {
     setActiveTabState(tab)
     localStorage.setItem('admin_active_tab', tab)
     setSearchParams({ tab })
@@ -412,6 +413,94 @@ export default function AdminView() {
   // Showtime Filters State
   const [stFilterMovieId, setStFilterMovieId] = useState<number | 'all'>('all')
   const [stFilterRoomId, setStFilterRoomId] = useState<number | 'all'>('all')
+
+  // Dedicated Showtime Cancellation State
+  const [cancelMode, setCancelMode] = useState<'single' | 'movie' | 'all'>('single')
+  const [cancelSingleStId, setCancelSingleStId] = useState<number>(0)
+  const [cancelMovieId, setCancelMovieId] = useState<number>(0)
+
+  // Ticket Scanner / Verification State
+  const [scannerTicketCode, setScannerTicketCode] = useState('')
+  const [scannerResult, setScannerResult] = useState<{
+    valid: boolean
+    status_code: 'VALID' | 'CANCELLED' | 'CHECKED_IN' | 'NOT_FOUND'
+    message: string
+    reservation?: any
+  } | null>(null)
+  const [scannerLoading, setScannerLoading] = useState(false)
+  const [checkInLoading, setCheckInLoading] = useState(false)
+  const [recentCheckIns, setRecentCheckIns] = useState<Array<{
+    ticket_code: string
+    movie_title: string
+    room_name: string
+    checked_in_at: string
+  }>>([])
+
+  async function handleVerifyTicketCode(codeToVerify?: string) {
+    const code = (codeToVerify || scannerTicketCode).trim()
+    if (!code) return
+
+    setScannerLoading(true)
+    try {
+      const res = await apiClient.post('/api/v1/reservations/verify-ticket', {
+        ticket_code: code,
+      })
+      setScannerResult(res.data)
+    } catch (err: any) {
+      setScannerResult({
+        valid: false,
+        status_code: 'NOT_FOUND',
+        message: err.response?.data?.detail || `Không tìm thấy thông tin vé '${code}'.`,
+      })
+    } finally {
+      setScannerLoading(false)
+    }
+  }
+
+  async function handlePerformCheckIn() {
+    const code = (scannerResult?.reservation?.ticket_code || scannerTicketCode).trim()
+    if (!code) return
+
+    setCheckInLoading(true)
+    try {
+      const res = await apiClient.post('/api/v1/reservations/check-in', {
+        ticket_code: code,
+      })
+
+      const resData = res.data
+      setScannerResult({
+        valid: false,
+        status_code: 'CHECKED_IN',
+        message: resData.message || '✅ Check-in thành công! Khán giả đã vào rạp.',
+        reservation: resData.reservation,
+      })
+
+      if (resData.reservation) {
+        const item = resData.reservation
+        setRecentCheckIns((prev) => [
+          {
+            ticket_code: item.ticket_code,
+            movie_title: item.showtime?.movie_title || 'N/A',
+            room_name: item.showtime?.room_name || 'N/A',
+            checked_in_at: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          },
+          ...prev.slice(0, 9),
+        ])
+      }
+
+      setActionMsg({
+        type: 'success',
+        text: `Đã check-in cho vé ${code} thành công!`,
+      })
+    } catch (err: any) {
+      setActionMsg({
+        type: 'error',
+        text: err.response?.data?.detail || 'Không thể thực hiện check-in cho vé này.',
+      })
+    } finally {
+      setCheckInLoading(false)
+    }
+  }
 
   // Create Room Form State
   const [rName, setRName] = useState('')
@@ -544,7 +633,7 @@ export default function AdminView() {
           console.error('Failed to load rooms:', err)
           return null
         }),
-        apiClient.get<{ items: ShowtimeItem[] }>('/api/v1/showtimes/?page_size=500').catch((err) => {
+        apiClient.get<{ items: ShowtimeItem[] }>('/api/v1/showtimes/?page_size=5000').catch((err) => {
           console.error('Failed to load showtimes:', err)
           setActionMsg({ type: 'error', text: 'Không thể tải danh sách suất chiếu từ máy chủ.' })
           return null
@@ -812,9 +901,26 @@ export default function AdminView() {
         showtimes: autoPreviewList,
         replace_existing: autoReplaceExisting,
       })
+
+      // Extract unique movie titles from autoPreviewList
+      const movieTitlesSet = new Set<string>()
+      autoPreviewList.forEach((item) => {
+        if (item.movie_title) movieTitlesSet.add(item.movie_title)
+      })
+
+      const uniqueMovieTitles = Array.from(movieTitlesSet)
+      let movieStr = 'tất cả các phim'
+      if (uniqueMovieTitles.length === 1) {
+        movieStr = uniqueMovieTitles[0]
+      } else if (uniqueMovieTitles.length > 1) {
+        movieStr = `${uniqueMovieTitles.length} bộ phim (${uniqueMovieTitles.join(', ')})`
+      }
+
+      const count = res.data.count || autoPreviewList.length
+
       setActionMsg({
         type: 'success',
-        text: `✓ Đã tự động xếp thành công ${res.data.count} suất chiếu mới mượt mà!`,
+        text: `Đã xếp thành công ${count} suất chiếu cho phim ${movieStr}`,
       })
       setAutoModalOpen(false)
       setAutoPreviewList(null)
@@ -833,7 +939,7 @@ export default function AdminView() {
     if (!window.confirm('Bạn có chắc chắn muốn HỦY suất chiếu này không?')) return
     try {
       await apiClient.delete(`/api/v1/showtimes/${showtimeId}`)
-      setActionMsg({ type: 'success', text: '✓ Đã hủy suất chiếu thành công!' })
+      setActionMsg({ type: 'success', text: 'Đã hủy suất chiếu thành công!' })
       await loadAllData()
     } catch (err: any) {
       setActionMsg({
@@ -870,7 +976,7 @@ export default function AdminView() {
       const { data } = await apiClient.delete<{ message: string; count: number }>(url)
       setActionMsg({
         type: 'success',
-        text: `✓ ${data.message || `Đã hủy thành công ${data.count} suất chiếu!`}`,
+        text: data.message || `Đã hủy thành công ${data.count} suất chiếu!`,
       })
       await loadAllData()
     } catch (err: any) {
@@ -878,6 +984,42 @@ export default function AdminView() {
         type: 'error',
         text: typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Không thể hủy hàng loạt suất chiếu.',
       })
+    }
+  }
+
+  async function handleCancelByMovie(movieId: number) {
+    const targetMovie = movies.find((m) => m.id === movieId)
+    const count = showtimes.filter((st) => st.movie_id === movieId).length
+    if (count === 0) {
+      setActionMsg({ type: 'error', text: 'Phim này hiện không có suất chiếu nào.' })
+      return
+    }
+    if (!window.confirm(`Bạn có chắc muốn HỦY TOÀN BỘ ${count} suất chiếu của phim "${targetMovie?.title}" không?`)) {
+      return
+    }
+    try {
+      const { data } = await apiClient.delete<{ message: string; count: number }>(
+        `/api/v1/showtimes/admin/bulk-cancel?movie_id=${movieId}`
+      )
+      setActionMsg({ type: 'success', text: data.message || `Đã hủy thành công ${data.count} suất chiếu!` })
+      setCancelMovieId(0)
+      await loadAllData()
+    } catch (err: any) {
+      setActionMsg({ type: 'error', text: err.response?.data?.detail || 'Không thể hủy suất chiếu.' })
+    }
+  }
+
+  async function handleCancelAllSystemShowtimes() {
+    if (showtimes.length === 0) return
+    if (!window.confirm(`⚠️ CẢNH BÁO NGUY HIỂM: Bạn có chắc chắn muốn HỦY TOÀN BỘ ${showtimes.length} suất chiếu trên hệ thống không?`)) {
+      return
+    }
+    try {
+      const { data } = await apiClient.delete<{ message: string; count: number }>('/api/v1/showtimes/admin/bulk-cancel')
+      setActionMsg({ type: 'success', text: data.message || `Đã hủy thành công ${data.count} suất chiếu!` })
+      await loadAllData()
+    } catch (err: any) {
+      setActionMsg({ type: 'error', text: err.response?.data?.detail || 'Không thể hủy tất cả suất chiếu.' })
     }
   }
 
@@ -916,30 +1058,7 @@ export default function AdminView() {
   }
 
   return (
-    <div className="max-w-[1280px] mx-auto px-6 py-10 pb-20">
-      {/* Header Bar */}
-      <div className="bg-[#111118] border border-white/10 rounded-2xl p-6 mb-8 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-xl">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-[#e8b84b]/15 border border-[#e8b84b]/40 flex items-center justify-center text-[#e8b84b] font-black text-xl">
-            ⚡
-          </div>
-          <div>
-            <h1 className="font-display font-black text-2xl text-[#f0ede8] tracking-tight">
-              Quản Trị Hệ Thống CineVerse
-            </h1>
-            <p className="text-xs text-[#a09e9a]">
-              Xin chào <strong className="text-[#e8b84b]">{user.full_name || user.email}</strong> · Quyền Admin
-            </p>
-          </div>
-        </div>
-
-        <button
-          onClick={() => navigate('/')}
-          className="bg-white/5 hover:bg-white/10 text-[#a09e9a] hover:text-[#f0ede8] border border-white/10 rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer"
-        >
-          ← Xem Trang Chủ
-        </button>
-      </div>
+    <div className="max-w-[1280px] mx-auto px-6 py-6 pb-20">
 
       {/* Action Status Banner */}
       {actionMsg && (
@@ -963,68 +1082,7 @@ export default function AdminView() {
         </div>
       )}
 
-      {/* Navigation Tabs */}
-      <div className="flex border-b border-white/10 mb-8 gap-6 overflow-x-auto">
-        <button
-          type="button"
-          onClick={() => setActiveTab('movies')}
-          className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer shrink-0 ${
-            activeTab === 'movies'
-              ? 'border-[#e8b84b] text-[#e8b84b]'
-              : 'border-transparent text-[#a09e9a] hover:text-[#f0ede8]'
-          }`}
-        >
-          🎬 Quản Lý Phim ({movies.length})
-        </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('showtimes')}
-          className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer shrink-0 ${
-            activeTab === 'showtimes'
-              ? 'border-[#e8b84b] text-[#e8b84b]'
-              : 'border-transparent text-[#a09e9a] hover:text-[#f0ede8]'
-          }`}
-        >
-          🕒 Quản Lý Suất Chiếu ({showtimes.length})
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('rooms')}
-          className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer shrink-0 ${
-            activeTab === 'rooms'
-              ? 'border-[#e8b84b] text-[#e8b84b]'
-              : 'border-transparent text-[#a09e9a] hover:text-[#f0ede8]'
-          }`}
-        >
-          🏛️ Quản Lý Phòng Chiếu ({rooms.length})
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('vouchers')}
-          className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer shrink-0 ${
-            activeTab === 'vouchers'
-              ? 'border-[#e8b84b] text-[#e8b84b]'
-              : 'border-transparent text-[#a09e9a] hover:text-[#f0ede8]'
-          }`}
-        >
-          🎟️ Quản Lý Voucher ({vouchers.length})
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('analytics')}
-          className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer shrink-0 ${
-            activeTab === 'analytics'
-              ? 'border-[#e8b84b] text-[#e8b84b]'
-              : 'border-transparent text-[#a09e9a] hover:text-[#f0ede8]'
-          }`}
-        >
-          📊 Thống Kê & Báo Cáo
-        </button>
-      </div>
 
       {/* TAB 1: MOVIE MANAGEMENT */}
       {activeTab === 'movies' && (
@@ -1210,42 +1268,202 @@ export default function AdminView() {
       {/* TAB 2: SHOWTIMES MANAGEMENT */}
       {activeTab === 'showtimes' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Column Left: AI Auto Schedule Engine Panel */}
-          <div className="lg:col-span-5 bg-[#111118] border border-white/10 rounded-2xl p-6 shadow-xl h-fit space-y-6">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#e8b84b]/10 border border-[#e8b84b]/30 rounded-full text-xs text-[#e8b84b] font-semibold font-mono-data">
-                <span>⚡ AI Auto-Scheduling Engine</span>
+          {/* Column Left: AI Auto Schedule Engine & Showtime Cancel Section */}
+          <div className="lg:col-span-5 space-y-6">
+            {/* Auto Schedule Card */}
+            <div className={`p-6 rounded-2xl border space-y-5 shadow-xl transition-colors ${
+              isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+            }`}>
+              <div className="space-y-1.5">
+                <h3 className={`font-display font-bold text-2xl ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Xếp Lịch Chiếu Tự Động</h3>
+                <p className={`text-xs leading-relaxed ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                  Hệ thống tự động phân bổ lịch chiếu theo danh sách phòng, thời lượng từng bộ phim, giờ hoạt động của rạp và đảm bảo chống trùng lặp suất chiếu.
+                </p>
               </div>
-              <h3 className="font-display font-bold text-2xl text-[#f0ede8]">Xếp Lịch Chiếu Tự Động</h3>
-              <p className="text-xs text-[#a09e9a] leading-relaxed">
-                Hệ thống tự động phân bổ lịch chiếu thông minh theo danh sách phòng, thời lượng từng bộ phim, giờ hoạt động của rạp và đảm bảo khoảng nghỉ chống trùng lặp tuyệt đối.
-              </p>
+
+              {/* Launch Modal Action Button */}
+              <button
+                type="button"
+                onClick={() => setAutoModalOpen(true)}
+                className="w-full bg-gradient-to-r from-[#e8b84b] via-[#f0c868] to-[#e8b84b] text-[#09090e] border-0 rounded-xl py-4 font-bold text-sm cursor-pointer hover:shadow-[0_4px_24px_rgba(232,184,75,0.4)] transition-all flex items-center justify-center gap-2 uppercase tracking-wider shadow-lg"
+              >
+                <span>⚡</span>
+                <span>Lập Lịch Tự Động</span>
+              </button>
             </div>
 
-            {/* Launch Modal Action Button */}
-            <button
-              type="button"
-              onClick={() => setAutoModalOpen(true)}
-              className="w-full bg-gradient-to-r from-[#e8b84b] via-[#f0c868] to-[#e8b84b] text-[#09090e] border-0 rounded-xl py-4 font-bold text-sm cursor-pointer hover:shadow-[0_4px_24px_rgba(232,184,75,0.4)] transition-all flex items-center justify-center gap-2 uppercase tracking-wider shadow-lg"
-            >
-              <span>⚡</span>
-              <span>Lập Lịch Tự Động Ngay →</span>
-            </button>
+            {/* Dedicated Showtime Cancellation Section */}
+            <div className={`p-6 rounded-2xl border space-y-4 shadow-xl transition-colors ${
+              isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+            }`}>
+              <div className={`border-b pb-3 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
+                <h3 className={`font-display font-bold text-lg flex items-center gap-2 ${
+                  isDark ? 'text-[#f0ede8]' : 'text-slate-900'
+                }`}>
+                  <span className="text-rose-500">🗑️</span>
+                  <span>Hủy Suất Chiếu</span>
+                </h3>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                  Chọn 1 trong 3 mục: Hủy 1 suất cụ thể, hủy toàn bộ suất của phim hoặc hủy tất cả.
+                </p>
+              </div>
 
-            {/* Quick System Stats */}
-            <div className="grid grid-cols-3 gap-3 pt-2 border-t border-white/10 text-center">
-              <div className="bg-[#09090e] p-3 rounded-xl border border-white/5">
-                <span className="text-lg font-bold font-mono-data text-[#f0ede8] block">{movies.length}</span>
-                <span className="text-[10px] text-[#6e6c68]">Phim Khả Dụng</span>
+              {/* Sub-tab selector for Cancel methods */}
+              <div className={`flex rounded-xl p-1 border text-xs gap-1 ${
+                isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-100 border-slate-200'
+              }`}>
+                <button
+                  type="button"
+                  onClick={() => setCancelMode('single')}
+                  className={`flex-1 py-2 px-2 rounded-lg font-bold transition-all cursor-pointer text-center ${
+                    cancelMode === 'single'
+                      ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 shadow-sm'
+                      : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  🎯 1 Suất Cụ Thể
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCancelMode('movie')}
+                  className={`flex-1 py-2 px-2 rounded-lg font-bold transition-all cursor-pointer text-center ${
+                    cancelMode === 'movie'
+                      ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 shadow-sm'
+                      : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  🎬 Theo Phim
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCancelMode('all')}
+                  className={`flex-1 py-2 px-2 rounded-lg font-bold transition-all cursor-pointer text-center ${
+                    cancelMode === 'all'
+                      ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 shadow-sm'
+                      : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  💥 Tất Cả Suất
+                </button>
               </div>
-              <div className="bg-[#09090e] p-3 rounded-xl border border-white/5">
-                <span className="text-lg font-bold font-mono-data text-[#f0ede8] block">{rooms.length}</span>
-                <span className="text-[10px] text-[#6e6c68]">Phòng Chiếu</span>
-              </div>
-              <div className="bg-[#09090e] p-3 rounded-xl border border-white/5">
-                <span className="text-lg font-bold font-mono-data text-[#e8b84b] block">{showtimes.length}</span>
-                <span className="text-[10px] text-[#6e6c68]">Suất Hiện Có</span>
-              </div>
+
+              {/* Method 1: Cancel Single Showtime */}
+              {cancelMode === 'single' && (
+                <div className="space-y-3 pt-1">
+                  <div>
+                    <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>
+                      Chọn suất chiếu cần hủy:
+                    </label>
+                    <select
+                      value={cancelSingleStId}
+                      onChange={(e) => setCancelSingleStId(Number(e.target.value))}
+                      className={`w-full p-2.5 rounded-xl border text-xs outline-none cursor-pointer ${
+                        isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900 font-semibold'
+                      }`}
+                    >
+                      <option value={0}>-- Chọn suất chiếu cụ thể --</option>
+                      {showtimes.map((st) => {
+                        const mTitle = st.movie?.title || `Phim #${st.movie_id}`
+                        const rName = st.room?.name || `Phòng #${st.room_id}`
+                        const timeFmt = new Date(st.start_time).toLocaleString('vi-VN', {
+                          weekday: 'short',
+                          day: '2-digit',
+                          month: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                        return (
+                          <option key={st.id} value={st.id}>
+                            #{st.id} - {mTitle} ({rName}) [{timeFmt}]
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={!cancelSingleStId || cancelSingleStId === 0}
+                    onClick={() => {
+                      if (cancelSingleStId > 0) {
+                        handleCancelSingleShowtime(cancelSingleStId)
+                        setCancelSingleStId(0)
+                      }
+                    }}
+                    className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
+                  >
+                    🗑️ Xác Nhận Hủy Suất Chiếu Này
+                  </button>
+                </div>
+              )}
+
+              {/* Method 2: Cancel Showtimes By Movie */}
+              {cancelMode === 'movie' && (
+                <div className="space-y-3 pt-1">
+                  <div>
+                    <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>
+                      Chọn bộ phim cần hủy toàn bộ suất:
+                    </label>
+                    <select
+                      value={cancelMovieId}
+                      onChange={(e) => setCancelMovieId(Number(e.target.value))}
+                      className={`w-full p-2.5 rounded-xl border text-xs outline-none cursor-pointer ${
+                        isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900 font-semibold'
+                      }`}
+                    >
+                      <option value={0}>-- Chọn bộ phim --</option>
+                      {movies.map((m) => {
+                        const count = showtimes.filter((st) => st.movie_id === m.id).length
+                        return (
+                          <option key={m.id} value={m.id}>
+                            {m.title} ({count} suất chiếu)
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
+
+                  {cancelMovieId > 0 && (
+                    <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl font-mono-data">
+                      💡 Phim đã chọn đang có <strong>{showtimes.filter((st) => st.movie_id === cancelMovieId).length}</strong> suất chiếu.
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={!cancelMovieId || cancelMovieId === 0}
+                    onClick={() => {
+                      if (cancelMovieId > 0) {
+                        handleCancelByMovie(cancelMovieId)
+                      }
+                    }}
+                    className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
+                  >
+                    🗑️ Hủy Tất Cả Suất Của Phim Đã Chọn
+                  </button>
+                </div>
+              )}
+
+              {/* Method 3: Cancel All System Showtimes */}
+              {cancelMode === 'all' && (
+                <div className="space-y-3 pt-1">
+                  <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl space-y-1">
+                    <p className="font-bold">⚠️ Cảnh báo hủy hệ thống:</p>
+                    <p className="text-[11px] leading-relaxed opacity-90">
+                      Thao tác này sẽ xóa sạch toàn bộ <strong>{showtimes.length}</strong> suất chiếu hiện có trên hệ thống!
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={showtimes.length === 0}
+                    onClick={handleCancelAllSystemShowtimes}
+                    className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md uppercase tracking-wider"
+                  >
+                    💥 Hủy Tất Cả {showtimes.length} Suất Chiếu Hệ Thống
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1273,17 +1491,6 @@ export default function AdminView() {
                     className="text-xs text-[#a09e9a] hover:text-[#f0ede8] cursor-pointer flex items-center gap-1 border border-white/10 px-2.5 py-1 rounded-lg"
                   >
                     ✕ Xóa bộ lọc
-                  </button>
-                )}
-
-                {filteredShowtimes.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleBulkCancelShowtimes}
-                    className="text-xs bg-[#e07060]/10 border border-[#e07060]/30 text-[#e07060] hover:bg-[#e07060]/20 font-bold px-3 py-1.5 rounded-lg cursor-pointer flex items-center gap-1.5 transition-colors"
-                  >
-                    <span>🗑️</span>
-                    <span>Hủy {filteredShowtimes.length} Suất</span>
                   </button>
                 )}
               </div>
@@ -1369,19 +1576,10 @@ export default function AdminView() {
                           </p>
                         </div>
 
-                        <div className="text-right flex flex-col items-end gap-2">
+                        <div className="text-right flex flex-col items-end justify-center">
                           <span className="text-[11px] text-[#6e6c68] font-mono-data block">
                             Ghế trống: {st.available_seats ?? 'N/A'}/{st.total_seats ?? 'N/A'}
                           </span>
-
-                          <button
-                            type="button"
-                            onClick={() => handleCancelSingleShowtime(st.id)}
-                            className="px-2.5 py-1 bg-[#e07060]/10 hover:bg-[#e07060]/20 border border-[#e07060]/30 text-[#e07060] rounded-lg text-[11px] font-medium cursor-pointer transition-colors flex items-center gap-1"
-                          >
-                            <span>🗑️</span>
-                            <span>Hủy</span>
-                          </button>
                         </div>
                       </div>
                     )
@@ -1409,7 +1607,7 @@ export default function AdminView() {
 
             <form onSubmit={handleCreateRoom} className="space-y-4">
               <div>
-                <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Tên Phòng Chiếu (Để trống để tự động đặt)</label>
+                <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Tên Phòng Chiếu (Để trống coi như tự động đặt)</label>
                 <input
                   type="text"
                   value={rName}
@@ -1420,7 +1618,7 @@ export default function AdminView() {
                   className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none"
                 />
                 <span className="text-[11px] text-[#e8b84b] font-mono-data mt-1 block">
-                  💡 Gợi ý: Đây sẽ là phòng thứ {nextRoomNum} của loại{' '}
+                  💡Đây sẽ là phòng thứ {nextRoomNum} của loại phòng {' '}
                   {rType === 'standard'
                     ? 'Standard'
                     : rType === 'imax'
@@ -1758,7 +1956,221 @@ export default function AdminView() {
         </div>
       )}
 
-      {/* TAB 4: ANALYTICS & REPORTS */}
+      {/* TAB 4: STAFF TICKET SCANNER & CHECK-IN */}
+      {activeTab === 'scanner' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Scanner Input Panel */}
+          <div className={`lg:col-span-5 p-6 rounded-2xl border space-y-6 shadow-xl transition-colors ${
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+          }`}>
+            <div className="space-y-1.5 border-b pb-4 border-white/10">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/30 rounded-full text-xs text-amber-400 font-semibold font-mono-data">
+                <span>🔍 QR Code Ticket Scanner</span>
+              </div>
+              <h3 className={`font-display font-bold text-2xl ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Soát Vé & Check-in</h3>
+              <p className={`text-xs leading-relaxed ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                Nhập hoặc quét Mã vé QR từ thiết bị di động của khán giả để kiểm tra tính hợp lệ và xác nhận cho vào rạp.
+              </p>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleVerifyTicketCode()
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>
+                  Mã Vé Chiếu (Ticket Code / QR Payload):
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={scannerTicketCode}
+                    onChange={(e) => setScannerTicketCode(e.target.value.toUpperCase())}
+                    placeholder="Ví dụ: CVN-8942A1..."
+                    className={`flex-1 px-3.5 py-3 border rounded-xl text-sm outline-none font-mono-data font-bold uppercase transition-colors ${
+                      isDark
+                        ? 'bg-[#09090e] border-white/15 text-[#f0ede8] focus:border-[#e8b84b]'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500 shadow-sm'
+                    }`}
+                  />
+                  <button
+                    type="submit"
+                    disabled={scannerLoading || !scannerTicketCode.trim()}
+                    className="bg-[#e8b84b] hover:bg-[#f0c868] text-[#09090e] font-bold px-5 py-3 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-50 shadow-md shrink-0"
+                  >
+                    {scannerLoading ? 'Đang quét...' : '🔍 Kiểm Tra Vé'}
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            {/* Recent Sample Ticket Chips */}
+            <div className="space-y-2 pt-2 border-t border-white/10">
+              <span className={`text-[11px] font-mono-data block ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                💡 Thử mã vé mẫu từ danh sách vé hệ thống:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {showtimes.slice(0, 4).map((st, idx) => {
+                  const sampleCode = `CVN-${st.id}A${idx + 1}`
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setScannerTicketCode(sampleCode)
+                        handleVerifyTicketCode(sampleCode)
+                      }}
+                      className={`text-[11px] font-mono-data px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                        isDark
+                          ? 'bg-white/5 border-white/10 text-[#e8b84b] hover:bg-white/10'
+                          : 'bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100 font-semibold'
+                      }`}
+                    >
+                      {sampleCode}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Verification Result Display Panel */}
+          <div className="lg:col-span-7 space-y-6">
+            {scannerResult ? (
+              <div className={`p-6 rounded-2xl border space-y-6 shadow-xl transition-all ${
+                scannerResult.status_code === 'VALID'
+                  ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400'
+                  : scannerResult.status_code === 'CHECKED_IN'
+                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+                  : 'bg-rose-500/10 border-rose-500/40 text-rose-400'
+              }`}>
+                {/* Result Header Badge */}
+                <div className="flex justify-between items-center border-b border-current/20 pb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">
+                      {scannerResult.status_code === 'VALID'
+                        ? '✅'
+                        : scannerResult.status_code === 'CHECKED_IN'
+                        ? '⚠️'
+                        : '⛔'}
+                    </span>
+                    <div>
+                      <h4 className="font-display font-extrabold text-lg leading-tight uppercase">
+                        {scannerResult.status_code === 'VALID'
+                          ? 'VÉ HỢP LỆ - SẴN SÀNG VÀO RẠP'
+                          : scannerResult.status_code === 'CHECKED_IN'
+                          ? 'VÉ NÀY ĐÃ ĐƯỢC CHECK-IN LÚC TRƯỚC'
+                          : 'VÉ KHÔNG HỢP LỆ HOẶC ĐÃ HỦY'}
+                      </h4>
+                      <p className="text-xs font-mono-data opacity-90 mt-0.5">{scannerResult.message}</p>
+                    </div>
+                  </div>
+
+                  <span className="font-mono-data font-bold text-xs uppercase px-3 py-1 rounded-full border border-current">
+                    {scannerResult.status_code}
+                  </span>
+                </div>
+
+                {/* Ticket Details Box */}
+                {scannerResult.reservation && (
+                  <div className={`p-4 rounded-xl border space-y-3 text-xs font-mono-data ${
+                    isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+                  }`}>
+                    <div className="grid grid-cols-2 gap-4 pb-3 border-b border-white/10">
+                      <div>
+                        <span className="text-[#a09e9a] block text-[10px] uppercase">Phim Chiếu</span>
+                        <strong className="text-base font-display text-[#e8b84b]">
+                          {scannerResult.reservation.showtime?.movie_title || 'Minions & Quái Vật'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[#a09e9a] block text-[10px] uppercase">Phòng Chiếu</span>
+                        <strong className="text-base font-display text-emerald-400">
+                          {scannerResult.reservation.showtime?.room_name || 'Phòng Standard 1'}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-[#a09e9a] block text-[10px] uppercase">Giờ Chiếu</span>
+                        <strong>
+                          {scannerResult.reservation.showtime?.start_time
+                            ? new Date(scannerResult.reservation.showtime.start_time).toLocaleString('vi-VN')
+                            : 'N/A'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[#a09e9a] block text-[10px] uppercase">Danh Sách Ghế</span>
+                        <strong className="text-amber-400 font-bold">
+                          {scannerResult.reservation.reservation_seats
+                            ?.map((s: any) => s.seat_label ?? `R${s.row_label}C${s.col_number}`)
+                            .join(', ') || 'N/A'}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Check-in Action Button */}
+                {scannerResult.status_code === 'VALID' && (
+                  <button
+                    type="button"
+                    disabled={checkInLoading}
+                    onClick={handlePerformCheckIn}
+                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-black font-extrabold py-4 rounded-xl text-sm cursor-pointer transition-all shadow-xl uppercase tracking-wider flex items-center justify-center gap-2"
+                  >
+                    <span>✅</span>
+                    <span>{checkInLoading ? 'Đang check-in...' : 'ĐÁNH DẤU ĐÃ VÀO RẠP (CHECK-IN VÉ)'}</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className={`p-12 rounded-2xl border text-center space-y-3 transition-colors ${
+                isDark ? 'bg-[#111118] border-white/10 text-[#a09e9a]' : 'bg-white border-slate-200 text-slate-500 shadow-md'
+              }`}>
+                <span className="text-5xl block">📱</span>
+                <h4 className={`font-display font-bold text-lg ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Sẵn Sàng Quét Mã QR</h4>
+                <p className="text-xs max-w-sm mx-auto">
+                  Nhập mã vé hoặc chọn mã vé mẫu ở cột bên trái để kiểm tra thông tin vé điện tử của khán giả.
+                </p>
+              </div>
+            )}
+
+            {/* Recent Check-ins History */}
+            {recentCheckIns.length > 0 && (
+              <div className={`p-5 rounded-2xl border space-y-3 ${
+                isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-md'
+              }`}>
+                <h4 className={`font-display font-bold text-sm flex items-center gap-2 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                  <span>📋</span>
+                  <span>Nhật Ký Check-in Gần Đây ({recentCheckIns.length})</span>
+                </h4>
+                <div className="space-y-2 font-mono-data text-xs">
+                  {recentCheckIns.map((item, idx) => (
+                    <div key={idx} className={`p-2.5 rounded-xl border flex justify-between items-center ${
+                      isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-50 border-slate-200'
+                    }`}>
+                      <div>
+                        <span className="font-bold text-amber-400">{item.ticket_code}</span>
+                        <span className="mx-2 opacity-50">·</span>
+                        <span className={isDark ? 'text-[#f0ede8]' : 'text-slate-900'}>{item.movie_title}</span>
+                      </div>
+                      <span className="text-[11px] text-[#a09e9a]">🕒 {item.checked_in_at}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: ANALYTICS & REPORTS */}
       {activeTab === 'analytics' && (
         <div className="space-y-8">
           {/* Summary Stat Cards */}
@@ -2513,9 +2925,43 @@ export default function AdminView() {
                   </div>
 
                   {autoPreviewList.length === 0 ? (
-                    <p className={`text-xs italic py-2 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                      Không tìm thấy khoảng thời gian trống phù hợp nào trong khoảng ngày đã chọn.
-                    </p>
+                    <div className="py-2">
+                      {(() => {
+                        const selectedRoomObjs = rooms.filter((r) => autoSelectedRoomIds.includes(r.id))
+                        const hasKidsRoom = selectedRoomObjs.some((r) => (r.room_type || '').toLowerCase() === 'kids')
+                        const selectedMovieObjs = movies.filter((m) => autoSelectedMovieIds.includes(m.id))
+                        const incompatibleMovies = selectedMovieObjs.filter((m) => {
+                          const genres = m.genres?.map((g) => g.name) || []
+                          return (
+                            genres.includes('Kinh Dị') ||
+                            genres.includes('Gây Cấn') ||
+                            (m.rating && ['T18', 'R', 'NC-17'].includes(m.rating))
+                          )
+                        })
+
+                        if (hasKidsRoom && incompatibleMovies.length > 0) {
+                          const horrorTitles = incompatibleMovies.map((m) => m.title).join(', ')
+
+                          return (
+                            <div className="text-rose-300 bg-rose-500/10 p-4 rounded-xl border border-rose-500/30 font-medium space-y-1.5 shadow-sm">
+                              <div className="font-bold text-rose-400 text-sm flex items-center gap-1.5">
+                                <span>⛔</span>
+                                <span>Cảnh báo an toàn (Kids Safety Guard):</span>
+                              </div>
+                              <p className="text-xs leading-relaxed">
+                                Hệ thống tự động từ chối xếp phim Kinh Dị / Người Lớn (<strong>{horrorTitles}</strong>) vào <strong>Phòng chiếu Trẻ Em (Kids)</strong> để bảo vệ khán giả nhỏ tuổi. Vui lòng chọn loại phòng Standard / VIP / IMAX / 3D cho phim này!
+                              </p>
+                            </div>
+                          )
+                        }
+
+                        return (
+                          <p className={`text-xs italic py-2 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                            Không tìm thấy khoảng thời gian trống phù hợp nào trong khoảng ngày đã chọn.
+                          </p>
+                        )
+                      })()}
+                    </div>
                   ) : (
                     <div className={`max-h-[300px] overflow-x-auto overflow-y-auto pr-1 border rounded-xl ${
                       isDark ? 'border-white/10' : 'border-slate-200 bg-white'

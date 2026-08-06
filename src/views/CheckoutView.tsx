@@ -138,11 +138,13 @@ export default function CheckoutView() {
           seatIds,
         })
 
-        await createReservationMutation.mutateAsync({
+        const res = await createReservationMutation.mutateAsync({
           showtimeId: showtime.id,
           seatIds,
           voucherCode: appliedVoucher?.code,
         })
+
+        dispatch({ type: 'SET_CREATED_RESERVATION', payload: res })
 
         navigate('/confirmed')
         window.scrollTo({ top: 0, behavior: 'smooth' })

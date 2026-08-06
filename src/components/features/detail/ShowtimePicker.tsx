@@ -4,6 +4,7 @@ import { fmt, getDateList } from '../../../lib/utils'
 import { cn } from '../../../lib/utils'
 import { ShowtimeTypeBadge } from '../../ui/Badge'
 import DatePicker from './DatePicker'
+import { useTheme } from '../../../context/ThemeContext'
 
 interface ShowtimePickerProps {
   selectedDate: number
@@ -35,6 +36,9 @@ export default function ShowtimePicker({
   isError,
   onRetry,
 }: ShowtimePickerProps) {
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
+
   // Lấy danh sách ngày có suất chiếu thực tế từ backend
   const { dateStrs, dateObjects } = useMemo(() => {
     const todayStr = formatYYYYMMDD(new Date())
@@ -77,10 +81,17 @@ export default function ShowtimePicker({
   const safeDateIdx = selectedDate < dateObjects.length ? selectedDate : 0
   const selectedDateStr = dateStrs[safeDateIdx] || dateStrs[0]
 
-  // Lọc suất chiếu CHÍNH XÁC theo ngày được chọn
+  // Lọc suất chiếu CHÍNH XÁC theo ngày được chọn & loại bỏ các suất đã chiếu (quá giờ)
   const displayShowtimes = useMemo(() => {
     const safeList = Array.isArray(showtimes) ? showtimes : []
-    return safeList.filter((st) => st.date === selectedDateStr)
+    const nowMs = Date.now()
+
+    return safeList.filter((st) => {
+      if (st.date !== selectedDateStr) return false
+      // Exclude showtimes that have already started / passed
+      const stTimeMs = new Date(`${st.date}T${st.time}:00`).getTime()
+      return stTimeMs > nowMs
+    })
   }, [showtimes, selectedDateStr])
 
   // Group showtimes by room type and sort chronologically by time (HH:MM)
@@ -124,21 +135,23 @@ export default function ShowtimePicker({
 
       {/* Showtime header */}
       <div className="flex justify-between items-baseline mb-4 mt-8">
-        <h3 className="font-display text-lg font-semibold">Suất chiếu</h3>
+        <h3 className={`font-display text-lg font-semibold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Suất chiếu</h3>
         {isLoading && (
-          <span className="font-mono-data text-xs text-[#6e6c68] animate-pulse">
+          <span className={`font-mono-data text-xs animate-pulse ${isDark ? 'text-[#6e6c68]' : 'text-slate-500'}`}>
             Đang tải suất chiếu...
           </span>
         )}
       </div>
 
       {isLoading ? (
-        <div className="py-8 text-center text-xs font-mono-data text-[#a09e9a] animate-pulse">
+        <div className={`py-8 text-center text-xs font-mono-data animate-pulse ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
           ⏳ Đang kiểm tra lịch chiếu...
         </div>
       ) : isError ? (
-        <div className="py-8 px-4 text-center text-xs bg-[rgba(192,57,43,0.12)] border border-[rgba(192,57,43,0.3)] rounded-xl my-4 space-y-3">
-          <p className="text-[#e07060] font-medium">⚠ Không thể tải danh sách suất chiếu từ máy chủ.</p>
+        <div className={`py-8 px-4 text-center text-xs border rounded-xl my-4 space-y-3 ${
+          isDark ? 'bg-[rgba(192,57,43,0.12)] border-[rgba(192,57,43,0.3)]' : 'bg-red-50 border-red-200'
+        }`}>
+          <p className={isDark ? 'text-[#e07060] font-medium' : 'text-red-700 font-semibold'}>⚠ Không thể tải danh sách suất chiếu từ máy chủ.</p>
           {onRetry && (
             <button
               type="button"
@@ -150,7 +163,9 @@ export default function ShowtimePicker({
           )}
         </div>
       ) : displayShowtimes.length === 0 ? (
-        <div className="py-8 px-4 text-center text-xs text-[#a09e9a] bg-[#111118] border border-white/10 rounded-xl my-4">
+        <div className={`py-8 px-4 text-center text-xs border rounded-xl my-4 ${
+          isDark ? 'text-[#a09e9a] bg-[#111118] border-white/10' : 'text-slate-500 bg-white border-slate-200 shadow-sm'
+        }`}>
           🍿 Chưa có suất chiếu nào được lên lịch cho ngày này. Vui lòng chọn ngày khác.
         </div>
       ) : (
@@ -170,12 +185,16 @@ export default function ShowtimePicker({
                 : '🎬 PHÒNG STANDARD'
 
             return (
-              <div key={type} className="bg-[#09090e]/80 border border-white/10 p-4 rounded-xl space-y-3">
-                <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                  <h4 className="text-xs font-bold font-mono-data text-[#e8b84b] uppercase tracking-wider flex items-center gap-2">
+              <div key={type} className={`p-4 rounded-xl space-y-3 border transition-colors ${
+                isDark ? 'bg-[#09090e]/80 border-white/10' : 'bg-white border-slate-200 shadow-md'
+              }`}>
+                <div className={`flex items-center justify-between border-b pb-2 ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
+                  <h4 className={`text-xs font-bold font-mono-data uppercase tracking-wider flex items-center gap-2 ${
+                    isDark ? 'text-[#e8b84b]' : 'text-amber-600'
+                  }`}>
                     <span>{typeLabel}</span>
                   </h4>
-                  <span className="text-[11px] text-[#a09e9a] font-mono-data">{list.length} suất chiếu</span>
+                  <span className={`text-[11px] font-mono-data ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>{list.length} suất chiếu</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
@@ -190,18 +209,22 @@ export default function ShowtimePicker({
                         className={cn(
                           'flex flex-col items-start gap-1 p-3 rounded-lg border text-left cursor-pointer transition-all duration-150',
                           isSelected
-                            ? 'border-[#e8b84b] bg-[rgba(232,184,75,0.12)] shadow-[0_0_16px_rgba(232,184,75,0.2)] font-semibold scale-[1.02]'
-                            : 'border-white/10 bg-[#111118] hover:border-white/20 hover:bg-white/[0.06]',
+                            ? isDark
+                              ? 'border-[#e8b84b] bg-[rgba(232,184,75,0.12)] shadow-[0_0_16px_rgba(232,184,75,0.2)] font-semibold scale-[1.02]'
+                              : 'border-amber-500 bg-amber-50 shadow-md font-semibold scale-[1.02]'
+                            : isDark
+                              ? 'border-white/10 bg-[#111118] hover:border-white/20 hover:bg-white/[0.06]'
+                              : 'border-slate-200 bg-slate-50 hover:border-amber-400 hover:bg-amber-50/50 hover:shadow-sm'
                         )}
                       >
                         <div className="flex items-center justify-between w-full">
-                          <span className="font-mono-data text-sm font-bold text-[#f0ede8]">{st.time}</span>
+                          <span className={`font-mono-data text-sm font-bold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{st.time}</span>
                           <ShowtimeTypeBadge type={st.type} price={fmt(st.price)} />
                         </div>
 
-                        <div className="flex items-center justify-between w-full text-[11px] text-[#a09e9a] mt-0.5">
+                        <div className={`flex items-center justify-between w-full text-[11px] mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
                           <span>{st.hall}</span>
-                          <span className="font-mono-data font-semibold text-[#e8b84b]">
+                          <span className={`font-mono-data font-semibold ${isDark ? 'text-[#e8b84b]' : 'text-amber-600'}`}>
                             {fmt(st.price)}
                           </span>
                         </div>
@@ -219,7 +242,7 @@ export default function ShowtimePicker({
       <button
         onClick={onSelectSeats}
         disabled={!selectedShowtime}
-        className="w-full bg-[#e8b84b] text-[#09090e] border-0 rounded-lg py-4 text-sm font-bold cursor-pointer transition-all duration-150 hover:shadow-[0_4px_24px_rgba(232,184,75,0.4)] disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-wider"
+        className="w-full bg-[#e8b84b] text-[#09090e] border-0 rounded-lg py-4 text-sm font-bold cursor-pointer transition-all duration-150 hover:shadow-[0_4px_24px_rgba(232,184,75,0.4)] disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-wider shadow-md"
       >
         {selectedShowtime ? `Chọn ghế cho suất ${selectedShowtime.time} (${selectedShowtime.hall}) →` : 'Vui lòng chọn suất chiếu'}
       </button>
