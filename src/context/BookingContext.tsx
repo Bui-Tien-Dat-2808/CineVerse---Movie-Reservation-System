@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useReducer, type ReactNode } from 'react'
 import type { Movie, ShowTime, SeatItem } from '../types'
+import type { Concession } from '../api/concessions'
 
 // ── Helper: Calculate total price considering seat types (Standard vs VIP) ──
 export function calculateBookingTotalPrice(
@@ -37,6 +38,7 @@ interface BookingState {
   selectedDate: number
   selectedShowtime: ShowTime | null
   selectedSeats: Set<string>
+  selectedConcessions: Map<number, { concession: Concession; quantity: number }>
   createdReservation?: any
 }
 
@@ -45,6 +47,7 @@ const initialState: BookingState = {
   selectedDate: 0,
   selectedShowtime: null,
   selectedSeats: new Set(),
+  selectedConcessions: new Map(),
   createdReservation: null,
 }
 
@@ -58,6 +61,7 @@ function getInitialBookingState(): BookingState {
         selectedDate: parsed.selectedDate || 0,
         selectedShowtime: parsed.selectedShowtime || null,
         selectedSeats: new Set(parsed.selectedSeats || []),
+        selectedConcessions: new Map(),
         createdReservation: parsed.createdReservation || null,
       }
     }
@@ -74,6 +78,8 @@ type BookingAction =
   | { type: 'SELECT_SHOWTIME'; payload: ShowTime }
   | { type: 'TOGGLE_SEAT'; payload: string }
   | { type: 'CLEAR_SEATS' }
+  | { type: 'SET_CONCESSION'; payload: { concession: Concession; quantity: number } }
+  | { type: 'CLEAR_CONCESSIONS' }
   | { type: 'SET_CREATED_RESERVATION'; payload: any }
   | { type: 'RESET' }
 
@@ -112,6 +118,18 @@ function bookingReducer(state: BookingState, action: BookingAction): BookingStat
     }
     case 'CLEAR_SEATS':
       return { ...state, selectedSeats: new Set() }
+    case 'SET_CONCESSION': {
+      const next = new Map(state.selectedConcessions)
+      const { concession, quantity } = action.payload
+      if (quantity <= 0) {
+        next.delete(concession.id)
+      } else {
+        next.set(concession.id, { concession, quantity })
+      }
+      return { ...state, selectedConcessions: next }
+    }
+    case 'CLEAR_CONCESSIONS':
+      return { ...state, selectedConcessions: new Map() }
     case 'SET_CREATED_RESERVATION':
       return { ...state, createdReservation: action.payload }
     case 'RESET':
@@ -128,12 +146,15 @@ function bookingReducer(state: BookingState, action: BookingAction): BookingStat
 interface BookingContextValue {
   state: BookingState
   totalPrice: number
+  concessionTotal: number
   calculateTotalPrice: (seatMapSeats?: SeatItem[]) => number
   selectMovie: (movie: Movie) => void
   selectDate: (i: number) => void
   selectShowtime: (st: ShowTime) => void
   toggleSeat: (key: string) => void
   clearSeats: () => void
+  setConcession: (concession: Concession, quantity: number) => void
+  clearConcessions: () => void
   reset: () => void
 }
 
@@ -164,15 +185,24 @@ export function BookingProvider({ children }: { children: ReactNode }) {
 
   const totalPrice = calcTotalPrice()
 
+  const concessionTotal = Array.from(state.selectedConcessions.values()).reduce(
+    (sum, { concession, quantity }) => sum + concession.price * quantity,
+    0,
+  )
+
   const value: BookingContextValue = {
     state,
     totalPrice,
+    concessionTotal,
     calculateTotalPrice: calcTotalPrice,
     selectMovie: (movie) => dispatch({ type: 'SELECT_MOVIE', payload: movie }),
     selectDate: (i) => dispatch({ type: 'SELECT_DATE', payload: i }),
     selectShowtime: (st) => dispatch({ type: 'SELECT_SHOWTIME', payload: st }),
     toggleSeat: (key) => dispatch({ type: 'TOGGLE_SEAT', payload: key }),
     clearSeats: () => dispatch({ type: 'CLEAR_SEATS' }),
+    setConcession: (concession, quantity) =>
+      dispatch({ type: 'SET_CONCESSION', payload: { concession, quantity } }),
+    clearConcessions: () => dispatch({ type: 'CLEAR_CONCESSIONS' }),
     reset: () => dispatch({ type: 'RESET' }),
   }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -308,6 +308,587 @@ function CleanDatePicker({ value, onChange, minDate, label }: CleanDatePickerPro
             </div>
           </div>
         </>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────
+// ImageUploadField — reusable file picker with preview
+// ─────────────────────────────────────────
+function ImageUploadField({
+  value,
+  onChange,
+  isDark,
+  compact = false,
+}: {
+  value: string
+  onChange: (url: string) => void
+  isDark: boolean
+  compact?: boolean
+}) {
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  const [dragOver, setDragOver] = useState(false)
+
+  function handleFile(file: File) {
+    if (!file.type.startsWith('image/')) return
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const result = e.target?.result as string
+      onChange(result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) handleFile(file)
+    e.target.value = ''
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) handleFile(file)
+  }
+
+  return (
+    <div>
+      {/* Hidden file input */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileInput}
+      />
+
+      {/* Preview area / drop zone */}
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        onClick={() => !value && inputRef.current?.click()}
+        className={`relative rounded-xl border-2 border-dashed transition-all overflow-hidden ${
+          dragOver
+            ? 'border-[#e8b84b] bg-[#e8b84b]/10'
+            : isDark ? 'border-white/15 bg-[#0d0d14]' : 'border-slate-200 bg-slate-50'
+        } ${compact ? 'h-64' : 'h-72'} ${!value ? 'cursor-pointer' : ''}`}
+      >
+        {value ? (
+          <>
+            <img
+              src={value}
+              alt="preview"
+              className="w-full h-full object-contain"
+            />
+            {/* Overlay on hover */}
+            <div className="absolute inset-0 bg-black/55 opacity-0 hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                className="bg-[#e8b84b] text-[#09090e] text-sm font-bold px-4 py-2 rounded-xl cursor-pointer hover:brightness-110 transition-all flex items-center gap-1.5"
+              >
+                🔄 Đổi ảnh
+              </button>
+              <button
+                type="button"
+                onClick={() => onChange('')}
+                className="bg-red-500/80 text-white text-xs font-semibold px-4 py-1.5 rounded-xl cursor-pointer hover:bg-red-500 transition-all"
+              >
+                🗑️ Xoá ảnh
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full gap-2.5">
+            <span className="text-4xl">🖼️</span>
+            <p className={`text-xs text-center ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>
+              Kéo thả ảnh vào đây hoặc
+            </p>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); inputRef.current?.click() }}
+              className={`text-sm font-bold px-4 py-2 rounded-xl cursor-pointer transition-all ${
+                isDark
+                  ? 'bg-[#e8b84b]/15 text-[#e8b84b] hover:bg-[#e8b84b]/25 border border-[#e8b84b]/30'
+                  : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
+              }`}
+            >
+              📁 Chọn tệp ảnh
+            </button>
+            <p className={`text-[10px] ${isDark ? 'text-[#6e6c68]/60' : 'text-slate-300'}`}>
+              JPG, PNG, WEBP — tối đa 5MB
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────
+// ConcessionAdminTab
+// ─────────────────────────────────────────
+function ConcessionAdminTab({ isDark }: { isDark: boolean }) {
+  const [concessions, setConcessions] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editId, setEditId] = useState<number | null>(null)
+  const [editForm, setEditForm] = useState<any>({})
+  const [creating, setCreating] = useState(false)
+  const [newForm, setNewForm] = useState({
+    name: '', description: '', price: '', category: 'popcorn', size: '', image_url: '', is_active: true,
+  })
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  // Categories that support size selection
+  const SIZE_CATEGORIES = ['popcorn', 'drink', 'combo']
+  const SIZE_OPTIONS = [
+    { value: 'S', label: 'S — Nhỏ' },
+    { value: 'M', label: 'M — Vừa' },
+    { value: 'L', label: 'L — Lớn' },
+    { value: 'XL', label: 'XL — Cỡ Lớn' },
+  ]
+
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all')
+
+  const categoryFilterTabs = [
+    { value: 'all', label: 'Tất cả', icon: '✨' },
+    { value: 'combo', label: 'Combo', icon: '🍿' },
+    { value: 'popcorn', label: 'Bắp Rang', icon: '🌽' },
+    { value: 'drink', label: 'Nước', icon: '🥤' },
+    { value: 'food', label: 'Đồ Ăn', icon: '🌭' },
+    { value: 'snack', label: 'Snack', icon: '🧀' },
+  ]
+
+  const categoryOptions = [
+    { value: 'combo', label: '🍿 Combo' },
+    { value: 'popcorn', label: '🌽 Bắp Rang' },
+    { value: 'drink', label: '🥤 Nước' },
+    { value: 'food', label: '🌭 Đồ Ăn' },
+    { value: 'snack', label: '🧀 Snack' },
+  ]
+
+  const filteredConcessions = useMemo(() => {
+    if (selectedCategoryFilter === 'all') return concessions
+    return concessions.filter(item => item.category === selectedCategoryFilter)
+  }, [concessions, selectedCategoryFilter])
+
+  async function fetchConcessions() {
+    setLoading(true)
+    try {
+      const { data } = await apiClient.get('/api/v1/concessions/all')
+      setConcessions(data)
+    } catch (e) {
+      setMsg('Lỗi tải danh sách')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchConcessions() }, [])
+
+  async function handleToggleActive(item: any) {
+    setSaving(true)
+    try {
+      await apiClient.put(`/api/v1/concessions/${item.id}`, { is_active: !item.is_active })
+      await fetchConcessions()
+      setMsg(`✓ Đã ${!item.is_active ? 'kích hoạt' : 'ẩn'} "${item.name}"`)
+      setTimeout(() => setMsg(''), 3000)
+    } catch { setMsg('Lỗi cập nhật') }
+    finally { setSaving(false) }
+  }
+
+  async function handleSaveEdit() {
+    if (!editId) return
+    setSaving(true)
+    try {
+      await apiClient.put(`/api/v1/concessions/${editId}`, {
+        name: editForm.name,
+        description: editForm.description,
+        price: parseFloat(editForm.price),
+        category: editForm.category,
+        size: SIZE_CATEGORIES.includes(editForm.category) ? (editForm.size || null) : null,
+        image_url: editForm.image_url || undefined,
+      })
+      await fetchConcessions()
+      setEditId(null)
+      setMsg('✓ Đã cập nhật thành công')
+      setTimeout(() => setMsg(''), 3000)
+    } catch { setMsg('Lỗi lưu dữ liệu') }
+    finally { setSaving(false) }
+  }
+
+  async function handleCreate() {
+    setSaving(true)
+    try {
+      await apiClient.post('/api/v1/concessions/', {
+        name: newForm.name,
+        description: newForm.description || undefined,
+        price: parseFloat(newForm.price),
+        category: newForm.category,
+        size: SIZE_CATEGORIES.includes(newForm.category) ? (newForm.size || null) : null,
+        image_url: newForm.image_url || undefined,
+        is_active: newForm.is_active,
+      })
+      await fetchConcessions()
+      setCreating(false)
+      setNewForm({ name: '', description: '', price: '', category: 'popcorn', size: '', image_url: '', is_active: true })
+      setMsg('✓ Đã thêm combo mới thành công')
+      setTimeout(() => setMsg(''), 3000)
+    } catch { setMsg('Lỗi tạo combo') }
+    finally { setSaving(false) }
+  }
+
+  const card = isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+  const input = isDark
+    ? 'bg-[#0d0d14] border-white/10 text-[#f0ede8] placeholder:text-[#6e6c68] focus:border-[#e8b84b]/50 focus:ring-1 focus:ring-[#e8b84b]/30'
+    : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-amber-400 focus:ring-1 focus:ring-amber-200'
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className={`font-display text-2xl font-black ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+            🍿 Quản Lý Bắp Rang & Nước
+          </h2>
+          <p className={`text-sm mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+            Quản lý danh sách combo đồ ăn kèm vé — khách sẽ thấy khi thanh toán
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { setCreating(true); setEditId(null) }}
+          className="bg-[#e8b84b] text-[#09090e] px-4 py-2 rounded-xl text-sm font-bold hover:brightness-110 cursor-pointer transition-all"
+        >
+          + Thêm Combo Mới
+        </button>
+      </div>
+
+      {msg && (
+        <div className={`text-sm px-4 py-2.5 rounded-xl border ${
+          msg.startsWith('✓')
+            ? isDark ? 'bg-green-900/20 border-green-500/30 text-green-400' : 'bg-green-50 border-green-200 text-green-700'
+            : isDark ? 'bg-red-900/20 border-red-500/30 text-red-400' : 'bg-red-50 border-red-200 text-red-700'
+        }`}>
+          {msg}
+        </div>
+      )}
+
+      {/* ── CREATE FORM ── */}
+      {creating && (
+        <div className={`rounded-2xl border p-5 space-y-4 ${card}`}>
+          <h3 className={`font-bold text-sm ${isDark ? 'text-[#e8b84b]' : 'text-amber-700'}`}>
+            ✨ Thêm Combo Mới
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Left column: image upload */}
+            <div className="sm:row-span-3">
+              <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                Ảnh combo
+              </label>
+              <ImageUploadField
+                value={newForm.image_url}
+                onChange={(url) => setNewForm(f => ({ ...f, image_url: url }))}
+                isDark={isDark}
+              />
+            </div>
+
+            {/* Right column: fields */}
+            <div>
+              <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Tên combo *</label>
+              <input value={newForm.name} onChange={e => setNewForm(f => ({ ...f, name: e.target.value }))}
+                className={`mt-1 w-full px-3 py-2 rounded-xl border text-sm outline-none transition-all ${input}`}
+                placeholder="Vd: Combo Đôi Bắp + 2 Nước" />
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Giá (VNĐ) *</label>
+                <input value={newForm.price} onChange={e => setNewForm(f => ({ ...f, price: e.target.value }))}
+                  type="number" min="0" className={`mt-1 w-full px-3 py-2 rounded-xl border text-sm outline-none transition-all ${input}`}
+                  placeholder="95000" />
+              </div>
+              <div className="flex-1">
+                <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Danh mục</label>
+                <select value={newForm.category} onChange={e => setNewForm(f => ({ ...f, category: e.target.value, size: '' }))}
+                  className={`mt-1 w-full px-3 py-2 rounded-xl border text-sm outline-none transition-all ${input}`}>
+                  {categoryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Size picker — only for popcorn/drink/combo */}
+            {SIZE_CATEGORIES.includes(newForm.category) && (
+              <div className="sm:col-span-2">
+                <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                  Size (không bắt buộc)
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewForm(f => ({ ...f, size: '' }))}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all border ${
+                      newForm.size === ''
+                        ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
+                        : isDark ? 'border-white/15 text-[#6e6c68] hover:border-white/30' : 'border-slate-200 text-slate-400 hover:border-slate-300'
+                    }`}
+                  >
+                    Không chọn
+                  </button>
+                  {SIZE_OPTIONS.map(s => (
+                    <button
+                      key={s.value}
+                      type="button"
+                      onClick={() => setNewForm(f => ({ ...f, size: s.value }))}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all border ${
+                        newForm.size === s.value
+                          ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
+                          : isDark ? 'border-white/15 text-[#a09e9a] hover:border-white/30 hover:text-[#f0ede8]' : 'border-slate-200 text-slate-500 hover:border-slate-400'
+                      }`}
+                    >
+                      {s.value}
+                    </button>
+                  ))}
+                </div>
+                {newForm.size && (
+                  <p className={`text-[11px] mt-1 ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>
+                    Đã chọn: {SIZE_OPTIONS.find(s => s.value === newForm.size)?.label}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="sm:col-span-2">
+              <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Mô tả</label>
+              <textarea value={newForm.description} onChange={e => setNewForm(f => ({ ...f, description: e.target.value }))}
+                rows={2} className={`mt-1 w-full px-3 py-2 rounded-xl border text-sm outline-none transition-all resize-none ${input}`}
+                placeholder="Mô tả ngắn..." />
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end pt-1">
+            <button type="button" onClick={() => setCreating(false)}
+              className={`px-4 py-1.5 rounded-xl text-sm font-medium cursor-pointer transition-all ${isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>
+              Huỷ
+            </button>
+            <button type="button" disabled={!newForm.name || !newForm.price || saving}
+              onClick={handleCreate}
+              className="bg-[#e8b84b] text-[#09090e] px-5 py-1.5 rounded-xl text-sm font-bold hover:brightness-110 cursor-pointer disabled:opacity-50 transition-all">
+              {saving ? 'Đang lưu...' : '✓ Tạo Combo'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── CATEGORY FILTER TABS ── */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-none">
+        {categoryFilterTabs.map((tab) => {
+          const count = tab.value === 'all'
+            ? concessions.length
+            : concessions.filter(c => c.category === tab.value).length
+          const isActive = selectedCategoryFilter === tab.value
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => setSelectedCategoryFilter(tab.value)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
+                isActive
+                  ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-md'
+                  : isDark
+                    ? 'bg-[#111118] text-[#a09e9a] border-white/10 hover:text-[#f0ede8] hover:border-white/20'
+                    : 'bg-white text-slate-600 border-slate-200 hover:text-slate-900 hover:border-slate-300'
+              }`}
+            >
+              <span>{tab.icon} {tab.label}</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                isActive
+                  ? 'bg-black/20 text-[#09090e]'
+                  : isDark
+                    ? 'bg-white/10 text-[#a09e9a]'
+                    : 'bg-slate-100 text-slate-500'
+              }`}>
+                {count}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── CONCESSIONS GRID ── */}
+      {loading ? (
+        <div className={`p-10 text-center rounded-2xl border ${card}`}>
+          <div className="text-2xl animate-spin inline-block">⏳</div>
+          <p className={`mt-2 text-sm ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Đang tải...</p>
+        </div>
+      ) : filteredConcessions.length === 0 ? (
+        <div className={`p-10 text-center rounded-2xl border ${card}`}>
+          <span className="text-3xl">🍿</span>
+          <p className={`mt-2 text-sm font-semibold ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+            Không có sản phẩm nào trong danh mục này.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredConcessions.map(item => (
+            <div key={item.id} className={`rounded-2xl border overflow-hidden flex flex-col ${card} ${
+              !item.is_active ? 'opacity-55 grayscale' : ''
+            }`}>
+
+              {/* ── EDIT MODE ── */}
+              {editId === item.id ? (
+                <div className="p-4 space-y-3">
+                  <p className={`text-[11px] font-bold uppercase tracking-wide ${isDark ? 'text-[#e8b84b]' : 'text-amber-700'}`}>
+                    ✏️ Đang chỉnh sửa
+                  </p>
+
+                  {/* Image upload */}
+                  <div>
+                    <label className={`text-xs font-medium block mb-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Ảnh</label>
+                    <ImageUploadField
+                      value={editForm.image_url}
+                      onChange={(url) => setEditForm((f: any) => ({ ...f, image_url: url }))}
+                      isDark={isDark}
+                      compact
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Tên</label>
+                    <input value={editForm.name} onChange={e => setEditForm((f: any) => ({ ...f, name: e.target.value }))}
+                      className={`mt-0.5 w-full px-2.5 py-1.5 rounded-lg border text-sm outline-none ${input}`} />
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Giá</label>
+                      <input value={editForm.price} type="number" onChange={e => setEditForm((f: any) => ({ ...f, price: e.target.value }))}
+                        className={`mt-0.5 w-full px-2.5 py-1.5 rounded-lg border text-sm outline-none ${input}`} />
+                    </div>
+                    <div className="flex-1">
+                      <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Danh mục</label>
+                      <select value={editForm.category} onChange={e => setEditForm((f: any) => ({ ...f, category: e.target.value, size: '' }))}
+                        className={`mt-0.5 w-full px-2.5 py-1.5 rounded-lg border text-sm outline-none ${input}`}>
+                        {categoryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Size picker — popcorn/drink/combo only */}
+                  {SIZE_CATEGORIES.includes(editForm.category) && (
+                    <div>
+                      <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Size</label>
+                      <div className="flex gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setEditForm((f: any) => ({ ...f, size: '' }))}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer transition-all border ${
+                            !editForm.size
+                              ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
+                              : isDark ? 'border-white/15 text-[#6e6c68] hover:border-white/30' : 'border-slate-200 text-slate-400'
+                          }`}
+                        >
+                          Không chọn
+                        </button>
+                        {SIZE_OPTIONS.map(s => (
+                          <button
+                            key={s.value}
+                            type="button"
+                            onClick={() => setEditForm((f: any) => ({ ...f, size: s.value }))}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-all border ${
+                              editForm.size === s.value
+                                ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
+                                : isDark ? 'border-white/15 text-[#a09e9a] hover:text-[#f0ede8] hover:border-white/30' : 'border-slate-200 text-slate-500 hover:border-slate-400'
+                            }`}
+                          >
+                            {s.value}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Mô tả</label>
+                    <textarea value={editForm.description} rows={2}
+                      onChange={e => setEditForm((f: any) => ({ ...f, description: e.target.value }))}
+                      className={`mt-0.5 w-full px-2.5 py-1.5 rounded-lg border text-sm outline-none resize-none ${input}`} />
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button type="button" onClick={() => setEditId(null)}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>
+                      Huỷ
+                    </button>
+                    <button type="button" disabled={saving} onClick={handleSaveEdit}
+                      className="flex-1 py-1.5 rounded-lg text-xs font-bold cursor-pointer bg-[#e8b84b] text-[#09090e] hover:brightness-110 disabled:opacity-50 transition-all">
+                      {saving ? '...' : '✓ Lưu'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* ── VIEW MODE ── */
+                <>
+                  {/* Image */}
+                  <div className={`h-56 overflow-hidden flex items-center justify-center ${isDark ? 'bg-[#0d0d14]' : 'bg-slate-100'}`}>
+                    {item.image_url ? (
+                      <img src={item.image_url} alt={item.name} className="max-w-full max-h-full w-full h-full object-contain" />
+                    ) : (
+                      <span className="text-5xl opacity-20">🍿</span>
+                    )}
+                  </div>
+                  <div className="p-4 flex flex-col gap-2 flex-1">
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${
+                          isDark ? 'bg-[#e8b84b]/15 text-[#e8b84b]' : 'bg-amber-50 text-amber-700'
+                        }`}>{item.category}</span>
+                        {item.size && (
+                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                            isDark ? 'bg-[#e8b84b] text-[#0c0c16] border-[#e8b84b]' : 'bg-amber-400 text-black border-amber-400'
+                          }`}>Size {item.size}</span>
+                        )}
+                      </div>
+                      <h4 className={`font-bold text-sm mt-1 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{item.name}</h4>
+                      {item.description && (
+                        <p className={`text-[11px] mt-0.5 line-clamp-2 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>{item.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between mt-auto pt-2">
+                      <span className="font-mono-data font-bold text-[#e8b84b]">{Number(item.price).toLocaleString('vi-VN')}đ</span>
+                      <div className="flex gap-1.5">
+                        <button type="button"
+                          onClick={() => {
+                            setEditId(item.id)
+                            setCreating(false)
+                            setEditForm({
+                              name: item.name,
+                              price: String(item.price),
+                              category: item.category,
+                              size: item.size || '',
+                              description: item.description || '',
+                              image_url: item.image_url || '',
+                            })
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-xs cursor-pointer transition-all ${isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>
+                          ✏️ Sửa
+                        </button>
+                        <button type="button" onClick={() => handleToggleActive(item)}
+                          className={`px-2.5 py-1 rounded-lg text-xs cursor-pointer transition-all ${
+                            item.is_active
+                              ? isDark ? 'bg-red-900/20 hover:bg-red-900/30 text-red-400' : 'bg-red-50 hover:bg-red-100 text-red-600'
+                              : isDark ? 'bg-green-900/20 hover:bg-green-900/30 text-green-400' : 'bg-green-50 hover:bg-green-100 text-green-600'
+                          }`}>
+                          {item.is_active ? '🙈 Ẩn' : '👁️ Hiện'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
@@ -1954,6 +2535,11 @@ export default function AdminView() {
             />
           </div>
         </div>
+      )}
+
+      {/* TAB: CONCESSIONS MANAGEMENT */}
+      {activeTab === 'concessions' && (
+        <ConcessionAdminTab isDark={isDark} />
       )}
 
       {/* TAB 4: STAFF TICKET SCANNER & CHECK-IN */}

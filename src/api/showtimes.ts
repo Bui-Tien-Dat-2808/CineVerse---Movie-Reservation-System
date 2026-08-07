@@ -127,12 +127,14 @@ export async function holdSeatsAPI(showtimeId: number, seatIds: number[]): Promi
 export async function createReservationAPI(
   showtimeId: number,
   seatIds: number[],
-  voucherCode?: string
+  voucherCode?: string,
+  concessionOrders?: Array<{ concession_id: number; quantity: number }>,
 ): Promise<any> {
   const { data } = await apiClient.post('/api/v1/reservations/', {
     showtime_id: showtimeId,
     seat_ids: seatIds,
     voucher_code: voucherCode || undefined,
+    concession_orders: concessionOrders?.length ? concessionOrders : undefined,
   })
   return data
 }

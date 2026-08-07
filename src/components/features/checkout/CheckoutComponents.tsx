@@ -77,11 +77,12 @@ interface PriceBreakdownProps {
   pricePerSeat?: number
   subtotal: number
   discountOverride?: number
+  concessionTotal?: number
 }
 
-export function PriceBreakdown({ seatCount, pricePerSeat, subtotal, discountOverride }: PriceBreakdownProps) {
+export function PriceBreakdown({ seatCount, pricePerSeat, subtotal, discountOverride, concessionTotal = 0 }: PriceBreakdownProps) {
   const discount = discountOverride !== undefined ? discountOverride : 0
-  const total = Math.max(0, subtotal - discount)
+  const total = Math.max(0, subtotal - discount + concessionTotal)
 
   const rows = [
     {
@@ -91,6 +92,13 @@ export function PriceBreakdown({ seatCount, pricePerSeat, subtotal, discountOver
       value: fmt(subtotal),
     },
   ]
+
+  if (concessionTotal > 0) {
+    rows.push({
+      label: '🍿 Bắp rang & nước',
+      value: fmt(concessionTotal),
+    })
+  }
 
   if (discount > 0) {
     rows.push({

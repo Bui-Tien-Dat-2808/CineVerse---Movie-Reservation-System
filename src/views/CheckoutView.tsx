@@ -10,11 +10,12 @@ import {
   PriceBreakdown,
   PaymentMethods,
 } from '../components/features/checkout/CheckoutComponents'
+import ConcessionPicker from '../components/features/concessions/ConcessionPicker'
 
 export default function CheckoutView() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { state, calculateTotalPrice } = useBooking()
+  const { state, calculateTotalPrice, concessionTotal, dispatch } = useBooking() as any
   const { isAuthenticated, openAuthModal } = useAuth()
   const [paymentMethod, setPaymentMethod] = useState('Thẻ ngân hàng')
   const [errorMsg, setErrorMsg] = useState('')
@@ -142,6 +143,9 @@ export default function CheckoutView() {
           showtimeId: showtime.id,
           seatIds,
           voucherCode: appliedVoucher?.code,
+          concessionOrders: Array.from(state.selectedConcessions.entries()).map(
+            ([concession_id, { quantity }]) => ({ concession_id, quantity })
+          ),
         })
 
         dispatch({ type: 'SET_CREATED_RESERVATION', payload: res })
@@ -255,10 +259,13 @@ export default function CheckoutView() {
         )}
       </div>
 
+      <ConcessionPicker />
+
       <PriceBreakdown
         seatCount={state.selectedSeats.size}
         subtotal={currentSubtotal}
         discountOverride={appliedVoucher?.discount_amount}
+        concessionTotal={concessionTotal}
       />
 
       <PaymentMethods selected={paymentMethod} onSelect={setPaymentMethod} />

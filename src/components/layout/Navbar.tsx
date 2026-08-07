@@ -17,6 +17,7 @@ const ADMIN_NAV_ITEMS = [
   { label: '🕒 Quản Lý Suất Chiếu', tab: 'showtimes' },
   { label: '🏛️ Quản Lý Phòng Chiếu', tab: 'rooms' },
   { label: '🎟️ Quản Lý Voucher', tab: 'vouchers' },
+  { label: '🍿 Quản Lý Bắp Nước', tab: 'concessions' },
   { label: '🔍 Soát Vé / QR', tab: 'scanner' },
   { label: '📊 Thống Kê & Báo Cáo', tab: 'analytics' },
 ]

@@ -53,10 +53,12 @@ export function useCreateReservation() {
       showtimeId,
       seatIds,
       voucherCode,
+      concessionOrders,
     }: {
       showtimeId: number
       seatIds: number[]
       voucherCode?: string
-    }) => createReservationAPI(showtimeId, seatIds, voucherCode),
+      concessionOrders?: Array<{ concession_id: number; quantity: number }>
+    }) => createReservationAPI(showtimeId, seatIds, voucherCode, concessionOrders),
   })
 }
