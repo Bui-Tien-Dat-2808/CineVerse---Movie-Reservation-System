@@ -55,6 +55,8 @@ export interface AuthUser {
   region?: string
   role: 'admin' | 'user' | string
   is_active: boolean
+  loyalty_points?: number
+  loyalty_tier?: string
 }
 
 export interface AppState {

@@ -9,21 +9,22 @@ import { fmt } from '../lib/utils'
 import type { ShowTime, SeatItem } from '../types'
 
 import { ETicketModal } from '../components/features/ticket/ETicketModal'
+import { fetchMyLoyalty, type LoyaltyStatus } from '../api/loyalty'
 
 export default function ProfileView() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const tabParam = searchParams.get('tab') as 'profile' | 'history' | 'vouchers' | null
+  const tabParam = searchParams.get('tab') as 'profile' | 'history' | 'vouchers' | 'loyalty' | null
 
   const { user, isAuthenticated, logout } = useAuth()
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'history' | 'vouchers'>(tabParam || 'profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'history' | 'vouchers' | 'loyalty'>(tabParam || 'profile')
   const [ticketModalReservation, setTicketModalReservation] = useState<ReservationItem | null>(null)
 
   useEffect(() => {
-    if (tabParam && (tabParam === 'profile' || tabParam === 'history' || tabParam === 'vouchers')) {
+    if (tabParam && (tabParam === 'profile' || tabParam === 'history' || tabParam === 'vouchers' || tabParam === 'loyalty')) {
       setActiveTab(tabParam)
     }
   }, [tabParam])
@@ -49,12 +50,29 @@ export default function ProfileView() {
   const [userVouchers, setUserVouchers] = useState<any[]>([])
   const [voucherLoading, setVoucherLoading] = useState(false)
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
+  const [loyaltyData, setLoyaltyData] = useState<LoyaltyStatus | null>(null)
+  const [loyaltyLoading, setLoyaltyLoading] = useState(false)
 
   useEffect(() => {
     if (activeTab === 'vouchers') {
       loadUserVouchers()
     }
+    if (activeTab === 'loyalty') {
+      loadLoyalty()
+    }
   }, [activeTab])
+
+  async function loadLoyalty() {
+    setLoyaltyLoading(true)
+    try {
+      const data = await fetchMyLoyalty()
+      setLoyaltyData(data)
+    } catch (err) {
+      console.error('Failed to load loyalty data:', err)
+    } finally {
+      setLoyaltyLoading(false)
+    }
+  }
 
   async function loadUserVouchers() {
     setVoucherLoading(true)
@@ -899,6 +917,97 @@ export default function ProfileView() {
                     </button>
                   </div>
                 </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: LOYALTY */}
+      {activeTab === 'loyalty' && (
+        <div className="space-y-6">
+          <div className={`rounded-xl p-6 sm:p-8 border transition-colors ${
+            isDark ? 'bg-[#111118] border-white/10 shadow-xl' : 'bg-white border-slate-200 shadow-lg'
+          }`}>
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className={`font-display text-xl font-bold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                  🏆 Điểm Thưởng & Phân Hạng
+                </h3>
+                <p className={`text-xs mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                  Điểm tích lũy từ mỗi lần đặt vé và các mức hạng thành viên.
+                </p>
+              </div>
+            </div>
+
+            {loyaltyLoading ? (
+              <div className={`py-10 text-center text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                ⏳ Đang tải thông tin điểm thưởng...
+              </div>
+            ) : loyaltyData ? (
+              <div className="space-y-6">
+                <div className={`rounded-2xl border p-5 ${isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                      <p className={`text-xs uppercase tracking-[0.2em] ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Hạng hiện tại</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-2xl">{loyaltyData.tier_icon}</span>
+                        <span className="font-display text-2xl font-bold" style={{ color: loyaltyData.tier_color }}>
+                          {loyaltyData.tier_label}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-left md:text-right">
+                      <p className={`text-xs uppercase tracking-[0.2em] ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Tổng điểm</p>
+                      <p className={`font-display text-3xl font-black ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                        {loyaltyData.points.toLocaleString('vi-VN')}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <div className="flex items-center justify-between text-xs mb-2">
+                      <span className={`${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Tiến độ lên hạng tiếp theo</span>
+                      <span className={`font-bold ${isDark ? 'text-[#e8b84b]' : 'text-amber-700'}`}>
+                        {loyaltyData.points_to_next_tier > 0 ? `${loyaltyData.points_to_next_tier} điểm nữa` : 'Đã đạt hạng cao nhất'}
+                      </span>
+                    </div>
+                    <div className={`h-2.5 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-200'}`}>
+                      <div className="h-full rounded-full" style={{ width: '100%', background: loyaltyData.tier_color }} />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className={`font-bold text-sm mb-3 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Lịch sử giao dịch điểm</h4>
+                  {loyaltyData.transactions.length === 0 ? (
+                    <div className={`rounded-xl border py-8 text-center text-xs ${isDark ? 'text-[#a09e9a] border-white/10' : 'text-slate-500 border-slate-200'}`}>
+                      Chưa có giao dịch điểm nào.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {loyaltyData.transactions.map((tx) => (
+                        <div key={tx.id} className={`rounded-xl border p-3 flex items-center justify-between ${isDark ? 'border-white/10 bg-[#09090e]' : 'border-slate-200 bg-white'}`}>
+                          <div>
+                            <p className={`text-sm font-semibold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                              {tx.reason === 'booking' ? 'Đặt vé thành công' : tx.reason === 'admin_adjust' ? 'Điều chỉnh bởi admin' : tx.reason || 'Giao dịch'}
+                            </p>
+                            <p className={`text-[11px] mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                              {tx.created_at ? new Date(tx.created_at).toLocaleString('vi-VN') : '—'}
+                            </p>
+                          </div>
+                          <span className={`font-bold ${tx.points >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {tx.points >= 0 ? '+' : ''}{tx.points}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className={`py-10 text-center text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                Không thể tải dữ liệu điểm thưởng.
               </div>
             )}
           </div>

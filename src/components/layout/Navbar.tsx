@@ -18,6 +18,7 @@ const ADMIN_NAV_ITEMS = [
   { label: '🏛️ Quản Lý Phòng Chiếu', tab: 'rooms' },
   { label: '🎟️ Quản Lý Voucher', tab: 'vouchers' },
   { label: '🍿 Quản Lý Bắp Nước', tab: 'concessions' },
+  { label: '🏆 Tích Điểm', tab: 'loyalty' },
   { label: '🔍 Soát Vé / QR', tab: 'scanner' },
   { label: '📊 Thống Kê & Báo Cáo', tab: 'analytics' },
 ]
@@ -226,6 +227,21 @@ export default function Navbar() {
                       >
                         <span>🏷️</span>
                         <span>Voucher Của Tôi</span>
+                      </button>
+                    )}
+
+                    {/* Menu Item 4: Loyalty Points (Regular Users Only) */}
+                    {user?.role !== 'admin' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserMenuOpen(false)
+                          navigate('/profile?tab=loyalty')
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-lg text-[#f0ede8] hover:bg-white/5 hover:text-[#e8b84b] font-medium transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <span>🏆</span>
+                        <span>Điểm Thưởng</span>
                       </button>
                     )}
 

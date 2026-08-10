@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { apiClient } from '../api/client'
 import { fmt } from '../lib/utils'
+import { adjustUserPoints, fetchLoyaltyUsers, type LoyaltyTransaction } from '../api/loyalty'
 
 interface MovieItem {
   id: number
@@ -431,6 +432,79 @@ function ImageUploadField({
 // ─────────────────────────────────────────
 // ConcessionAdminTab
 // ─────────────────────────────────────────
+function LoyaltyAdminTab({ isDark }: { isDark: boolean }) {
+  const [users, setUsers] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [query, setQuery] = useState('')
+  const [msg, setMsg] = useState('')
+
+  async function loadUsers() {
+    setLoading(true)
+    try {
+      const data = await fetchLoyaltyUsers()
+      setUsers(data)
+    } catch {
+      setMsg('Không thể tải danh sách thành viên')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { loadUsers() }, [])
+
+  const filteredUsers = users.filter((u) => {
+    const text = `${u.full_name || ''} ${u.email || ''}`.toLowerCase()
+    return text.includes(query.toLowerCase())
+  })
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className={`font-display text-2xl font-black ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>🏆 Danh Sách Điểm Thành Viên</h2>
+          <p className={`text-sm mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Xem danh sách điểm thưởng và phân hạng của thành viên (Tự động tích điểm từ đơn đặt vé).</p>
+        </div>
+      </div>
+
+      {msg && <div className={`text-sm px-4 py-2.5 rounded-xl border ${isDark ? 'bg-red-900/20 border-red-500/30 text-red-400' : 'bg-red-50 border-red-200 text-red-700'}`}>{msg}</div>}
+
+      <div className={`rounded-2xl border p-4 ${isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'}`}>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Tìm theo tên hoặc email..."
+          className={`w-full px-3 py-2 rounded-xl border text-sm outline-none ${isDark ? 'bg-[#0d0d14] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
+        />
+      </div>
+
+      {loading ? (
+        <div className={`p-10 text-center rounded-2xl border ${isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'}`}>
+          Đang tải danh sách thành viên...
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredUsers.map((user) => (
+            <div key={user.id} className={`rounded-2xl border p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 ${isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'}`}>
+              <div>
+                <p className={`font-bold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{user.full_name || user.email}</p>
+                <p className={`text-xs mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>{user.email}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase ${isDark ? 'bg-white/10 text-[#e8b84b]' : 'bg-amber-50 text-amber-700'}`}>
+                  Hạng {user.loyalty_tier || 'bronze'}
+                </span>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${isDark ? 'bg-[#e8b84b]/15 text-[#e8b84b]' : 'bg-amber-100 text-amber-800'}`}>
+                  {Number(user.loyalty_points || 0).toLocaleString('vi-VN')} điểm
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ConcessionAdminTab({ isDark }: { isDark: boolean }) {
   const [concessions, setConcessions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -461,6 +535,7 @@ function ConcessionAdminTab({ isDark }: { isDark: boolean }) {
     { value: 'drink', label: 'Nước', icon: '🥤' },
     { value: 'food', label: 'Đồ Ăn', icon: '🌭' },
     { value: 'snack', label: 'Snack', icon: '🧀' },
+    { value: 'hidden', label: 'Đã ẩn', icon: '🙈' },
   ]
 
   const categoryOptions = [
@@ -472,8 +547,22 @@ function ConcessionAdminTab({ isDark }: { isDark: boolean }) {
   ]
 
   const filteredConcessions = useMemo(() => {
-    if (selectedCategoryFilter === 'all') return concessions
-    return concessions.filter(item => item.category === selectedCategoryFilter)
+    if (selectedCategoryFilter === 'all') {
+      return [
+        ...concessions.filter(item => item.is_active),
+        ...concessions.filter(item => !item.is_active),
+      ]
+    }
+
+    if (selectedCategoryFilter === 'hidden') {
+      return concessions.filter(item => !item.is_active)
+    }
+
+    const categoryItems = concessions.filter(item => item.category === selectedCategoryFilter)
+    return [
+      ...categoryItems.filter(item => item.is_active),
+      ...categoryItems.filter(item => !item.is_active),
+    ]
   }, [concessions, selectedCategoryFilter])
 
   async function fetchConcessions() {
@@ -687,7 +776,9 @@ function ConcessionAdminTab({ isDark }: { isDark: boolean }) {
         {categoryFilterTabs.map((tab) => {
           const count = tab.value === 'all'
             ? concessions.length
-            : concessions.filter(c => c.category === tab.value).length
+            : tab.value === 'hidden'
+              ? concessions.filter(c => !c.is_active).length
+              : concessions.filter(c => c.category === tab.value).length
           const isActive = selectedCategoryFilter === tab.value
           return (
             <button
@@ -906,13 +997,15 @@ export default function AdminView() {
     | 'showtimes'
     | 'rooms'
     | 'vouchers'
+    | 'concessions'
+    | 'loyalty'
     | 'analytics'
     | 'users'
     | 'scanner'
     | null
 
   const [activeTabState, setActiveTabState] = useState<
-    'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'analytics' | 'users' | 'scanner'
+    'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'concessions' | 'loyalty' | 'analytics' | 'users' | 'scanner'
   >(() => {
     if (tabParam) return tabParam
     const stored = localStorage.getItem('admin_active_tab')
@@ -921,7 +1014,7 @@ export default function AdminView() {
 
   const activeTab = tabParam || activeTabState
 
-  const setActiveTab = (tab: 'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'analytics' | 'users' | 'scanner') => {
+  const setActiveTab = (tab: 'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'concessions' | 'loyalty' | 'analytics' | 'users' | 'scanner') => {
     setActiveTabState(tab)
     localStorage.setItem('admin_active_tab', tab)
     setSearchParams({ tab })
@@ -2540,6 +2633,9 @@ export default function AdminView() {
       {/* TAB: CONCESSIONS MANAGEMENT */}
       {activeTab === 'concessions' && (
         <ConcessionAdminTab isDark={isDark} />
+      )}
+      {activeTab === 'loyalty' && (
+        <LoyaltyAdminTab isDark={isDark} />
       )}
 
       {/* TAB 4: STAFF TICKET SCANNER & CHECK-IN */}
