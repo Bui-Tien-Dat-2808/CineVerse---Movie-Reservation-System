@@ -452,7 +452,38 @@ function LoyaltyAdminTab({ isDark }: { isDark: boolean }) {
 
   useEffect(() => { loadUsers() }, [])
 
+  function getTierProgress(pts: number) {
+    const tierMap = [
+      { key: 'bronze', label: 'Đồng', icon: '🥉', color: '#CD7F32', min: 0, nextKey: 'silver', nextLabel: 'Bạc', nextMin: 1000 },
+      { key: 'silver', label: 'Bạc', icon: '🥈', color: '#A8A9AD', min: 1000, nextKey: 'gold', nextLabel: 'Vàng', nextMin: 5000 },
+      { key: 'gold', label: 'Vàng', icon: '🥇', color: '#FFD700', min: 5000, nextKey: 'diamond', nextLabel: 'Kim Cương', nextMin: 10000 },
+      { key: 'diamond', label: 'Kim Cương', icon: '💎', color: '#B9F2FF', min: 10000, nextKey: null, nextLabel: null, nextMin: 10000 },
+    ]
+
+    const currentTier = tierMap.find((t) => pts >= t.min && (t.nextKey === null || pts < t.nextMin)) || tierMap[0]
+    if (!currentTier.nextKey) {
+      return {
+        tier: currentTier,
+        progressPct: 100,
+        remaining: 0,
+        nextLabel: null,
+      }
+    }
+
+    const range = currentTier.nextMin - currentTier.min
+    const progressPct = Math.min(100, Math.max(0, ((pts - currentTier.min) / range) * 100))
+    const remaining = Math.max(0, currentTier.nextMin - pts)
+
+    return {
+      tier: currentTier,
+      progressPct,
+      remaining,
+      nextLabel: currentTier.nextLabel,
+    }
+  }
+
   const filteredUsers = users.filter((u) => {
+    if (u.role === 'admin' || u.role === 'ADMIN' || u.email?.toLowerCase().includes('admin')) return false
     const text = `${u.full_name || ''} ${u.email || ''}`.toLowerCase()
     return text.includes(query.toLowerCase())
   })
@@ -461,8 +492,8 @@ function LoyaltyAdminTab({ isDark }: { isDark: boolean }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className={`font-display text-2xl font-black ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>🏆 Danh Sách Điểm Thành Viên</h2>
-          <p className={`text-sm mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Xem danh sách điểm thưởng và phân hạng của thành viên (Tự động tích điểm từ đơn đặt vé).</p>
+          <h2 className={`font-display text-2xl font-black ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>🏆 Tiến Độ Tích Điểm Thành Viên</h2>
+          <p className={`text-sm mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Theo dõi tổng điểm, phân hạng và điểm còn thiếu để thăng hạng của khách hàng.</p>
         </div>
       </div>
 
@@ -472,7 +503,7 @@ function LoyaltyAdminTab({ isDark }: { isDark: boolean }) {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Tìm theo tên hoặc email..."
+          placeholder="Tìm khách hàng theo tên hoặc email..."
           className={`w-full px-3 py-2 rounded-xl border text-sm outline-none ${isDark ? 'bg-[#0d0d14] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
         />
       </div>
@@ -481,24 +512,70 @@ function LoyaltyAdminTab({ isDark }: { isDark: boolean }) {
         <div className={`p-10 text-center rounded-2xl border ${isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'}`}>
           Đang tải danh sách thành viên...
         </div>
+      ) : filteredUsers.length === 0 ? (
+        <div className={`p-10 text-center rounded-2xl border text-xs ${isDark ? 'bg-[#111118] border-white/10 text-[#a09e9a]' : 'bg-white border-slate-200 text-slate-500'}`}>
+          Không tìm thấy khách hàng nào.
+        </div>
       ) : (
         <div className="space-y-3">
-          {filteredUsers.map((user) => (
-            <div key={user.id} className={`rounded-2xl border p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 ${isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'}`}>
-              <div>
-                <p className={`font-bold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{user.full_name || user.email}</p>
-                <p className={`text-xs mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>{user.email}</p>
+          {filteredUsers.map((user) => {
+            const pts = Number(user.loyalty_points || 0)
+            const info = getTierProgress(pts)
+
+            return (
+              <div key={user.id} className={`rounded-2xl border p-5 ${isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'}`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className={`font-bold text-base ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{user.full_name || user.email}</span>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border" style={{
+                        backgroundColor: `${info.tier.color}15`,
+                        borderColor: `${info.tier.color}40`,
+                        color: isDark ? info.tier.color : '#09090e'
+                      }}>
+                        <span>{info.tier.icon}</span>
+                        <span>Hạng {info.tier.label}</span>
+                      </span>
+                    </div>
+                    <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>{user.email}</p>
+                  </div>
+
+                  <div className="text-left sm:text-right">
+                    <span className={`text-lg font-black font-display ${isDark ? 'text-[#e8b84b]' : 'text-amber-700'}`}>
+                      {pts.toLocaleString('vi-VN')} điểm
+                    </span>
+                  </div>
+                </div>
+
+                {/* Progress Bar & Tier info */}
+                <div className={`mt-3 pt-3 border-t text-xs ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1.5 font-medium">
+                    <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-600'}>
+                      {info.nextLabel
+                        ? `Tiến độ thăng hạng từ ${info.tier.label} (${info.tier.min.toLocaleString('vi-VN')}) ➔ ${info.nextLabel}`
+                        : '🎉 Đã đạt Hạng Kim Cương cao nhất!'}
+                    </span>
+                    <span className={`font-bold ${isDark ? 'text-[#e8b84b]' : 'text-amber-700'}`}>
+                      {info.remaining > 0
+                        ? `Còn ${info.remaining.toLocaleString('vi-VN')} điểm nữa ➔ ${info.nextLabel}`
+                        : 'Đã đạt hạng cao nhất'}
+                    </span>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className={`h-2.5 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-200'}`}>
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${info.progressPct}%`,
+                        backgroundColor: info.tier.color || '#e8b84b',
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase ${isDark ? 'bg-white/10 text-[#e8b84b]' : 'bg-amber-50 text-amber-700'}`}>
-                  Hạng {user.loyalty_tier || 'bronze'}
-                </span>
-                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${isDark ? 'bg-[#e8b84b]/15 text-[#e8b84b]' : 'bg-amber-100 text-amber-800'}`}>
-                  {Number(user.loyalty_points || 0).toLocaleString('vi-VN')} điểm
-                </span>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -1037,17 +1114,24 @@ export default function AdminView() {
   const [voucherPage, setVoucherPage] = useState(1)
   const PAGE_SIZE = 8
 
-  // Check Admin Access Guard - Redirect non-admin users to home
+  // Check Admin Access Guard - Redirect non-admin users to profile
   useEffect(() => {
     if (isAuthLoading) return
 
-    if (!isAuthenticated || user?.role !== 'admin') {
-      // If access_token exists, do not kick out while loading credentials
+    if (!isAuthenticated) {
       if (localStorage.getItem('access_token')) return
       navigate('/')
       return
     }
-    loadAllData()
+
+    if (user && user.role !== 'admin') {
+      navigate('/profile?tab=loyalty')
+      return
+    }
+
+    if (user && user.role === 'admin') {
+      loadAllData()
+    }
   }, [isAuthenticated, isAuthLoading, user, navigate])
 
   useEffect(() => {
@@ -1087,6 +1171,7 @@ export default function AdminView() {
   // Showtime Filters State
   const [stFilterMovieId, setStFilterMovieId] = useState<number | 'all'>('all')
   const [stFilterRoomId, setStFilterRoomId] = useState<number | 'all'>('all')
+  const [stTimeFilter, setStTimeFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming')
 
   // Dedicated Showtime Cancellation State
   const [cancelMode, setCancelMode] = useState<'single' | 'movie' | 'all'>('single')
@@ -1191,13 +1276,31 @@ export default function AdminView() {
     return maxNum + 1
   }, [safeRooms, rType])
 
+  const { upcomingShowtimesCount, pastShowtimesCount } = useMemo(() => {
+    const nowMs = Date.now()
+    let upcoming = 0
+    let past = 0
+    showtimes.forEach((st) => {
+      const isPast = new Date(st.end_time || st.start_time).getTime() < nowMs || st.status === 'completed'
+      if (isPast) past++
+      else upcoming++
+    })
+    return { upcomingShowtimesCount: upcoming, pastShowtimesCount: past }
+  }, [showtimes])
+
   const filteredShowtimes = useMemo(() => {
+    const nowMs = Date.now()
     return showtimes.filter((st) => {
       if (stFilterMovieId !== 'all' && st.movie_id !== stFilterMovieId) return false
       if (stFilterRoomId !== 'all' && st.room_id !== stFilterRoomId) return false
+
+      const isPast = new Date(st.end_time || st.start_time).getTime() < nowMs || st.status === 'completed'
+      if (stTimeFilter === 'upcoming' && isPast) return false
+      if (stTimeFilter === 'past' && !isPast) return false
+
       return true
     })
-  }, [showtimes, stFilterMovieId, stFilterRoomId])
+  }, [showtimes, stFilterMovieId, stFilterRoomId, stTimeFilter])
 
   // Auto-Schedule Modal State
   const [autoModalOpen, setAutoModalOpen] = useState(false)
@@ -2035,8 +2138,10 @@ export default function AdminView() {
                         isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900 font-semibold'
                       }`}
                     >
-                      <option value={0}>-- Chọn suất chiếu cụ thể --</option>
-                      {showtimes.map((st) => {
+                      <option value={0}>-- Chọn suất chiếu cụ thể (chưa diễn ra) --</option>
+                      {showtimes
+                        .filter((st) => new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed')
+                        .map((st) => {
                         const mTitle = st.movie?.title || `Phim #${st.movie_id}`
                         const rName = st.room?.name || `Phòng #${st.room_id}`
                         const timeFmt = new Date(st.start_time).toLocaleString('vi-VN', {
@@ -2170,6 +2275,54 @@ export default function AdminView() {
               </div>
             </div>
 
+            {/* Time Filter Tabs (Approach 1) */}
+            <div className="flex items-center gap-1 bg-[#09090e] p-1 rounded-xl border border-white/5 text-xs">
+              <button
+                type="button"
+                onClick={() => { setStTimeFilter('upcoming'); setShowtimePage(1) }}
+                className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  stTimeFilter === 'upcoming'
+                    ? 'bg-[#e8b84b] text-[#09090e] shadow-md'
+                    : 'text-[#a09e9a] hover:text-[#f0ede8]'
+                }`}
+              >
+                <span>🟢 Sắp chiếu</span>
+                <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-black/20 font-mono-data">
+                  {upcomingShowtimesCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setStTimeFilter('past'); setShowtimePage(1) }}
+                className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  stTimeFilter === 'past'
+                    ? 'bg-white/20 text-[#f0ede8] shadow-md'
+                    : 'text-[#a09e9a] hover:text-[#f0ede8]'
+                }`}
+              >
+                <span>⚪ Đã chiếu</span>
+                <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-black/30 font-mono-data">
+                  {pastShowtimesCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setStTimeFilter('all'); setShowtimePage(1) }}
+                className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  stTimeFilter === 'all'
+                    ? 'bg-white/20 text-[#f0ede8] shadow-md'
+                    : 'text-[#a09e9a] hover:text-[#f0ede8]'
+                }`}
+              >
+                <span>📋 Tất cả</span>
+                <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-black/30 font-mono-data">
+                  {showtimes.length}
+                </span>
+              </button>
+            </div>
+
             {/* Filter Dropdowns */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#09090e] p-3 rounded-xl border border-white/5 text-xs">
               <div>
@@ -2228,16 +2381,31 @@ export default function AdminView() {
                       minute: '2-digit',
                     })
 
+                    const isPast = new Date(st.end_time || st.start_time).getTime() < Date.now() || st.status === 'completed'
+
                     return (
                       <div
                         key={st.id}
-                        className="bg-[#09090e] border border-white/10 rounded-xl p-4 flex justify-between items-center gap-4 hover:border-white/20 transition-colors"
+                        className={`border rounded-xl p-4 flex justify-between items-center gap-4 transition-colors ${
+                          isPast ? 'bg-[#09090e]/60 border-white/5 opacity-80' : 'bg-[#09090e] border-white/10 hover:border-white/20'
+                        }`}
                       >
                         <div>
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <span className="text-[10px] font-mono-data text-[#e8b84b] bg-[#e8b84b]/10 border border-[#e8b84b]/20 rounded px-2 py-0.5 uppercase font-semibold">
                               {st.room?.name ?? `Phòng #${st.room_id}`}
                             </span>
+                            
+                            {isPast ? (
+                              <span className="text-[10px] font-mono-data text-slate-400 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 font-bold">
+                                ⚪ Đã kết thúc
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-mono-data text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5 font-bold">
+                                🟢 Sắp chiếu
+                              </span>
+                            )}
+
                             <span className="text-xs text-[#a09e9a] font-mono-data">🕒 {startTimeFmt}</span>
                           </div>
 

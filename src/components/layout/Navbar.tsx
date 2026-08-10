@@ -33,7 +33,7 @@ export default function Navbar() {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const isAdminPage = location.pathname.startsWith('/admin')
+  const isAdminPage = location.pathname.startsWith('/admin') && user?.role === 'admin'
   const searchParams = new URLSearchParams(location.search)
   const currentAdminTab = searchParams.get('tab') || 'movies'
 
@@ -104,7 +104,7 @@ export default function Navbar() {
 
         {/* Nav links */}
         <div className="hidden md:flex gap-6 items-center">
-          {isAdminPage || user?.role === 'admin' ? (
+          {isAdminPage ? (
             ADMIN_NAV_ITEMS.map((item) => {
               const isActive = currentAdminTab === item.tab
               return (

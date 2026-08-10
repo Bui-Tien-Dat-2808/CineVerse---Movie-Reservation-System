@@ -80,12 +80,22 @@ export default function ConfirmedView() {
       <h2 className="font-display text-[36px] font-black tracking-tight mb-3">
         Đặt vé thành công!
       </h2>
-      <p className="text-[#a09e9a] text-[15px] leading-relaxed mb-8">
+      <p className="text-[#a09e9a] text-[15px] leading-relaxed mb-6">
         Vé của bạn cho <strong className="text-[#f0ede8]">{movie.title}</strong> lúc{' '}
         <strong className="text-[#e8b84b]">{showtime.time}</strong> đã được xác nhận.
         <br />
         Mã vé đã gửi về email của bạn.
       </p>
+
+      {/* Loyalty Points Earned Banner */}
+      {createdReservation?.total_price && Math.floor(Number(createdReservation.total_price) / 1000) > 0 && (
+        <div className="bg-[#e8b84b]/15 border border-[#e8b84b]/40 rounded-xl p-3.5 mb-6 flex items-center justify-center gap-2 text-sm text-[#e8b84b] font-medium">
+          <span className="text-xl">🏆</span>
+          <span>
+            Chúc mừng! Bạn đã nhận được <strong className="font-bold">+{Math.floor(Number(createdReservation.total_price) / 1000)} điểm</strong> thành viên cho giao dịch này.
+          </span>
+        </div>
+      )}
 
       {/* Ticket card */}
       <div className="bg-[#111118] border border-white/10 rounded-lg p-7 mb-8 relative overflow-hidden text-left shadow-xl">
