@@ -32,7 +32,7 @@ export interface SeatItem {
   seat_id: number          // database seat_id
   row_label: string        // "A", "B", etc.
   col_number: number       // 1, 2, etc.
-  seat_type: 'standard' | 'vip' | 'couple' | string
+  seat_type: 'standard' | 'vip' | 'couple' | 'kids' | string
   status: 'available' | 'held' | 'booked' | string
   price: number
 }

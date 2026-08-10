@@ -4,8 +4,11 @@ import { fetchActiveConcessions, type Concession } from '../../../api/concession
 import { useBooking } from '../../../context/BookingContext'
 import { useTheme } from '../../../context/ThemeContext'
 
-function formatPrice(price: number): string {
-  return price.toLocaleString('vi-VN') + ' đ'
+import { fmt } from '../../../lib/utils'
+
+function formatPrice(price: number | string): string {
+  const val = typeof price === 'string' ? parseFloat(price) : price
+  return isNaN(val) ? '0₫' : fmt(val)
 }
 
 function getCategoryLabel(cat: string): { label: string; emoji: string; color: string } {
@@ -106,32 +109,32 @@ function ConcessionCard({ item, quantity, onQuantityChange, isDark }: Concession
             <button
               type="button"
               onClick={() => onQuantityChange(item, 1)}
-              className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+              className={`h-8 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center border whitespace-nowrap ${
                 isDark
-                  ? 'bg-[#e8b84b]/15 hover:bg-[#e8b84b]/30 text-[#e8b84b] border border-[#e8b84b]/30'
-                  : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300'
+                  ? 'bg-[#e8b84b]/15 hover:bg-[#e8b84b]/30 text-[#e8b84b] border-[#e8b84b]/30'
+                  : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
               }`}
             >
               + Thêm
             </button>
           ) : (
-            <div className={`flex items-center gap-1.5 rounded-xl border px-1 py-1 ${
+            <div className={`h-8 flex items-center gap-1.5 rounded-xl border px-1.5 ${
               isDark ? 'bg-[#e8b84b]/10 border-[#e8b84b]/30' : 'bg-amber-50 border-amber-300'
             }`}>
               <button
                 type="button"
                 onClick={() => onQuantityChange(item, quantity - 1)}
-                className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-[#e8b84b] font-bold text-base flex items-center justify-center transition-all cursor-pointer"
+                className="w-5 h-5 rounded-lg bg-white/10 hover:bg-white/20 text-[#e8b84b] font-bold text-xs flex items-center justify-center transition-all cursor-pointer leading-none"
               >
                 −
               </button>
-              <span className="font-mono-data font-bold text-sm text-[#e8b84b] min-w-[16px] text-center">
+              <span className="font-mono-data font-bold text-xs text-[#e8b84b] min-w-[18px] text-center">
                 {quantity}
               </span>
               <button
                 type="button"
                 onClick={() => onQuantityChange(item, Math.min(quantity + 1, 5))}
-                className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-[#e8b84b] font-bold text-base flex items-center justify-center transition-all cursor-pointer"
+                className="w-5 h-5 rounded-lg bg-white/10 hover:bg-white/20 text-[#e8b84b] font-bold text-xs flex items-center justify-center transition-all cursor-pointer leading-none"
               >
                 +
               </button>
@@ -197,11 +200,11 @@ export default function ConcessionPicker() {
           </div>
           <div className="text-left">
             <h3 className={`font-display font-bold text-[15px] ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-              Thêm Bắp Rang & Nước
+              Thêm Bắp Rang, Nước & Snack
             </h3>
             <p className={`text-[12px] ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
               {hasSelected
-                ? `Đã chọn ${selectedCount} loại · Tổng cộng: ${concessionTotal.toLocaleString('vi-VN')}đ`
+                ? `Đã chọn ${selectedCount} loại · Tổng cộng: ${fmt(concessionTotal)}`
                 : 'Tùy chọn — chọn ngay để nhận combo tại quầy'}
             </p>
           </div>
@@ -234,7 +237,7 @@ export default function ConcessionPicker() {
           ) : (
             <>
               {/* Category Filter Bar */}
-              <div className="pt-4 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+              <div className="pt-4 flex flex-wrap items-center gap-2 pb-1">
                 {categoryTabs.map((tab) => {
                   const count = tab.value === 'all'
                     ? concessions.length
@@ -285,38 +288,6 @@ export default function ConcessionPicker() {
                       isDark={isDark}
                     />
                   ))}
-                </div>
-              )}
-
-              {/* Concession Summary */}
-              {hasSelected && (
-                <div className={`mt-4 p-3.5 rounded-xl border flex justify-between items-center ${
-                  isDark ? 'bg-[#e8b84b]/8 border-[#e8b84b]/20' : 'bg-amber-50 border-amber-200'
-                }`}>
-                  <div className="text-sm">
-                    <span className={`font-bold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                      🍿 Combo đã chọn:
-                    </span>
-                    <div className="mt-1 space-y-0.5">
-                      {Array.from(state.selectedConcessions.entries()).map(([id, { concession, quantity }]) => (
-                        <div key={id} className={`text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-                          {concession.name} ×{quantity} = {(concession.price * quantity).toLocaleString('vi-VN')}đ
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0 pl-3">
-                    <span className="font-mono-data font-bold text-[#e8b84b] text-lg block">
-                      {concessionTotal.toLocaleString('vi-VN')}đ
-                    </span>
-                    <button
-                      type="button"
-                      onClick={clearConcessions}
-                      className={`text-[11px] cursor-pointer ${isDark ? 'text-[#e07060] hover:underline' : 'text-red-500 hover:underline'}`}
-                    >
-                      Bỏ tất cả
-                    </button>
-                  </div>
                 </div>
               )}
             </>

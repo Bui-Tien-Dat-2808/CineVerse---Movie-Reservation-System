@@ -72,52 +72,99 @@ export function BookingSummary({
 // ─────────────────────────────────────────
 // PriceBreakdown
 // ─────────────────────────────────────────
+export interface ConcessionItemDetail {
+  id: number
+  name: string
+  price: number
+  quantity: number
+  category?: string
+}
+
 interface PriceBreakdownProps {
   seatCount: number
   pricePerSeat?: number
   subtotal: number
   discountOverride?: number
   concessionTotal?: number
+  concessionItems?: ConcessionItemDetail[]
+  onRemoveConcession?: (id: number) => void
 }
 
-export function PriceBreakdown({ seatCount, pricePerSeat, subtotal, discountOverride, concessionTotal = 0 }: PriceBreakdownProps) {
+export function PriceBreakdown({
+  seatCount,
+  pricePerSeat,
+  subtotal,
+  discountOverride,
+  concessionTotal = 0,
+  concessionItems = [],
+  onRemoveConcession,
+}: PriceBreakdownProps) {
   const discount = discountOverride !== undefined ? discountOverride : 0
   const total = Math.max(0, subtotal - discount + concessionTotal)
-
-  const rows = [
-    {
-      label: pricePerSeat
-        ? `${seatCount} vé × ${fmt(pricePerSeat)}`
-        : `${seatCount} vé đã chọn`,
-      value: fmt(subtotal),
-    },
-  ]
-
-  if (concessionTotal > 0) {
-    rows.push({
-      label: '🍿 Bắp rang & nước',
-      value: fmt(concessionTotal),
-    })
-  }
-
-  if (discount > 0) {
-    rows.push({
-      label: 'Mã ưu đãi Voucher',
-      value: '- ' + fmt(discount),
-    })
-  }
 
   return (
     <div className="bg-[#111118] border border-white/[0.08] rounded-md p-5 mb-6">
       <h4 className="font-mono-data text-[13px] text-[#6e6c68] tracking-wide uppercase mb-3.5">
         Chi tiết giá
       </h4>
-      {rows.map(({ label, value }) => (
-        <div key={label} className="flex justify-between mb-2.5 text-sm">
-          <span className="text-[#a09e9a]">{label}</span>
-          <span className="text-[#f0ede8] font-mono-data">{value}</span>
+
+      {/* Ticket Row */}
+      <div className="flex justify-between mb-2.5 text-sm">
+        <span className="text-[#a09e9a]">
+          {pricePerSeat ? `${seatCount} vé × ${fmt(pricePerSeat)}` : `${seatCount} vé đã chọn`}
+        </span>
+        <span className="text-[#f0ede8] font-mono-data">{fmt(subtotal)}</span>
+      </div>
+
+      {/* List each selected concession item */}
+      {concessionItems.length > 0 && (
+        <div className="my-2.5 py-2.5 border-t border-b border-white/[0.06] space-y-2.5">
+          {concessionItems.map((item) => {
+            const itemTotal = Number(item.price) * item.quantity
+            const emoji =
+              item.category === 'snack' ? '🧀' :
+              item.category === 'drink' ? '🥤' :
+              item.category === 'food' ? '🌭' : '🍿'
+
+            return (
+              <div key={item.id} className="flex justify-between items-center text-sm gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-base shrink-0">{emoji}</span>
+                  <span className="text-[#a09e9a] font-medium truncate">{item.name}</span>
+                  <span className="font-mono-data font-bold text-xs text-[#e8b84b] bg-[#e8b84b]/15 px-2 py-0.5 rounded-full shrink-0">
+                    ×{item.quantity}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-[#f0ede8] font-mono-data font-semibold">{fmt(itemTotal)}</span>
+                  {onRemoveConcession && (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveConcession(item.id)}
+                      className="w-6 h-6 rounded-full bg-red-500/20 hover:bg-red-500/40 text-red-400 hover:text-red-200 font-bold text-xs flex items-center justify-center transition-all cursor-pointer border border-red-500/40"
+                      title={`Gỡ bỏ ${item.name}`}
+                      aria-label={`Gỡ bỏ ${item.name}`}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
-      ))}
+      )}
+
+      {/* Discount */}
+      {discount > 0 && (
+        <div className="flex justify-between mb-2.5 text-sm">
+          <span className="text-[#a09e9a]">Mã ưu đãi Voucher</span>
+          <span className="text-[#2ecc71] font-mono-data">- {fmt(discount)}</span>
+        </div>
+      )}
+
+      {/* Total */}
       <div className="border-t border-white/[0.08] pt-3.5 mt-1 flex justify-between items-baseline">
         <span className="text-sm font-semibold">Tổng cộng</span>
         <span className="font-display text-[28px] font-black text-[#e8b84b]">{fmt(total)}</span>

@@ -7,7 +7,6 @@ import Footer from './components/layout/Footer'
 import AuthModal from './components/features/auth/AuthModal'
 import HomeView from './views/HomeView'
 import DetailView from './views/DetailView'
-import SeatsView from './views/SeatsView'
 import CheckoutView from './views/CheckoutView'
 import ConfirmedView from './views/ConfirmedView'
 import ProfileView from './views/ProfileView'
@@ -73,7 +72,6 @@ function AppShell() {
           <Route path="/rap-chieu" element={isAdmin ? <Navigate to="/admin" replace /> : <TheatersView />} />
           <Route path="/khuyen-mai" element={isAdmin ? <Navigate to="/admin" replace /> : <PromotionsView />} />
           <Route path="/movie/:id" element={isAdmin ? <Navigate to="/admin" replace /> : <DetailView />} />
-          <Route path="/movie/:id/seats" element={isAdmin ? <Navigate to="/admin" replace /> : <SeatsView />} />
           <Route path="/movie/:id/checkout" element={isAdmin ? <Navigate to="/admin" replace /> : <CheckoutView />} />
           <Route path="/confirmed" element={isAdmin ? <Navigate to="/admin" replace /> : <ConfirmedView />} />
           {/* Catch-all: redirect về admin nếu là Admin, hoặc home nếu là User */}

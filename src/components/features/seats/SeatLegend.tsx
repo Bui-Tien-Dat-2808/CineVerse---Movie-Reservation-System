@@ -21,6 +21,11 @@ export default function SeatLegend() {
       label: 'Ghế đôi (💑)',
     },
     {
+      bg: isDark ? 'rgba(20,184,166,0.15)' : '#ccfbf1',
+      border: isDark ? 'rgba(20,184,166,0.5)' : '#2dd4bf',
+      label: 'Ghế Trẻ em (🎈)',
+    },
+    {
       bg: '#e8b84b',
       border: '#e8b84b',
       label: 'Đang chọn',
@@ -33,7 +38,7 @@ export default function SeatLegend() {
   ]
 
   return (
-    <div className="flex justify-center gap-6 mb-9 flex-wrap">
+    <div className="flex items-center justify-center gap-3 sm:gap-6 flex-wrap py-1">
       {items.map(({ bg, border, label }) => (
         <div key={label} className="flex items-center gap-2">
           <div

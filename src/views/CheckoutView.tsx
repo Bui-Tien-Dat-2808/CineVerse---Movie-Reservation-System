@@ -15,7 +15,15 @@ import ConcessionPicker from '../components/features/concessions/ConcessionPicke
 export default function CheckoutView() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { state, calculateTotalPrice, concessionTotal, dispatch } = useBooking() as any
+  const { state, calculateTotalPrice, concessionTotal, clearSeats, setConcession, dispatch } = useBooking() as any
+
+  function handleCancelBooking() {
+    if (window.confirm('Bạn có chắc chắn muốn huỷ giữ chỗ không? Ghế đã giữ sẽ được giải phóng ngay lập tức.')) {
+      clearSeats()
+      if (dispatch) dispatch({ type: 'CLEAR_CONCESSIONS' })
+      navigate(`/movie/${movie?.id}`)
+    }
+  }
   const { isAuthenticated, openAuthModal } = useAuth()
   const [paymentMethod, setPaymentMethod] = useState('Thẻ ngân hàng')
   const [errorMsg, setErrorMsg] = useState('')
@@ -54,7 +62,7 @@ export default function CheckoutView() {
   useEffect(() => {
     if (timeLeft <= 0) {
       alert('Thời gian giữ ghế 10 phút đã hết hạn! Vui lòng chọn lại ghế.')
-      navigate(`/movie/${movie?.id}/seats`)
+      navigate(`/movie/${movie?.id}`)
       return
     }
     const timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000)
@@ -168,7 +176,7 @@ export default function CheckoutView() {
     <div className="max-w-[640px] mx-auto px-6 py-10 pb-20">
       {/* Back */}
       <button
-        onClick={() => navigate(`/movie/${movie.id}/seats`)}
+        onClick={() => navigate(`/movie/${movie.id}`)}
         className="flex items-center gap-1.5 bg-transparent border-0 text-[#a09e9a] text-sm cursor-pointer mb-8 hover:text-[#f0ede8] transition-colors"
       >
         ← Quay lại
@@ -261,23 +269,57 @@ export default function CheckoutView() {
 
       <ConcessionPicker />
 
-      <PriceBreakdown
-        seatCount={state.selectedSeats.size}
-        subtotal={currentSubtotal}
-        discountOverride={appliedVoucher?.discount_amount}
-        concessionTotal={concessionTotal}
-      />
+      {/* Itemized concession detail for PriceBreakdown */}
+      {(() => {
+        const concessionItems = Array.from(
+          (state.selectedConcessions as Map<number, { concession: any; quantity: number }>).values()
+        ).map(({ concession, quantity }) => ({
+          id: concession.id,
+          name: concession.name,
+          price: concession.price,
+          quantity,
+          category: concession.category,
+        }))
+
+        return (
+          <PriceBreakdown
+            seatCount={state.selectedSeats.size}
+            subtotal={currentSubtotal}
+            discountOverride={appliedVoucher?.discount_amount}
+            concessionTotal={concessionTotal}
+            concessionItems={concessionItems}
+            onRemoveConcession={(concessionId) => {
+              const item = state.selectedConcessions.get(concessionId)
+              if (item && setConcession) {
+                setConcession(item.concession, 0)
+              }
+            }}
+          />
+        )
+      })()}
 
       <PaymentMethods selected={paymentMethod} onSelect={setPaymentMethod} />
 
-      <button
-        id="pay-now-btn"
-        onClick={handleConfirm}
-        disabled={isPending}
-        className="w-full bg-[#e8b84b] text-[#09090e] border-0 rounded py-4 text-base font-bold cursor-pointer tracking-wide transition-all duration-200 hover:shadow-[0_8px_30px_rgba(232,184,75,0.4)] hover:-translate-y-px disabled:opacity-50"
-      >
-        {isPending ? 'Đang xử lý đặt vé...' : 'Thanh toán ngay'}
-      </button>
+      {/* Action Buttons Row */}
+      <div className="flex flex-col sm:flex-row items-center gap-3">
+        <button
+          type="button"
+          onClick={handleCancelBooking}
+          className="w-full sm:w-1/3 py-4 px-4 bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 rounded-xl text-sm font-bold cursor-pointer transition-all duration-200 flex items-center justify-center gap-2 shadow-sm"
+          title="Huỷ giữ chỗ ngay để chọn vé khác"
+        >
+          <span>✕</span> Huỷ giữ chỗ
+        </button>
+
+        <button
+          id="pay-now-btn"
+          onClick={handleConfirm}
+          disabled={isPending}
+          className="w-full sm:w-2/3 bg-[#e8b84b] text-[#09090e] border-0 rounded-xl py-4 text-base font-bold cursor-pointer tracking-wide transition-all duration-200 hover:shadow-[0_8px_30px_rgba(232,184,75,0.4)] hover:-translate-y-px disabled:opacity-50"
+        >
+          {isPending ? 'Đang xử lý đặt vé...' : 'Thanh toán ngay'}
+        </button>
+      </div>
     </div>
   )
 }

@@ -17,6 +17,15 @@ interface MovieItem {
   rating?: string
 }
 
+interface SeatItemAdmin {
+  id: number
+  row_label: string
+  col_number: number
+  seat_type: 'standard' | 'vip' | 'couple' | string
+  width?: number
+  is_active?: boolean
+}
+
 interface RoomItem {
   id: number
   name: string
@@ -25,6 +34,7 @@ interface RoomItem {
   total_rows: number
   total_cols: number
   total_seats: number
+  seats?: SeatItemAdmin[]
 }
 
 interface ProposedShowtimeItem {
@@ -74,10 +84,33 @@ function PaginationControl({
   const startItem = (currentPage - 1) * pageSize + 1
   const endItem = Math.min(currentPage * pageSize, totalItems)
 
-  const pages = []
-  for (let i = 1; i <= totalPages; i++) {
-    pages.push(i)
-  }
+  const paginationRange = useMemo(() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1)
+    }
+
+    const delta = 1
+    const rangeStart = Math.max(2, currentPage - delta)
+    const rangeEnd = Math.min(totalPages - 1, currentPage + delta)
+
+    const pages: (number | '...')[] = [1]
+
+    if (rangeStart > 2) {
+      pages.push('...')
+    }
+
+    for (let i = rangeStart; i <= rangeEnd; i++) {
+      pages.push(i)
+    }
+
+    if (rangeEnd < totalPages - 1) {
+      pages.push('...')
+    }
+
+    pages.push(totalPages)
+
+    return pages
+  }, [currentPage, totalPages])
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-[#161622] border-t border-white/10 text-xs">
@@ -97,20 +130,33 @@ function PaginationControl({
           ‹ Trang trước
         </button>
 
-        {pages.map((p) => (
-          <button
-            key={p}
-            type="button"
-            onClick={() => onPageChange(p)}
-            className={`w-8 h-8 rounded border font-bold text-xs transition-all cursor-pointer ${
-              currentPage === p
-                ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
-                : 'border-white/10 bg-[#111118] text-[#a09e9a] hover:text-[#f0ede8] hover:border-white/20'
-            }`}
-          >
-            {p}
-          </button>
-        ))}
+        {paginationRange.map((p, idx) => {
+          if (p === '...') {
+            return (
+              <span
+                key={`dots-${idx}`}
+                className="px-1 text-[#a09e9a] font-mono-data select-none font-bold text-sm"
+              >
+                ...
+              </span>
+            )
+          }
+
+          return (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onPageChange(p)}
+              className={`w-8 h-8 rounded border font-bold text-xs transition-all cursor-pointer ${
+                currentPage === p
+                  ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm scale-105'
+                  : 'border-white/10 bg-[#111118] text-[#a09e9a] hover:text-[#f0ede8] hover:border-white/20'
+              }`}
+            >
+              {p}
+            </button>
+          )
+        })}
 
         <button
           type="button"
@@ -578,6 +624,410 @@ function LoyaltyAdminTab({ isDark }: { isDark: boolean }) {
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+function RoomSeatLayoutModal({
+  room,
+  isDark,
+  onClose,
+}: {
+  room: RoomItem
+  isDark: boolean
+  onClose: () => void
+}) {
+  const [detailedRoom, setDetailedRoom] = useState<RoomItem>(room)
+  const [loading, setLoading] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [selectedToolSeatType, setSelectedToolSeatType] = useState<'standard' | 'vip' | 'couple' | 'kids'>('vip')
+  const [editableSeats, setEditableSeats] = useState<SeatItemAdmin[]>([])
+  const [saving, setSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!room.seats || room.seats.length === 0) {
+      setLoading(true)
+      apiClient
+        .get<RoomItem>(`/api/v1/rooms/${room.id}`)
+        .then((res) => {
+          if (res.data) {
+            setDetailedRoom(res.data)
+            setEditableSeats(res.data.seats || [])
+          }
+        })
+        .catch((err) => console.error('Failed to load room seats:', err))
+        .finally(() => setLoading(false))
+    } else {
+      setDetailedRoom(room)
+      setEditableSeats(room.seats)
+    }
+  }, [room])
+
+  const handleSeatClick = (seatId: number) => {
+    if (!isEditing) return
+    setEditableSeats((prev) =>
+      prev.map((s) => {
+        if (s.id === seatId) {
+          const newType = selectedToolSeatType
+          const newWidth = newType === 'couple' ? 2 : 1
+          return { ...s, seat_type: newType, width: newWidth }
+        }
+        return s
+      })
+    )
+  }
+
+  const handleSaveLayout = async () => {
+    setSaving(true)
+    setSaveMessage(null)
+    try {
+      const updates = editableSeats.map((s) => ({
+        seat_id: s.id,
+        seat_type: s.seat_type,
+      }))
+      const res = await apiClient.put<RoomItem>(`/api/v1/rooms/${room.id}/seats`, updates)
+      if (res.data) {
+        setDetailedRoom(res.data)
+        setEditableSeats(res.data.seats || [])
+        setSaveMessage(`✅ Đã lưu sơ đồ ghế mới cho phòng ${room.name} thành công!`)
+        setIsEditing(false)
+        setTimeout(() => setSaveMessage(null), 4000)
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.detail ?? 'Lưu sơ đồ ghế thất bại.'
+      setSaveMessage(`❌ ${msg}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Calculate breakdown stats
+  const stats = useMemo(() => {
+    let standard = 0
+    let vip = 0
+    let couple = 0
+    let kids = 0
+
+    editableSeats.forEach((s) => {
+      const type = (s.seat_type || '').toLowerCase()
+      if (type === 'couple') couple++
+      else if (type === 'kids') kids++
+      else if (type === 'vip') vip++
+      else standard++
+    })
+
+    return { standard, vip, couple, kids }
+  }, [editableSeats])
+
+  // Group seats by row_label
+  const rowsMap = useMemo(() => {
+    const map = new Map<string, SeatItemAdmin[]>()
+    editableSeats.forEach((s) => {
+      const rLabel = s.row_label || 'A'
+      if (!map.has(rLabel)) map.set(rLabel, [])
+      map.get(rLabel)!.push(s)
+    })
+    map.forEach((list) => list.sort((a, b) => a.col_number - b.col_number))
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
+  }, [editableSeats])
+
+  const roomTypeName =
+    detailedRoom.room_type === 'standard' ? 'Standard' :
+    detailedRoom.room_type === 'vip' ? 'VIP Gold Lounge' :
+    detailedRoom.room_type === 'imax' ? 'IMAX 3D Laser' :
+    detailedRoom.room_type === '3d' ? '3D Surround' :
+    detailedRoom.room_type === '4d' ? '4DX Motion' :
+    detailedRoom.room_type === 'kids' ? 'Kids / Gia Đình' : detailedRoom.room_type
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+      <div className={`w-full max-w-4xl max-h-[92vh] flex flex-col rounded-3xl border shadow-2xl overflow-hidden ${
+        isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+      }`}>
+        {/* Modal Header */}
+        <div className={`p-5 border-b flex items-center justify-between gap-4 ${
+          isDark ? 'border-white/10 bg-[#0d0d14]' : 'border-slate-200 bg-slate-50'
+        }`}>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className={`font-display text-xl font-black ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                🪑 Sơ Đồ Bố Trí Ghế: {detailedRoom.name}
+              </h3>
+              <span className={`text-xs font-mono-data uppercase px-2.5 py-0.5 rounded-full font-bold border ${
+                isDark ? 'bg-[#e8b84b]/15 text-[#e8b84b] border-[#e8b84b]/30' : 'bg-amber-100 text-amber-900 border-amber-300'
+              }`}>
+                {roomTypeName}
+              </span>
+            </div>
+            <p className={`text-xs mt-1 font-mono-data ${isDark ? 'text-[#a09e9a]' : 'text-slate-600 font-medium'}`}>
+              Cấu trúc: {detailedRoom.total_rows} hàng × {detailedRoom.total_cols} cột ({detailedRoom.total_seats} ghế)
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsEditing(!isEditing)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                isEditing
+                  ? isDark
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-xs'
+                    : 'bg-amber-200 text-amber-950 border-amber-400 font-extrabold shadow-xs'
+                  : isDark
+                  ? 'bg-white/10 text-[#f0ede8] hover:bg-white/20 border-white/10'
+                  : 'bg-slate-100 text-slate-800 hover:bg-slate-200 border-slate-300 font-bold'
+              }`}
+            >
+              <span>{isEditing ? '👀 Quay lại chế độ Xem' : '✏️ Chỉnh sửa sơ đồ'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm transition-colors cursor-pointer ${
+                isDark ? 'bg-white/10 text-[#f0ede8] hover:bg-white/20' : 'bg-slate-200 text-slate-800 hover:bg-slate-300'
+              }`}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Save Message Notification */}
+        {saveMessage && (
+          <div className={`px-5 py-2.5 text-xs font-bold border-b flex items-center justify-between ${
+            saveMessage.startsWith('✅')
+              ? isDark ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20' : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+              : isDark ? 'bg-red-500/15 text-red-400 border-red-500/20' : 'bg-red-100 text-red-900 border-red-300'
+          }`}>
+            <span>{saveMessage}</span>
+            <button type="button" onClick={() => setSaveMessage(null)} className="opacity-70 hover:opacity-100">✕</button>
+          </div>
+        )}
+
+        {/* Modal Body */}
+        <div className="p-6 overflow-y-auto space-y-6 flex-1">
+          {/* Admin Editing Palette Bar */}
+          {isEditing && (
+            <div className={`p-4 rounded-2xl border ${
+              isDark ? 'bg-[#181824] border-[#e8b84b]/30' : 'bg-amber-50/90 border-amber-300 shadow-sm'
+            }`}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                    isDark ? 'text-[#e8b84b]' : 'text-amber-900 font-extrabold'
+                  }`}>
+                    <span>✏️ Đang ở chế độ chỉnh sửa loại ghế</span>
+                  </h4>
+                  <p className={`text-[11px] mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-700 font-medium'}`}>
+                    Chọn loại ghế cọ vẽ bên dưới, sau đó click vào bất kỳ vị trí ghế nào trên sơ đồ để gán loại ghế đó.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-xs font-bold ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Cọ vẽ:</span>
+                  {(
+                    [
+                      {
+                        type: 'standard',
+                        label: 'Ghế thường',
+                        cls: isDark ? 'bg-slate-700 text-slate-100 border-slate-500' : 'bg-slate-200 text-slate-900 border-slate-400 font-bold'
+                      },
+                      {
+                        type: 'vip',
+                        label: 'Ghế VIP',
+                        cls: isDark ? 'bg-[#e8b84b]/20 text-[#e8b84b] border-[#e8b84b]' : 'bg-amber-200 text-amber-950 border-amber-400 font-extrabold'
+                      },
+                      {
+                        type: 'couple',
+                        label: 'Ghế đôi (💑)',
+                        cls: isDark ? 'bg-pink-500/20 text-pink-300 border-pink-400' : 'bg-pink-200 text-pink-950 border-pink-400 font-extrabold'
+                      },
+                      {
+                        type: 'kids',
+                        label: 'Ghế trẻ em (🎈)',
+                        cls: isDark ? 'bg-teal-500/20 text-teal-300 border-teal-400' : 'bg-teal-200 text-teal-950 border-teal-400 font-extrabold'
+                      },
+                    ] as const
+                  ).map((tool) => (
+                    <button
+                      key={tool.type}
+                      type="button"
+                      onClick={() => setSelectedToolSeatType(tool.type)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${tool.cls} ${
+                        selectedToolSeatType === tool.type
+                          ? isDark
+                            ? 'ring-2 ring-white scale-105 shadow-md'
+                            : 'ring-2 ring-slate-900 scale-105 shadow-md'
+                          : 'opacity-75 hover:opacity-100'
+                      }`}
+                    >
+                      {tool.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Stats Bar */}
+          <div className={`p-4 rounded-2xl border flex flex-wrap items-center justify-between gap-4 text-xs ${
+            isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-50 border-slate-200'
+          }`}>
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded border ${isDark ? 'bg-[#181824] border-white/20' : 'bg-slate-100 border-slate-300'}`} />
+                <span>Ghế thường: <strong className={isDark ? 'text-[#f0ede8]' : 'text-slate-900'}>{stats.standard}</strong></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded border ${isDark ? 'bg-[#e8b84b]/20 border-[#e8b84b]' : 'bg-amber-200 border-amber-400'}`} />
+                <span className={isDark ? 'text-[#e8b84b]' : 'text-amber-900 font-bold'}>
+                  Ghế VIP: <strong>{stats.vip}</strong>
+                </span>
+              </div>
+              {stats.couple > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className={`w-6 h-4 rounded border ${isDark ? 'bg-pink-500/20 border-pink-400' : 'bg-pink-200 border-pink-400'}`} />
+                  <span className={isDark ? 'text-pink-400' : 'text-pink-900 font-bold'}>
+                    Ghế đôi (💑): <strong>{stats.couple}</strong>
+                  </span>
+                </div>
+              )}
+              {stats.kids > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className={`w-4 h-4 rounded border ${isDark ? 'bg-teal-500/20 border-teal-400' : 'bg-teal-200 border-teal-400'}`} />
+                  <span className={isDark ? 'text-teal-400' : 'text-teal-900 font-bold'}>
+                    Ghế Trẻ em (🎈): <strong>{stats.kids}</strong>
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className={`font-mono-data text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+              Tổng sức chứa: <strong className={isDark ? 'text-[#e8b84b]' : 'text-amber-900 font-bold'}>{detailedRoom.total_seats} ghế</strong>
+            </div>
+          </div>
+
+          {/* Screen Indicator */}
+          <div className="text-center my-2">
+            <div className={`w-3/4 mx-auto h-1.5 rounded-full ${
+              isDark
+                ? 'bg-gradient-to-r from-transparent via-[#e8b84b] to-transparent opacity-80 shadow-[0_0_12px_#e8b84b]'
+                : 'bg-gradient-to-r from-transparent via-amber-500 to-transparent opacity-90 shadow-[0_0_8px_rgba(245,158,11,0.5)]'
+            }`} />
+            <span className={`text-[10px] font-mono-data uppercase tracking-widest block mt-1 font-bold ${
+              isDark ? 'text-[#a09e9a]' : 'text-slate-700 font-black'
+            }`}>
+              ────── MÀN HÌNH CHÍNH ──────
+            </span>
+          </div>
+
+          {/* Seat Grid */}
+          {loading ? (
+            <div className={`py-12 text-center text-xs font-mono-data animate-pulse ${
+              isDark ? 'text-[#e8b84b]' : 'text-amber-800 font-bold'
+            }`}>
+              ⏳ Đang tải sơ đồ ghế phòng chiếu...
+            </div>
+          ) : (
+            <div className="overflow-x-auto pb-4 pt-2 flex flex-col items-center gap-2 select-none">
+              {rowsMap.map(([rowLabel, rowSeats]) => (
+                <div key={rowLabel} className="flex items-center gap-2 font-mono-data text-xs">
+                  <span className={`w-5 text-center font-bold ${isDark ? 'text-[#e8b84b]' : 'text-slate-800 font-black'}`}>{rowLabel}</span>
+
+                  <div className="flex items-center gap-1.5">
+                    {rowSeats.map((s) => {
+                      const type = (s.seat_type || '').toLowerCase()
+                      const isCouple = type === 'couple'
+                      const isVip = type === 'vip'
+                      const isKids = type === 'kids'
+
+                      return (
+                        <div
+                          key={`${rowLabel}-${s.col_number}`}
+                          onClick={() => handleSeatClick(s.id)}
+                          className={`h-8 rounded-lg border flex items-center justify-center text-[10px] font-bold shadow-xs transition-transform ${
+                            isEditing
+                              ? isDark
+                                ? 'cursor-pointer hover:scale-115 hover:ring-2 hover:ring-white'
+                                : 'cursor-pointer hover:scale-115 hover:ring-2 hover:ring-slate-900'
+                              : 'cursor-default hover:scale-105'
+                          } ${
+                            isCouple
+                              ? isDark
+                                ? 'w-16 bg-pink-500/15 border-pink-500/40 text-pink-400'
+                                : 'w-16 bg-pink-100 border-pink-400 text-pink-950 font-black shadow-xs'
+                              : isKids
+                              ? isDark
+                                ? 'w-8 bg-teal-500/15 border-teal-500/40 text-teal-300'
+                                : 'w-8 bg-teal-100 border-teal-400 text-teal-950 font-black shadow-xs'
+                              : isVip
+                              ? isDark
+                                ? 'w-8 bg-[#e8b84b]/15 border-[#e8b84b]/40 text-[#e8b84b]'
+                                : 'w-8 bg-amber-100 border-amber-400 text-amber-950 font-black shadow-xs'
+                              : isDark
+                              ? 'w-8 bg-[#181824] border-white/15 text-[#f0ede8]'
+                              : 'w-8 bg-slate-100 border-slate-300 text-slate-800 font-bold'
+                          }`}
+                          title={`Ghế ${rowLabel}${s.col_number} (${
+                            isCouple ? 'Ghế đôi' : isKids ? 'Ghế trẻ em' : isVip ? 'Ghế VIP' : 'Ghế thường'
+                          })${isEditing ? ' - Click để đổi loại ghế' : ''}`}
+                        >
+                          {isCouple ? `💑 ${s.col_number}` : isKids ? `🎈 ${s.col_number}` : s.col_number}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  <span className={`w-5 text-center font-bold ${isDark ? 'text-[#e8b84b]' : 'text-slate-800 font-black'}`}>{rowLabel}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div className={`p-4 border-t flex items-center justify-between ${
+          isDark ? 'border-white/10 bg-[#0d0d14]' : 'border-slate-200 bg-slate-50'
+        }`}>
+          <div>
+            {isEditing ? (
+              <span className={`text-xs font-semibold ${isDark ? 'text-[#e8b84b]' : 'text-amber-900'}`}>
+                💡 Hãy bấm "💾 Lưu Sơ Đồ Ghế" sau khi đã tùy chỉnh xong.
+              </span>
+            ) : (
+              <span className={`text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-600 font-medium'}`}>
+                💡 Bấm "✏️ Chỉnh sửa sơ đồ" nếu bạn muốn thay đổi trực tiếp loại ghế.
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            {isEditing && (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleSaveLayout}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl cursor-pointer transition-all shadow-md flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <span>💾</span>
+                <span>{saving ? 'Đang lưu...' : 'Lưu Sơ Đồ Ghế'}</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onClose}
+              className={`px-5 py-2 font-bold text-xs rounded-xl cursor-pointer transition-all shadow-md ${
+                isDark ? 'bg-[#e8b84b] hover:bg-[#f5c759] text-[#09090e]' : 'bg-slate-800 hover:bg-slate-900 text-white'
+              }`}
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -1261,12 +1711,13 @@ export default function AdminView() {
     }
   }
 
-  // Create Room Form State
+  // Create Room Form & Layout View State
   const [rName, setRName] = useState('')
   const [rType, setRType] = useState('standard')
   const [rRows, setRRows] = useState(8)
   const [rCols, setRCols] = useState(10)
   const [rLoading, setRLoading] = useState(false)
+  const [viewRoomLayout, setViewRoomLayout] = useState<RoomItem | null>(null)
 
   const safeRooms = useMemo(() => (Array.isArray(rooms) ? rooms : []), [rooms])
 
@@ -2598,6 +3049,16 @@ export default function AdminView() {
                         </div>
 
                         <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setViewRoomLayout(r)}
+                            title={`Xem sơ đồ ghế phòng ${r.name}`}
+                            className="px-3 py-1.5 bg-[#e8b84b]/10 hover:bg-[#e8b84b]/20 text-[#e8b84b] border border-[#e8b84b]/30 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 shadow-sm"
+                          >
+                            <span>🪑</span>
+                            <span>Xem sơ đồ ghế</span>
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => handleDeleteRoom(r.id, r.name)}
@@ -4006,6 +4467,15 @@ export default function AdminView() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Room Seat Layout Viewer Modal */}
+      {viewRoomLayout && (
+        <RoomSeatLayoutModal
+          room={viewRoomLayout}
+          isDark={isDark}
+          onClose={() => setViewRoomLayout(null)}
+        />
       )}
     </div>
   )

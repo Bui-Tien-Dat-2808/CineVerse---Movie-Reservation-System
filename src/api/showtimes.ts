@@ -87,19 +87,22 @@ export async function fetchSeatMap(
 
   // Transform seats list
   const seats: SeatItem[] = (data.seats ?? []).map((ss: any) => {
-    const isCouple = ss.seat?.seat_type === 'couple'
-    const isVip = ss.seat?.seat_type === 'vip'
+    const sType = (ss.seat?.seat_type || '').toLowerCase()
+    const isCouple = sType === 'couple'
+    const isVip = sType === 'vip'
+    const isKids = sType === 'kids'
     const defaultBase = basePrice ?? 90000
     const defaultVip = vipPrice ?? (basePrice ? basePrice * 1.3 : 120000)
     const defaultCouple = basePrice ? basePrice * 1.8 : 180000
-    const price = isCouple ? defaultCouple : isVip ? defaultVip : defaultBase
+    const defaultKids = basePrice ? basePrice * 0.85 : 75000
+    const price = isCouple ? defaultCouple : isKids ? defaultKids : isVip ? defaultVip : defaultBase
 
     return {
       id: ss.id,                  // showtime_seat_id
       seat_id: ss.seat_id,
       row_label: ss.seat?.row_label ?? 'A',
       col_number: ss.seat?.col_number ?? 1,
-      seat_type: ss.seat?.seat_type ?? 'standard',
+      seat_type: sType || 'standard',
       width: ss.seat?.width ?? (isCouple ? 2 : 1),
       status: ss.status ?? 'available',
       price,
