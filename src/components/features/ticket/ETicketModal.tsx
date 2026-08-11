@@ -8,6 +8,44 @@ interface ETicketModalProps {
   userName?: string
 }
 
+export function getDeterministicBarcodeBars(ticketCode: string, count: number = 34) {
+  let seed = 0
+  for (let idx = 0; idx < ticketCode.length; idx++) {
+    seed = (seed << 5) - seed + ticketCode.charCodeAt(idx)
+    seed |= 0
+  }
+
+  const bars: string[] = []
+  for (let i = 0; i < count; i++) {
+    if (i === 0 || i === count - 1) {
+      bars.push('3.5px')
+      continue
+    }
+    if (i === 1 || i === count - 2) {
+      bars.push('1px')
+      continue
+    }
+    if (i === 2 || i === count - 3) {
+      bars.push('2.5px')
+      continue
+    }
+
+    const charCode = ticketCode.charCodeAt(i % ticketCode.length)
+    const pseudoRandom = Math.abs((charCode * (i + 1) * 37 + seed + i * 19) % 100)
+
+    if (pseudoRandom < 20) {
+      bars.push('1px')
+    } else if (pseudoRandom < 50) {
+      bars.push('2px')
+    } else if (pseudoRandom < 78) {
+      bars.push('3px')
+    } else {
+      bars.push('4px')
+    }
+  }
+  return bars
+}
+
 export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicketModalProps) {
   if (!isOpen || !reservation) return null
 
@@ -44,10 +82,6 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
 
   const isUsed = reservation.is_used
   const isCancelled = reservation.status === 'cancelled'
-
-  function handlePrint() {
-    window.print()
-  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in print:bg-white print:p-0">
@@ -129,16 +163,21 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
               {ticketCode}
             </div>
 
-            {/* High-contrast Barcode visualization */}
-            <div className="w-56 mx-auto h-14 flex items-center justify-between px-3 bg-white rounded-lg border border-slate-300 py-1.5">
-              {Array.from({ length: 34 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-full bg-slate-950"
-                  style={{ width: i % 4 === 0 ? '3.5px' : i % 3 === 0 ? '1px' : '2px' }}
-                />
-              ))}
-            </div>
+            {/* Dynamic & Unique High-contrast Barcode visualization */}
+            {(() => {
+              const barcodeBars = getDeterministicBarcodeBars(ticketCode, 34)
+              return (
+                <div className="w-56 mx-auto h-14 flex items-center justify-between px-3 bg-white rounded-lg border border-slate-300 py-1.5">
+                  {barcodeBars.map((w, i) => (
+                    <div
+                      key={i}
+                      className="h-full bg-slate-950"
+                      style={{ width: w }}
+                    />
+                  ))}
+                </div>
+              )
+            })()}
 
             <div className="text-[11px] text-slate-500 font-medium pt-1">
               🎟️ Đưa mã vạch này cho nhân viên tại rạp để soát vé vào phòng chiếu.
@@ -157,26 +196,6 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
               <span className="font-bold text-base text-[#e8b84b]">{fmt(totalPriceNum)}</span>
             </div>
           </div>
-        </div>
-
-        {/* Action Buttons Footer */}
-        <div className="p-4 bg-[#161622] border-t border-white/10 flex gap-3 shrink-0 print:hidden">
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="flex-1 bg-white/10 hover:bg-white/20 text-[#f0ede8] font-bold py-3 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer border border-white/10"
-          >
-            <span>🖨️</span>
-            <span>In / Lưu vé</span>
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 bg-[#e8b84b] hover:bg-[#f0c868] text-[#09090e] font-bold py-3 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md"
-          >
-            <span>✕</span>
-            <span>Đóng cửa sổ</span>
-          </button>
         </div>
       </div>
     </div>

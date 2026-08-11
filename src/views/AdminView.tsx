@@ -1629,6 +1629,11 @@ export default function AdminView() {
   const [loading, setLoading] = useState(false)
   const [actionMsg, setActionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
+  const notify = (type: 'success' | 'error', text: string) => {
+    setActionMsg({ type, text })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   // Create Voucher Form State
   const [vCode, setVCode] = useState('')
   const [vType, setVType] = useState<'percent' | 'fixed'>('percent')
@@ -1658,6 +1663,7 @@ export default function AdminView() {
   const [cancelMode, setCancelMode] = useState<'single' | 'movie' | 'all'>('single')
   const [cancelSingleStId, setCancelSingleStId] = useState<number>(0)
   const [cancelMovieId, setCancelMovieId] = useState<number>(0)
+  const [selectedStIds, setSelectedStIds] = useState<number[]>([])
 
   // Ticket Scanner / Verification State
   const [scannerTicketCode, setScannerTicketCode] = useState('')
@@ -1728,15 +1734,9 @@ export default function AdminView() {
         ])
       }
 
-      setActionMsg({
-        type: 'success',
-        text: `Đã check-in cho vé ${code} thành công!`,
-      })
+      notify('success', `Đã check-in cho vé ${code} thành công!`)
     } catch (err: any) {
-      setActionMsg({
-        type: 'error',
-        text: err.response?.data?.detail || 'Không thể thực hiện check-in cho vé này.',
-      })
+      notify('error', err.response?.data?.detail || 'Không thể thực hiện check-in cho vé này.')
     } finally {
       setCheckInLoading(false)
     }
@@ -1926,7 +1926,6 @@ export default function AdminView() {
     if (!vCode.trim()) return
 
     setVLoading(true)
-    setActionMsg(null)
     try {
       await apiClient.post('/api/v1/vouchers/', {
         code: vCode.trim().toUpperCase(),
@@ -1940,30 +1939,26 @@ export default function AdminView() {
         is_active: true,
       })
 
-      setActionMsg({ type: 'success', text: `Tạo voucher khuyến mãi "${vCode.toUpperCase()}" thành công!` })
+      notify('success', `Tạo voucher khuyến mãi "${vCode.toUpperCase()}" thành công!`)
       setVCode('')
       await loadAllData()
     } catch (err: any) {
       const msg = err.response?.data?.detail ?? 'Tạo mã voucher thất bại.'
-      setActionMsg({ type: 'error', text: typeof msg === 'string' ? msg : JSON.stringify(msg) })
+      notify('error', typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setVLoading(false)
     }
   }
 
   async function handleToggleVoucherActive(voucher: VoucherAdminItem) {
-    setActionMsg(null)
     try {
       await apiClient.put(`/api/v1/vouchers/${voucher.id}`, {
         is_active: !voucher.is_active,
       })
-      setActionMsg({
-        type: 'success',
-        text: `Đã ${!voucher.is_active ? 'bật' : 'tắt'} mã voucher "${voucher.code}" thành công!`,
-      })
+      notify('success', `Đã ${!voucher.is_active ? 'bật' : 'tắt'} mã voucher "${voucher.code}" thành công!`)
       await loadAllData()
     } catch (err: any) {
-      setActionMsg({ type: 'error', text: 'Cập nhật trạng thái voucher thất bại.' })
+      notify('error', 'Cập nhật trạng thái voucher thất bại.')
     }
   }
 
@@ -1976,12 +1971,19 @@ export default function AdminView() {
         ? 'ended'
         : 'now_showing'
 
+    const nextLabel =
+      nextStatus === 'now_showing'
+        ? 'Đang chiếu'
+        : nextStatus === 'coming_soon'
+        ? 'Sắp ra mắt'
+        : 'Ngừng chiếu'
+
     try {
       await apiClient.put(`/api/v1/movies/${movie.id}`, { status: nextStatus })
-      setActionMsg({ type: 'success', text: `Đã đổi trạng thái phim "${movie.title}" sang ${nextStatus}!` })
+      notify('success', `Đã đổi trạng thái phim "${movie.title}" sang "${nextLabel}" thành công!`)
       await loadAllData()
     } catch (err: any) {
-      alert(err.response?.data?.detail ?? 'Không thể cập nhật trạng thái phim.')
+      notify('error', err.response?.data?.detail ?? 'Không thể cập nhật trạng thái phim.')
     }
   }
 
@@ -1990,10 +1992,10 @@ export default function AdminView() {
     if (!confirm(`Bạn có chắc chắn muốn xóa phim "${title}"?`)) return
     try {
       await apiClient.delete(`/api/v1/movies/${movieId}`)
-      setActionMsg({ type: 'success', text: `Đã xóa phim "${title}"!` })
+      notify('success', `Đã xóa phim "${title}" thành công!`)
       await loadAllData()
     } catch (err: any) {
-      alert(err.response?.data?.detail ?? 'Xóa phim thất bại.')
+      notify('error', err.response?.data?.detail ?? 'Xóa phim thất bại.')
     }
   }
 
@@ -2003,12 +2005,11 @@ export default function AdminView() {
     try {
       const res = await apiClient.delete(`/api/v1/rooms/${roomId}`)
       const msg = res.data?.message ?? `Đã xóa phòng "${roomName}" thành công!`
-      setActionMsg({ type: 'success', text: msg })
+      notify('success', msg)
       await loadAllData()
     } catch (err: any) {
       const msg = err.response?.data?.detail ?? 'Xóa phòng thất bại.'
-      setActionMsg({ type: 'error', text: typeof msg === 'string' ? msg : JSON.stringify(msg) })
-      alert(typeof msg === 'string' ? msg : JSON.stringify(msg))
+      notify('error', typeof msg === 'string' ? msg : JSON.stringify(msg))
     }
   }
 
@@ -2016,14 +2017,12 @@ export default function AdminView() {
   async function handleCreateShowtime(e: React.FormEvent) {
     e.preventDefault()
     if (!stMovieId || !stRoomId || !stStartTime) {
-      alert('Vui lòng điền đầy đủ Phim, Phòng chiếu và Thời gian khởi chiếu.')
+      notify('error', 'Vui lòng điền đầy đủ Phim, Phòng chiếu và Thời gian khởi chiếu.')
       return
     }
 
     setStLoading(true)
-    setActionMsg(null)
     try {
-      // Format start_time to ISO format
       const isoStartTime = new Date(stStartTime).toISOString()
 
       await apiClient.post('/api/v1/showtimes/', {
@@ -2034,12 +2033,12 @@ export default function AdminView() {
         vip_price: Number(stVipPrice),
       })
 
-      setActionMsg({ type: 'success', text: 'Tạo suất chiếu mới thành công!' })
+      notify('success', 'Tạo suất chiếu mới thành công!')
       setStStartTime('')
       await loadAllData()
     } catch (err: any) {
       const msg = err.response?.data?.detail ?? 'Tạo suất chiếu thất bại (Có thể bị trùng lịch chiếu).'
-      setActionMsg({ type: 'error', text: typeof msg === 'string' ? msg : JSON.stringify(msg) })
+      notify('error', typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setStLoading(false)
     }
@@ -2050,7 +2049,6 @@ export default function AdminView() {
     e.preventDefault()
 
     setRLoading(true)
-    setActionMsg(null)
     try {
       const payloadName = rName.trim() ? rName.trim() : undefined
       const res = await apiClient.post('/api/v1/rooms/', {
@@ -2061,12 +2059,12 @@ export default function AdminView() {
       })
 
       const createdName = res.data?.name || payloadName || 'Phòng chiếu mới'
-      setActionMsg({ type: 'success', text: `Tạo phòng chiếu "${createdName}" thành công với ${rRows * rCols} ghế!` })
+      notify('success', `Tạo phòng chiếu "${createdName}" thành công với ${rRows * rCols} ghế!`)
       setRName('')
       await loadAllData()
     } catch (err: any) {
       const msg = err.response?.data?.detail ?? 'Tạo phòng chiếu thất bại.'
-      setActionMsg({ type: 'error', text: typeof msg === 'string' ? msg : JSON.stringify(msg) })
+      notify('error', typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setRLoading(false)
     }
@@ -2078,14 +2076,13 @@ export default function AdminView() {
 
   async function handleAutoSyncTmdb() {
     setAutoSyncLoading(true)
-    setActionMsg(null)
     try {
       const { data } = await apiClient.post<any>(
         `/api/v1/movies/tmdb/auto-sync?limit=${syncLimit}`,
         {},
         { timeout: 120000 }
       )
-      let msgText = data.message ?? 'Đã đồng bộ tự động thành công từ TMDB!'
+      let msgText = data.message ?? 'Đã lấy phim thành công từ TMDB!'
       if (data.failed_items && data.failed_items.length > 0) {
         const reasons = data.failed_items
           .slice(0, 5)
@@ -2094,11 +2091,11 @@ export default function AdminView() {
         msgText += `\n${data.failed_items.length} phim bị bỏ qua:\n${reasons}` +
           (data.failed_items.length > 5 ? `\n... và ${data.failed_items.length - 5} phim khác` : '')
       }
-      setActionMsg({ type: 'success', text: msgText })
+      notify('success', msgText)
       await loadAllData()
     } catch (err: any) {
-      const msg = err.response?.data?.detail ?? 'Đồng bộ tự động thất bại.'
-      setActionMsg({ type: 'error', text: typeof msg === 'string' ? msg : JSON.stringify(msg) })
+      const msg = err.response?.data?.detail ?? 'Lấy phim từ TMDB thất bại.'
+      notify('error', typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setAutoSyncLoading(false)
     }
@@ -2106,26 +2103,17 @@ export default function AdminView() {
 
   async function handleGenerateAutoPreview() {
     if (autoStartDate > autoEndDate) {
-      setActionMsg({
-        type: 'error',
-        text: '⚠ Ngày bắt đầu (Start Date) không thể lớn hơn Ngày kết thúc (End Date). Vui lòng chọn lại khoảng ngày hợp lệ.',
-      })
+      notify('error', '⚠ Ngày bắt đầu (Start Date) không thể lớn hơn Ngày kết thúc (End Date). Vui lòng chọn lại khoảng ngày hợp lệ.')
       return
     }
 
     if (autoMovieSelectionMode === 'custom' && autoSelectedMovieIds.length === 0) {
-      setActionMsg({
-        type: 'error',
-        text: '⚠ Vui lòng tích chọn ít nhất 1 bộ phim để xếp lịch chiếu tự động.',
-      })
+      notify('error', '⚠ Vui lòng tích chọn ít nhất 1 bộ phim để xếp lịch chiếu tự động.')
       return
     }
 
     if (autoRoomSelectionMode === 'custom' && autoSelectedRoomIds.length === 0) {
-      setActionMsg({
-        type: 'error',
-        text: '⚠ Vui lòng tích chọn ít nhất 1 phòng chiếu để xếp lịch chiếu tự động.',
-      })
+      notify('error', '⚠ Vui lòng tích chọn ít nhất 1 phòng chiếu để xếp lịch chiếu tự động.')
       return
     }
 
@@ -2147,10 +2135,7 @@ export default function AdminView() {
       })
       setAutoPreviewList(res.data)
     } catch (err: any) {
-      setActionMsg({
-        type: 'error',
-        text: typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Không thể tạo bản xem trước',
-      })
+      notify('error', typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Không thể tạo bản xem trước')
     } finally {
       setAutoGenerating(false)
     }
@@ -2181,18 +2166,12 @@ export default function AdminView() {
 
       const count = res.data.count || autoPreviewList.length
 
-      setActionMsg({
-        type: 'success',
-        text: `Đã xếp thành công ${count} suất chiếu cho phim ${movieStr}`,
-      })
+      notify('success', `Đã xếp thành công ${count} suất chiếu cho phim ${movieStr}`)
       setAutoModalOpen(false)
       setAutoPreviewList(null)
       loadAllData()
     } catch (err: any) {
-      setActionMsg({
-        type: 'error',
-        text: typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Không thể lưu suất chiếu tự động',
-      })
+      notify('error', typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Không thể lưu suất chiếu tự động')
     } finally {
       setAutoConfirming(false)
     }
@@ -2202,87 +2181,105 @@ export default function AdminView() {
     if (!window.confirm('Bạn có chắc chắn muốn HỦY suất chiếu này không?')) return
     try {
       await apiClient.delete(`/api/v1/showtimes/${showtimeId}`)
-      setActionMsg({ type: 'success', text: 'Đã hủy suất chiếu thành công!' })
+      notify('success', 'Đã hủy suất chiếu thành công!')
       await loadAllData()
     } catch (err: any) {
-      setActionMsg({
-        type: 'error',
-        text: typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Không thể hủy suất chiếu này.',
-      })
+      notify('error', typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Không thể hủy suất chiếu này.')
     }
   }
 
-  async function handleBulkCancelShowtimes() {
-    const count = filteredShowtimes.length
-    if (count === 0) return
+  const handleToggleSelectSt = (id: number) => {
+    setSelectedStIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    )
+  }
 
-    const filterText =
-      stFilterMovieId !== 'all' || stFilterRoomId !== 'all'
-        ? 'đang lọc hiện tại'
-        : 'trên toàn hệ thống'
+  const handleBulkCancelSelectedShowtimes = async (overrideIds?: number[]) => {
+    const ids = overrideIds || selectedStIds
+    if (ids.length === 0) return
 
-    if (
-      !window.confirm(
-        `⚠️ CẢNH BÁO NGUY HIỂM:\n\nBạn có chắc chắn muốn HỦY TOÀN BỘ ${count} suất chiếu (${filterText}) không?\n\nHành động này sẽ hủy tất cả lịch chiếu này và không thể hoàn tác!`
-      )
-    ) {
+    if (!window.confirm(`Bạn có chắc chắn muốn HỦY ${ids.length} suất chiếu đã chọn không?`)) {
       return
     }
 
     try {
-      let url = '/api/v1/showtimes/admin/bulk-cancel?'
-      const params: string[] = []
-      if (stFilterMovieId !== 'all') params.push(`movie_id=${stFilterMovieId}`)
-      if (stFilterRoomId !== 'all') params.push(`room_id=${stFilterRoomId}`)
-      url += params.join('&')
-
-      const { data } = await apiClient.delete<{ message: string; count: number }>(url)
-      setActionMsg({
-        type: 'success',
-        text: data.message || `Đã hủy thành công ${data.count} suất chiếu!`,
-      })
+      const { data } = await apiClient.post<{ message: string; count: number }>(
+        '/api/v1/showtimes/admin/bulk-cancel',
+        {
+          showtime_ids: ids,
+          only_upcoming: true,
+        }
+      )
+      notify('success', data.message || `Đã hủy thành công ${data.count} suất chiếu!`)
+      setSelectedStIds([])
+      setCancelSingleStId(0)
       await loadAllData()
     } catch (err: any) {
-      setActionMsg({
-        type: 'error',
-        text: typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Không thể hủy hàng loạt suất chiếu.',
-      })
+      notify('error', typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Không thể hủy các suất chiếu đã chọn.')
     }
   }
 
-  async function handleCancelByMovie(movieId: number) {
+  async function handleCancelByMovie(movieId: number, idsToCancel?: number[]) {
     const targetMovie = movies.find((m) => m.id === movieId)
-    const count = showtimes.filter((st) => st.movie_id === movieId).length
-    if (count === 0) {
-      setActionMsg({ type: 'error', text: 'Phim này hiện không có suất chiếu nào.' })
+
+    if (idsToCancel && idsToCancel.length > 0) {
+      return handleBulkCancelSelectedShowtimes(idsToCancel)
+    }
+
+    const upcomingMovieSts = showtimes.filter(
+      (st) => st.movie_id === movieId && new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed' && st.status !== 'cancelled'
+    )
+
+    if (upcomingMovieSts.length === 0) {
+      notify('error', 'Phim này hiện không có suất chiếu sắp chiếu (chưa diễn ra) nào.')
       return
     }
-    if (!window.confirm(`Bạn có chắc muốn HỦY TOÀN BỘ ${count} suất chiếu của phim "${targetMovie?.title}" không?`)) {
+
+    if (!window.confirm(`Bạn có chắc muốn HỦY TOÀN BỘ ${upcomingMovieSts.length} suất sắp chiếu của phim "${targetMovie?.title}" không?\n\n(Lưu ý: Các suất đã chiếu và đang chiếu sẽ KHÔNG bị hủy).`)) {
       return
     }
+
     try {
-      const { data } = await apiClient.delete<{ message: string; count: number }>(
-        `/api/v1/showtimes/admin/bulk-cancel?movie_id=${movieId}`
+      const { data } = await apiClient.post<{ message: string; count: number }>(
+        '/api/v1/showtimes/admin/bulk-cancel',
+        {
+          movie_id: movieId,
+          only_upcoming: true,
+        }
       )
-      setActionMsg({ type: 'success', text: data.message || `Đã hủy thành công ${data.count} suất chiếu!` })
-      setCancelMovieId(0)
+      notify('success', data.message || `Đã hủy thành công ${data.count} suất chiếu sắp chiếu!`)
+      setSelectedStIds([])
       await loadAllData()
     } catch (err: any) {
-      setActionMsg({ type: 'error', text: err.response?.data?.detail || 'Không thể hủy suất chiếu.' })
+      notify('error', err.response?.data?.detail || 'Không thể hủy suất chiếu.')
     }
   }
 
   async function handleCancelAllSystemShowtimes() {
-    if (showtimes.length === 0) return
-    if (!window.confirm(`⚠️ CẢNH BÁO NGUY HIỂM: Bạn có chắc chắn muốn HỦY TOÀN BỘ ${showtimes.length} suất chiếu trên hệ thống không?`)) {
+    const upcomingSts = showtimes.filter(
+      (st) => new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed' && st.status !== 'cancelled'
+    )
+
+    if (upcomingSts.length === 0) {
+      notify('error', 'Hệ thống hiện không có suất chiếu sắp chiếu (chưa diễn ra) nào.')
+      return
+    }
+
+    if (!window.confirm(`⚠️ CẢNH BÁO: Bạn có chắc chắn muốn HỦY TẤT CẢ ${upcomingSts.length} suất chiếu SẮP CHIẾU trên toàn hệ thống không?\n\n(Lưu ý: Các suất đã chiếu và đang chiếu sẽ KHÔNG bị ảnh hưởng).`)) {
       return
     }
     try {
-      const { data } = await apiClient.delete<{ message: string; count: number }>('/api/v1/showtimes/admin/bulk-cancel')
-      setActionMsg({ type: 'success', text: data.message || `Đã hủy thành công ${data.count} suất chiếu!` })
+      const { data } = await apiClient.post<{ message: string; count: number }>(
+        '/api/v1/showtimes/admin/bulk-cancel',
+        {
+          only_upcoming: true,
+        }
+      )
+      notify('success', data.message || `Đã hủy thành công ${data.count} suất chiếu sắp chiếu!`)
+      setSelectedStIds([])
       await loadAllData()
     } catch (err: any) {
-      setActionMsg({ type: 'error', text: err.response?.data?.detail || 'Không thể hủy tất cả suất chiếu.' })
+      notify('error', err.response?.data?.detail || 'Không thể hủy tất cả suất chiếu.')
     }
   }
 
@@ -2581,7 +2578,7 @@ export default function AdminView() {
                   <span>Hủy Suất Chiếu</span>
                 </h3>
                 <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                  Chọn 1 trong 3 mục: Hủy 1 suất cụ thể, hủy toàn bộ suất của phim hoặc hủy tất cả.
+                  Chọn 1 trong 3 mục: Hủy 1 hoặc nhiều suất cụ thể, hủy toàn bộ suất của phim hoặc hủy tất cả suất sắp chiếu.
                 </p>
               </div>
 
@@ -2598,7 +2595,7 @@ export default function AdminView() {
                       : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  🎯 1 Suất Cụ Thể
+                  🎯 Suất Cụ Thể
                 </button>
                 <button
                   type="button"
@@ -2624,55 +2621,95 @@ export default function AdminView() {
                 </button>
               </div>
 
-              {/* Method 1: Cancel Single Showtime */}
+              {/* Method 1: Cancel Single/Multiple Specific Showtimes */}
               {cancelMode === 'single' && (
                 <div className="space-y-3 pt-1">
-                  <div>
-                    <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>
-                      Chọn suất chiếu cần hủy:
-                    </label>
-                    <select
-                      value={cancelSingleStId}
-                      onChange={(e) => setCancelSingleStId(Number(e.target.value))}
-                      className={`w-full p-2.5 rounded-xl border text-xs outline-none cursor-pointer ${
-                        isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900 font-semibold'
-                      }`}
-                    >
-                      <option value={0}>-- Chọn suất chiếu cụ thể (chưa diễn ra) --</option>
-                      {showtimes
-                        .filter((st) => new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed')
-                        .map((st) => {
-                        const mTitle = st.movie?.title || `Phim #${st.movie_id}`
-                        const rName = st.room?.name || `Phòng #${st.room_id}`
-                        const timeFmt = new Date(st.start_time).toLocaleString('vi-VN', {
-                          weekday: 'short',
-                          day: '2-digit',
-                          month: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                        return (
-                          <option key={st.id} value={st.id}>
-                            #{st.id} - {mTitle} ({rName}) [{timeFmt}]
-                          </option>
-                        )
-                      })}
-                    </select>
-                  </div>
+                  {(() => {
+                    const upcomingSts = showtimes.filter(
+                      (st) => new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed' && st.status !== 'cancelled'
+                    )
+                    const selectedCount = selectedStIds.length
 
-                  <button
-                    type="button"
-                    disabled={!cancelSingleStId || cancelSingleStId === 0}
-                    onClick={() => {
-                      if (cancelSingleStId > 0) {
-                        handleCancelSingleShowtime(cancelSingleStId)
-                        setCancelSingleStId(0)
-                      }
-                    }}
-                    className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
-                  >
-                    🗑️ Xác Nhận Hủy Suất Chiếu Này
-                  </button>
+                    return (
+                      <>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-[#a09e9a]">Tích chọn suất chiếu muốn hủy:</span>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedStIds(upcomingSts.map((st) => st.id))}
+                              className="text-[11px] text-amber-400 hover:underline cursor-pointer"
+                            >
+                              Tích tất cả ({upcomingSts.length})
+                            </button>
+                            {selectedCount > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedStIds([])}
+                                className="text-[11px] text-[#a09e9a] hover:underline cursor-pointer"
+                              >
+                                Bỏ chọn
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Checklist Container */}
+                        <div className="max-h-56 overflow-y-auto space-y-1.5 p-2 bg-[#09090e] border border-white/10 rounded-xl">
+                          {upcomingSts.length === 0 ? (
+                            <p className="text-xs text-[#a09e9a] p-3 text-center italic">
+                              Hiện không có suất chiếu sắp chiếu nào.
+                            </p>
+                          ) : (
+                            upcomingSts.map((st) => {
+                              const isChecked = selectedStIds.includes(st.id)
+                              const mTitle = st.movie?.title || `Phim #${st.movie_id}`
+                              const rName = st.room?.name || `Phòng #${st.room_id}`
+                              const timeFmt = new Date(st.start_time).toLocaleString('vi-VN', {
+                                weekday: 'short',
+                                day: '2-digit',
+                                month: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                              return (
+                                <label
+                                  key={st.id}
+                                  className={`flex items-center gap-2.5 p-2 rounded-lg text-xs cursor-pointer border transition-colors ${
+                                    isChecked
+                                      ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+                                      : 'bg-white/5 border-transparent text-[#a09e9a] hover:text-[#f0ede8] hover:bg-white/10'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => handleToggleSelectSt(st.id)}
+                                    className="accent-rose-500 w-4 h-4 rounded cursor-pointer"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-bold truncate text-[#f0ede8]">{mTitle}</p>
+                                    <p className="text-[10px] text-[#a09e9a]">
+                                      #{st.id} - {rName} | {timeFmt}
+                                    </p>
+                                  </div>
+                                </label>
+                              )
+                            })
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={selectedCount === 0}
+                          onClick={() => handleBulkCancelSelectedShowtimes()}
+                          className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
+                        >
+                          🗑️ Hủy {selectedCount > 0 ? `${selectedCount} Suất Chiếu Đã Chọn` : 'Suất Chiếu Đã Chọn'}
+                        </button>
+                      </>
+                    )
+                  })()}
                 </div>
               )}
 
@@ -2681,66 +2718,162 @@ export default function AdminView() {
                 <div className="space-y-3 pt-1">
                   <div>
                     <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>
-                      Chọn bộ phim cần hủy toàn bộ suất:
+                      Chọn bộ phim cần hủy suất:
                     </label>
                     <select
                       value={cancelMovieId}
-                      onChange={(e) => setCancelMovieId(Number(e.target.value))}
+                      onChange={(e) => {
+                        setCancelMovieId(Number(e.target.value))
+                        setSelectedStIds([])
+                      }}
                       className={`w-full p-2.5 rounded-xl border text-xs outline-none cursor-pointer ${
                         isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900 font-semibold'
                       }`}
                     >
                       <option value={0}>-- Chọn bộ phim --</option>
                       {movies.map((m) => {
-                        const count = showtimes.filter((st) => st.movie_id === m.id).length
+                        const upcomingCount = showtimes.filter(
+                          (st) => st.movie_id === m.id && new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed' && st.status !== 'cancelled'
+                        ).length
                         return (
                           <option key={m.id} value={m.id}>
-                            {m.title} ({count} suất chiếu)
+                            {m.title} ({upcomingCount} suất sắp chiếu)
                           </option>
                         )
                       })}
                     </select>
                   </div>
 
-                  {cancelMovieId > 0 && (
-                    <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl font-mono-data">
-                      💡 Phim đã chọn đang có <strong>{showtimes.filter((st) => st.movie_id === cancelMovieId).length}</strong> suất chiếu.
-                    </div>
-                  )}
+                  {cancelMovieId > 0 && (() => {
+                    const upcomingMovieSts = showtimes.filter(
+                      (st) => st.movie_id === cancelMovieId && new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed' && st.status !== 'cancelled'
+                    )
+                    const selectedMovieStIds = selectedStIds.filter((id) =>
+                      upcomingMovieSts.some((st) => st.id === id)
+                    )
 
-                  <button
-                    type="button"
-                    disabled={!cancelMovieId || cancelMovieId === 0}
-                    onClick={() => {
-                      if (cancelMovieId > 0) {
-                        handleCancelByMovie(cancelMovieId)
-                      }
-                    }}
-                    className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
-                  >
-                    🗑️ Hủy Tất Cả Suất Của Phim Đã Chọn
-                  </button>
+                    return (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-[#a09e9a]">
+                            Suất sắp chiếu ({upcomingMovieSts.length}):
+                          </span>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedStIds(upcomingMovieSts.map((st) => st.id))}
+                              className="text-[11px] text-amber-400 hover:underline cursor-pointer"
+                            >
+                              Tích tất cả
+                            </button>
+                            {selectedMovieStIds.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedStIds([])}
+                                className="text-[11px] text-[#a09e9a] hover:underline cursor-pointer"
+                              >
+                                Bỏ chọn
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="max-h-48 overflow-y-auto space-y-1.5 p-2 bg-[#09090e] border border-white/10 rounded-xl">
+                          {upcomingMovieSts.length === 0 ? (
+                            <p className="text-xs text-[#a09e9a] p-3 text-center italic">
+                              Phim này không có suất chiếu sắp chiếu nào.
+                            </p>
+                          ) : (
+                            upcomingMovieSts.map((st) => {
+                              const isChecked = selectedStIds.includes(st.id)
+                              const rName = st.room?.name || `Phòng #${st.room_id}`
+                              const timeFmt = new Date(st.start_time).toLocaleString('vi-VN', {
+                                weekday: 'short',
+                                day: '2-digit',
+                                month: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                              return (
+                                <label
+                                  key={st.id}
+                                  className={`flex items-center gap-2.5 p-2 rounded-lg text-xs cursor-pointer border transition-colors ${
+                                    isChecked
+                                      ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+                                      : 'bg-white/5 border-transparent text-[#a09e9a] hover:text-[#f0ede8] hover:bg-white/10'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => handleToggleSelectSt(st.id)}
+                                    className="accent-rose-500 w-4 h-4 rounded cursor-pointer"
+                                  />
+                                  <span className="font-mono-data font-bold text-[#f0ede8]">
+                                    #{st.id} - {rName} | {timeFmt}
+                                  </span>
+                                </label>
+                              )
+                            })
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          {selectedMovieStIds.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleCancelByMovie(cancelMovieId, selectedMovieStIds)}
+                              className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs cursor-pointer transition-all shadow-md"
+                            >
+                              🗑️ Hủy {selectedMovieStIds.length} Suất Chiếu Đã Chọn Của Phim Này
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            disabled={upcomingMovieSts.length === 0}
+                            onClick={() => handleCancelByMovie(cancelMovieId)}
+                            className="w-full bg-rose-700/80 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 border border-rose-500/30"
+                          >
+                            💥 Hủy Tất Cả {upcomingMovieSts.length} Suất Sắp Chiếu Của Phim Này
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
 
               {/* Method 3: Cancel All System Showtimes */}
               {cancelMode === 'all' && (
                 <div className="space-y-3 pt-1">
-                  <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl space-y-1">
-                    <p className="font-bold">⚠️ Cảnh báo hủy hệ thống:</p>
-                    <p className="text-[11px] leading-relaxed opacity-90">
-                      Thao tác này sẽ xóa sạch toàn bộ <strong>{showtimes.length}</strong> suất chiếu hiện có trên hệ thống!
-                    </p>
-                  </div>
+                  {(() => {
+                    const upcomingStsCount = showtimes.filter(
+                      (st) => new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed' && st.status !== 'cancelled'
+                    ).length
 
-                  <button
-                    type="button"
-                    disabled={showtimes.length === 0}
-                    onClick={handleCancelAllSystemShowtimes}
-                    className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md uppercase tracking-wider"
-                  >
-                    💥 Hủy Tất Cả {showtimes.length} Suất Chiếu Hệ Thống
-                  </button>
+                    return (
+                      <>
+                        <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl space-y-1.5">
+                          <p className="font-bold flex items-center gap-1">
+                            <span>🛡️ Hủy An Toàn Suất Sắp Chiếu:</span>
+                          </p>
+                          <p className="text-[11px] leading-relaxed opacity-90">
+                            Thao tác này chỉ xóa các <strong>{upcomingStsCount}</strong> suất chiếu sắp diễn ra. Các suất đã chiếu hoặc đang chiếu sẽ <strong>được giữ nguyên</strong>.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={upcomingStsCount === 0}
+                          onClick={handleCancelAllSystemShowtimes}
+                          className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md uppercase tracking-wider"
+                        >
+                          💥 Hủy Tất Cả {upcomingStsCount} Suất Sắp Chiếu Hệ Thống
+                        </button>
+                      </>
+                    )
+                  })()}
                 </div>
               )}
             </div>
@@ -2864,6 +2997,63 @@ export default function AdminView() {
               </div>
             </div>
             
+            {/* Multi-Select Action Banner for List Table */}
+            {(() => {
+              const currentFilteredPageSts = filteredShowtimes
+                .slice((showtimePage - 1) * PAGE_SIZE, showtimePage * PAGE_SIZE)
+                .filter((st) => new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed' && st.status !== 'cancelled')
+              
+              const pageSelectedCount = currentFilteredPageSts.filter((st) => selectedStIds.includes(st.id)).length
+              const allPageSelected = currentFilteredPageSts.length > 0 && pageSelectedCount === currentFilteredPageSts.length
+
+              return (
+                <div className="flex items-center justify-between bg-[#09090e] border border-white/10 rounded-xl p-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={() => {
+                        if (allPageSelected) {
+                          const pageIds = currentFilteredPageSts.map((st) => st.id)
+                          setSelectedStIds((prev) => prev.filter((id) => !pageIds.includes(id)))
+                        } else {
+                          const pageIds = currentFilteredPageSts.map((st) => st.id)
+                          setSelectedStIds((prev) => Array.from(new Set([...prev, ...pageIds])))
+                        }
+                      }}
+                      className="accent-rose-500 w-4 h-4 rounded cursor-pointer"
+                    />
+                    <span className="text-[#a09e9a] font-medium">
+                      Tích chọn trang này ({pageSelectedCount}/{currentFilteredPageSts.length})
+                    </span>
+                  </div>
+
+                  {selectedStIds.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-rose-400 font-bold">
+                        Đã chọn {selectedStIds.length} suất
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleBulkCancelSelectedShowtimes()}
+                        className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-all shadow-md flex items-center gap-1"
+                      >
+                        <span>🗑️</span>
+                        <span>Hủy {selectedStIds.length} Suất Đã Chọn</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedStIds([])}
+                        className="text-[#a09e9a] hover:text-[#f0ede8] cursor-pointer text-[11px] underline"
+                      >
+                        Bỏ chọn
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
             <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
               {filteredShowtimes.length === 0 ? (
                 <div className="py-12 text-center text-xs text-[#a09e9a] italic bg-[#09090e] border border-white/5 rounded-xl">
@@ -2882,40 +3072,53 @@ export default function AdminView() {
                     })
 
                     const isPast = new Date(st.end_time || st.start_time).getTime() < Date.now() || st.status === 'completed'
+                    const isChecked = selectedStIds.includes(st.id)
 
                     return (
                       <div
                         key={st.id}
                         className={`border rounded-xl p-4 flex justify-between items-center gap-4 transition-colors ${
-                          isPast ? 'bg-[#09090e]/60 border-white/5 opacity-80' : 'bg-[#09090e] border-white/10 hover:border-white/20'
+                          isChecked
+                            ? 'bg-rose-500/10 border-rose-500/40 shadow-sm'
+                            : isPast ? 'bg-[#09090e]/60 border-white/5 opacity-80' : 'bg-[#09090e] border-white/10 hover:border-white/20'
                         }`}
                       >
-                        <div>
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className="text-[10px] font-mono-data text-[#e8b84b] bg-[#e8b84b]/10 border border-[#e8b84b]/20 rounded px-2 py-0.5 uppercase font-semibold">
-                              {st.room?.name ?? `Phòng #${st.room_id}`}
-                            </span>
-                            
-                            {isPast ? (
-                              <span className="text-[10px] font-mono-data text-slate-400 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 font-bold">
-                                ⚪ Đã kết thúc
+                        <div className="flex items-start gap-3">
+                          {!isPast && (
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleSelectSt(st.id)}
+                              className="accent-rose-500 w-4 h-4 rounded cursor-pointer mt-1"
+                            />
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className="text-[10px] font-mono-data text-[#e8b84b] bg-[#e8b84b]/10 border border-[#e8b84b]/20 rounded px-2 py-0.5 uppercase font-semibold">
+                                {st.room?.name ?? `Phòng #${st.room_id}`}
                               </span>
-                            ) : (
-                              <span className="text-[10px] font-mono-data text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5 font-bold">
-                                🟢 Sắp chiếu
-                              </span>
-                            )}
 
-                            <span className="text-xs text-[#a09e9a] font-mono-data">🕒 {startTimeFmt}</span>
+                              {isPast ? (
+                                <span className="text-[10px] font-mono-data text-slate-400 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 font-bold">
+                                  ⚪ Đã kết thúc
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-mono-data text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5 font-bold">
+                                  🟢 Sắp chiếu
+                                </span>
+                              )}
+
+                              <span className="text-xs text-[#a09e9a] font-mono-data">🕒 {startTimeFmt}</span>
+                            </div>
+
+                            <h4 className="font-display font-bold text-base text-[#f0ede8]">
+                              {st.movie?.title ?? `Phim #${st.movie_id}`}
+                            </h4>
+
+                            <p className="text-xs text-[#a09e9a] mt-1 font-mono-data">
+                              Giá vé: <strong className="text-[#e8b84b]">{fmt(Number(st.base_price))}</strong> (Thường) / <strong className="text-[#e8b84b]">{fmt(Number(st.vip_price ?? st.base_price))}</strong> (VIP)
+                            </p>
                           </div>
-
-                          <h4 className="font-display font-bold text-base text-[#f0ede8]">
-                            {st.movie?.title ?? `Phim #${st.movie_id}`}
-                          </h4>
-
-                          <p className="text-xs text-[#a09e9a] mt-1 font-mono-data">
-                            Giá vé: <strong className="text-[#e8b84b]">{fmt(Number(st.base_price))}</strong> (Thường) / <strong className="text-[#e8b84b]">{fmt(Number(st.vip_price ?? st.base_price))}</strong> (VIP)
-                          </p>
                         </div>
 
                         <div className="text-right flex flex-col items-end justify-center">

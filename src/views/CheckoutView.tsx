@@ -12,6 +12,7 @@ import {
   BookingSummary,
   PriceBreakdown,
   PaymentMethods,
+  VNPayLogo,
 } from '../components/features/checkout/CheckoutComponents'
 import ConcessionPicker from '../components/features/concessions/ConcessionPicker'
 
@@ -403,9 +404,11 @@ export default function CheckoutView() {
           id="pay-now-btn"
           onClick={handleConfirm}
           disabled={isPending}
-          className="w-full sm:w-2/3 bg-amber-500 hover:bg-amber-600 text-slate-950 border-0 rounded-2xl py-4 text-base font-black cursor-pointer tracking-wide transition-all duration-200 hover:shadow-lg hover:-translate-y-px disabled:opacity-50 shadow-md flex items-center justify-center gap-2"
+          className="w-full sm:w-2/3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 border-0 rounded-2xl py-4 px-6 text-base font-black cursor-pointer tracking-wide transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-50 shadow-md flex items-center justify-center gap-3"
         >
-          <span>💳</span>
+          <div className="bg-white/95 px-2.5 py-1 rounded-lg flex items-center shadow-xs">
+            <VNPayLogo className="h-5 w-auto shrink-0" />
+          </div>
           <span>{isPending ? 'Đang kết nối cổng thanh toán...' : 'Thanh toán qua VNPay'}</span>
         </button>
       </div>
