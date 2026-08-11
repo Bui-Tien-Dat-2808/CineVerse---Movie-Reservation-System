@@ -13,6 +13,7 @@ import ProfileView from './views/ProfileView'
 import ComingSoonView from './views/ComingSoonView'
 import TheatersView from './views/TheatersView'
 import PromotionsView from './views/PromotionsView'
+import PaymentResultView from './views/PaymentResultView'
 
 import AdminView from './views/AdminView'
 
@@ -74,6 +75,7 @@ function AppShell() {
           <Route path="/movie/:id" element={isAdmin ? <Navigate to="/admin" replace /> : <DetailView />} />
           <Route path="/movie/:id/checkout" element={isAdmin ? <Navigate to="/admin" replace /> : <CheckoutView />} />
           <Route path="/confirmed" element={isAdmin ? <Navigate to="/admin" replace /> : <ConfirmedView />} />
+          <Route path="/payment-result" element={<PaymentResultView />} />
           {/* Catch-all: redirect về admin nếu là Admin, hoặc home nếu là User */}
           <Route path="*" element={<Navigate to={isAdmin ? "/admin" : "/"} replace />} />
         </Routes>

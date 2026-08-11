@@ -5,11 +5,11 @@ import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { cn } from '../../lib/utils'
 
-const NAV_ITEMS = [
-  { label: 'Phim đang chiếu', path: '/' },
-  { label: 'Sắp ra mắt', path: '/sap-ra-mat' },
-  { label: 'Rạp chiếu', path: '/rap-chieu' },
-  { label: 'Khuyến mãi', path: '/khuyen-mai' },
+const USER_NAV_ITEMS = [
+  { label: 'Phim đang chiếu', icon: '🎬', path: '/' },
+  { label: 'Sắp ra mắt', icon: '⏳', path: '/sap-ra-mat' },
+  { label: 'Rạp chiếu', icon: '🏛️', path: '/rap-chieu' },
+  { label: 'Khuyến mãi', icon: '🎟️', path: '/khuyen-mai' },
 ]
 
 // Primary Admin Nav Items (Shown directly on Navbar)
@@ -220,7 +220,7 @@ export default function Navbar() {
               </div>
             </>
           ) : (
-            NAV_ITEMS.map((item) => {
+            USER_NAV_ITEMS.map((item) => {
               const isActive = location.pathname === item.path
               return (
                 <button
@@ -231,17 +231,18 @@ export default function Navbar() {
                     window.scrollTo({ top: 0, behavior: 'smooth' })
                   }}
                   className={cn(
-                    'bg-transparent border-0 cursor-pointer text-sm font-medium transition-colors duration-200 px-3 py-1.5 rounded-xl',
+                    'bg-transparent border-0 cursor-pointer text-xs lg:text-sm font-medium transition-all duration-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 whitespace-nowrap',
                     isActive
                       ? isDark
-                        ? 'text-[#e8b84b] font-bold'
-                        : 'text-amber-800 font-black'
+                        ? 'text-[#e8b84b] font-bold border-b-2 border-[#e8b84b] bg-white/5'
+                        : 'text-amber-900 font-black border-b-2 border-amber-500 bg-amber-50'
                       : isDark
-                      ? 'text-[#a09e9a] hover:text-[#f0ede8]'
-                      : 'text-slate-700 hover:text-slate-900 font-bold',
+                      ? 'text-[#a09e9a] hover:text-[#f0ede8] hover:bg-white/5 font-medium'
+                      : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100 font-bold',
                   )}
                 >
-                  {item.label}
+                  <span className="text-sm">{item.icon}</span>
+                  <span>{item.label}</span>
                 </button>
               )
             })

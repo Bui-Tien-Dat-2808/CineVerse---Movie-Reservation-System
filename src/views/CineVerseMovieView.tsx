@@ -1,8 +1,8 @@
 import { useEffect, useMemo } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useBooking } from '../context/BookingContext'
 import { useMovie } from '../hooks/useMovies'
-import { useSeatMap, useShowtimes } from '../hooks/useShowtimes'
+import { useSeatMap, useShowtimes, useHoldSeats } from '../hooks/useShowtimes'
 import { useTheme } from '../context/ThemeContext'
 import type { SeatItem, ShowTime } from '../types'
 import { fmt, getDateList, cn } from '../lib/utils'
@@ -63,6 +63,20 @@ export default function CineVerseMovieView() {
       selectMovie(apiMovie)
     }
   }, [apiMovie, state.selectedMovie?.id, selectMovie])
+
+  // Auto-select showtime if passed in URL ?showtime=123
+  const [searchParams] = useSearchParams()
+  const urlShowtimeId = searchParams.get('showtime')
+
+  useEffect(() => {
+    if (urlShowtimeId && showtimes && showtimes.length > 0) {
+      const targetId = Number(urlShowtimeId)
+      const found = showtimes.find((st) => st.id === targetId)
+      if (found && state.selectedShowtime?.id !== found.id) {
+        selectShowtime(found)
+      }
+    }
+  }, [urlShowtimeId, showtimes, selectShowtime, state.selectedShowtime?.id])
 
   // Extract valid date list from showtimes or default to next 7 days
   const { dateStrs, dateObjects } = useMemo(() => {
@@ -190,8 +204,27 @@ export default function CineVerseMovieView() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  function handleContinueToCheckout() {
+  const holdSeatsMutation = useHoldSeats()
+
+  async function handleContinueToCheckout() {
     if (!state.selectedShowtime || state.selectedSeats.size === 0) return
+
+    if (seatMap && seatMap.seats) {
+      const labelToIdMap = new Map<string, number>()
+      seatMap.seats.forEach((s) => labelToIdMap.set(`${s.row_label}${s.col_number}`, s.seat_id))
+      const seatIds = Array.from(state.selectedSeats)
+        .map((label) => labelToIdMap.get(label))
+        .filter((id): id is number => id !== undefined)
+
+      if (seatIds.length > 0) {
+        try {
+          await holdSeatsMutation.mutateAsync({ showtimeId: state.selectedShowtime.id, seatIds })
+        } catch (e) {
+          // If not logged in yet or already held, proceed to checkout page safely
+        }
+      }
+    }
+
     navigate(`/movie/${movie!.id}/checkout`)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }

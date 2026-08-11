@@ -155,6 +155,7 @@ interface BookingContextValue {
   clearSeats: () => void
   setConcession: (concession: Concession, quantity: number) => void
   clearConcessions: () => void
+  setCreatedReservation: (reservation: any) => void
   reset: () => void
 }
 
@@ -203,6 +204,8 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     setConcession: (concession, quantity) =>
       dispatch({ type: 'SET_CONCESSION', payload: { concession, quantity } }),
     clearConcessions: () => dispatch({ type: 'CLEAR_CONCESSIONS' }),
+    setCreatedReservation: (reservation) =>
+      dispatch({ type: 'SET_CREATED_RESERVATION', payload: reservation }),
     reset: () => dispatch({ type: 'RESET' }),
   }
 

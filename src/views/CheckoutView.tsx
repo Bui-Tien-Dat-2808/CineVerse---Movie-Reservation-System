@@ -2,9 +2,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useBooking } from '../context/BookingContext'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { useCreateReservation, useHoldSeats, useSeatMap } from '../hooks/useShowtimes'
 import { useMovie } from '../hooks/useMovies'
 import { apiClient } from '../api/client'
+import { createPaymentUrlAPI } from '../api/showtimes'
+import { cn } from '../lib/utils'
 import {
   BookingSummary,
   PriceBreakdown,
@@ -15,17 +18,38 @@ import ConcessionPicker from '../components/features/concessions/ConcessionPicke
 export default function CheckoutView() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { state, calculateTotalPrice, concessionTotal, clearSeats, setConcession, dispatch } = useBooking() as any
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
+
+  const {
+    state,
+    calculateTotalPrice,
+    concessionTotal,
+    clearSeats,
+    setConcession,
+    clearConcessions,
+    setCreatedReservation,
+  } = useBooking()
+
+  const movieId = id ? Number(id) : null
+  const { data: fetchedMovie } = useMovie(state.selectedMovie ? null : movieId)
+  const movie = state.selectedMovie ?? fetchedMovie
+  const showtime = state.selectedShowtime
+  const { data: seatMap } = useSeatMap(showtime)
 
   function handleCancelBooking() {
     if (window.confirm('Bạn có chắc chắn muốn huỷ giữ chỗ không? Ghế đã giữ sẽ được giải phóng ngay lập tức.')) {
+      if (showtime) {
+        sessionStorage.removeItem(`cineverse_hold_start_${showtime.id}`)
+      }
       clearSeats()
-      if (dispatch) dispatch({ type: 'CLEAR_CONCESSIONS' })
+      clearConcessions()
       navigate(`/movie/${movie?.id}`)
     }
   }
+
   const { isAuthenticated, openAuthModal } = useAuth()
-  const [paymentMethod, setPaymentMethod] = useState('Thẻ ngân hàng')
+  const [paymentMethod, setPaymentMethod] = useState('vnpay')
   const [errorMsg, setErrorMsg] = useState('')
 
   // Voucher state
@@ -41,15 +65,23 @@ export default function CheckoutView() {
   const holdSeatsMutation = useHoldSeats()
   const createReservationMutation = useCreateReservation()
 
-  const movieId = id ? Number(id) : null
-  const { data: fetchedMovie } = useMovie(state.selectedMovie ? null : movieId)
-  const movie = state.selectedMovie ?? fetchedMovie
-  const showtime = state.selectedShowtime
-  const { data: seatMap } = useSeatMap(showtime)
-
   const currentSubtotal = calculateTotalPrice(seatMap?.seats)
 
-  const [timeLeft, setTimeLeft] = useState(600)
+  // Countdown timer state persisted across page reloads
+  const [timeLeft, setTimeLeft] = useState<number>(() => {
+    if (!showtime) return 600
+    const key = `cineverse_hold_start_${showtime.id}`
+    const savedStart = sessionStorage.getItem(key)
+    if (savedStart) {
+      const startTime = parseInt(savedStart, 10)
+      const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000)
+      const remaining = 600 - elapsedSeconds
+      return remaining > 0 ? remaining : 0
+    }
+    const now = Date.now()
+    sessionStorage.setItem(key, now.toString())
+    return 600
+  })
 
   // Guard: redirect safely if missing booking info
   useEffect(() => {
@@ -58,16 +90,34 @@ export default function CheckoutView() {
     }
   }, [movie, showtime, state.selectedSeats.size, navigate])
 
-  // Countdown timer effect
+  // Countdown timer effect with reload persistence
   useEffect(() => {
-    if (timeLeft <= 0) {
-      alert('Thời gian giữ ghế 10 phút đã hết hạn! Vui lòng chọn lại ghế.')
-      navigate(`/movie/${movie?.id}`)
-      return
+    if (!showtime) return
+    const key = `cineverse_hold_start_${showtime.id}`
+
+    const updateTimer = () => {
+      const savedStart = sessionStorage.getItem(key)
+      if (savedStart) {
+        const startTime = parseInt(savedStart, 10)
+        const elapsed = Math.floor((Date.now() - startTime) / 1000)
+        const remaining = 600 - elapsed
+        if (remaining <= 0) {
+          setTimeLeft(0)
+          sessionStorage.removeItem(key)
+          alert('Thời gian giữ ghế 10 phút đã hết hạn! Vui lòng chọn lại ghế.')
+          clearSeats()
+          clearConcessions()
+          navigate(`/movie/${movie?.id}`)
+        } else {
+          setTimeLeft(remaining)
+        }
+      }
     }
-    const timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000)
+
+    updateTimer()
+    const timer = setInterval(updateTimer, 1000)
     return () => clearInterval(timer)
-  }, [timeLeft, navigate, movie?.id])
+  }, [showtime, navigate, movie?.id, clearSeats, clearConcessions])
 
   if (!movie || !showtime || state.selectedSeats.size === 0) {
     return null
@@ -142,11 +192,6 @@ export default function CheckoutView() {
           return
         }
 
-        await holdSeatsMutation.mutateAsync({
-          showtimeId: showtime.id,
-          seatIds,
-        })
-
         const res = await createReservationMutation.mutateAsync({
           showtimeId: showtime.id,
           seatIds,
@@ -156,53 +201,86 @@ export default function CheckoutView() {
           ),
         })
 
-        dispatch({ type: 'SET_CREATED_RESERVATION', payload: res })
+        setCreatedReservation(res)
 
-        navigate('/confirmed')
-        window.scrollTo({ top: 0, behavior: 'smooth' })
+        // Call VNPay payment link creator & redirect browser
+        const paymentRes = await createPaymentUrlAPI(res.id)
+        if (paymentRes && paymentRes.payment_url) {
+          window.location.href = paymentRes.payment_url
+        } else {
+          setErrorMsg('Không thể khởi tạo cổng thanh toán VNPay. Vui lòng thử lại.')
+        }
       } else {
-        navigate('/confirmed')
-        window.scrollTo({ top: 0, behavior: 'smooth' })
+        setErrorMsg('Không tìm thấy thông tin suất chiếu. Vui lòng thử lại.')
       }
     } catch (err: any) {
-      const detail = err.response?.data?.detail ?? 'Đã xảy ra lỗi khi tạo đơn đặt vé. Vui lòng thử lại.'
-      setErrorMsg(typeof detail === 'string' ? detail : JSON.stringify(detail))
+      const rawDetail = err.response?.data?.detail
+      let message = 'Đã xảy ra lỗi khi tạo đơn đặt vé. Vui lòng thử lại.'
+      if (typeof rawDetail === 'string') {
+        message = rawDetail
+      } else if (Array.isArray(rawDetail)) {
+        message = rawDetail.map((d: any) => d.msg || JSON.stringify(d)).join('; ')
+      } else if (rawDetail && typeof rawDetail === 'object') {
+        message = rawDetail.message || JSON.stringify(rawDetail)
+      } else if (err.message) {
+        message = err.message
+      }
+      setErrorMsg(message)
     }
   }
 
-  const isPending = createReservationMutation.isPending || holdSeatsMutation.isPending
+  const isPending = createReservationMutation.isPending
 
   return (
-    <div className="max-w-[640px] mx-auto px-6 py-10 pb-20">
+    <div className="max-w-[640px] mx-auto px-4 sm:px-6 py-10 pb-20">
       {/* Back */}
       <button
         onClick={() => navigate(`/movie/${movie.id}`)}
-        className="flex items-center gap-1.5 bg-transparent border-0 text-[#a09e9a] text-sm cursor-pointer mb-8 hover:text-[#f0ede8] transition-colors"
+        className={cn(
+          'flex items-center gap-1.5 bg-transparent border-0 text-sm cursor-pointer mb-8 transition-colors font-medium',
+          isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
+        )}
       >
         ← Quay lại
       </button>
 
-      <h2 className="font-display text-[32px] font-black tracking-tight mb-4">Xác nhận đặt vé</h2>
+      <h2 className={cn('font-display text-3xl sm:text-[32px] font-black tracking-tight mb-4', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+        Xác nhận đặt vé
+      </h2>
 
-      {/* Seat hold countdown timer banner */}
-      <div className="bg-[#e8b84b]/10 border border-[#e8b84b]/30 rounded-xl p-4 mb-6 flex items-center justify-between shadow-lg">
-        <div className="flex items-center gap-2 text-xs text-[#e8b84b] font-medium">
+      {/* Seat hold countdown timer banner (Sticky on scroll) */}
+      <div
+        className={cn(
+          'sticky top-16 sm:top-20 z-40 backdrop-blur-md border rounded-2xl p-4 mb-6 flex items-center justify-between shadow-xl transition-all duration-200',
+          isDark
+            ? 'bg-[#111118]/90 border-[#e8b84b]/40 text-[#e8b84b]'
+            : 'bg-amber-50/90 border-amber-300 text-amber-950 font-bold'
+        )}
+      >
+        <div className="flex items-center gap-2 text-xs sm:text-sm font-bold">
           <span className="animate-pulse text-base">⏳</span>
-          <span>Thời gian giữ ghế tạm thời còn lại:</span>
+          <span>Thời gian giữ ghế còn lại:</span>
         </div>
-        <span className="font-mono-data font-bold text-lg text-[#e8b84b] tracking-widest">{formattedTime}</span>
+        <span className={cn('font-mono-data font-black text-lg tracking-widest', isDark ? 'text-[#e8b84b]' : 'text-amber-600')}>
+          {formattedTime}
+        </span>
       </div>
 
       {/* Login prompt banner if not logged in */}
       {!isAuthenticated && (
-        <div className="bg-[#e8b84b]/10 border border-[#e8b84b]/30 rounded p-4 mb-6 flex justify-between items-center">
+        <div
+          className={cn(
+            'border rounded-2xl p-4 mb-6 flex justify-between items-center shadow-md',
+            isDark ? 'bg-[#e8b84b]/10 border-[#e8b84b]/30' : 'bg-amber-50 border-amber-300'
+          )}
+        >
           <div>
-            <p className="text-sm font-bold text-[#e8b84b]">Yêu cầu đăng nhập</p>
-            <p className="text-xs text-[#a09e9a]">Vui lòng đăng nhập tài khoản trước khi hoàn tất thanh toán.</p>
+            <p className={cn('text-sm font-black', isDark ? 'text-[#e8b84b]' : 'text-amber-900')}>Yêu cầu đăng nhập</p>
+            <p className={cn('text-xs font-medium', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>Vui lòng đăng nhập tài khoản trước khi hoàn tất thanh toán.</p>
           </div>
           <button
             onClick={() => openAuthModal('login')}
-            className="bg-[#e8b84b] text-[#09090e] border-0 rounded px-4 py-2 text-xs font-bold cursor-pointer"
+            className="bg-amber-500 hover:bg-amber-600 text-slate-950 border-0 rounded-xl px-4 py-2 text-xs font-black cursor-pointer shadow-md"
           >
             Đăng nhập ngay
           </button>
@@ -210,7 +288,7 @@ export default function CheckoutView() {
       )}
 
       {errorMsg && (
-        <div className="bg-[rgba(192,57,43,0.15)] border border-[rgba(192,57,43,0.3)] rounded p-4 mb-6 text-xs text-[#e07060]">
+        <div className="bg-red-500/15 border border-red-500/30 rounded-2xl p-4 mb-6 text-xs text-red-500 font-bold shadow-md">
           ⚠ {errorMsg}
         </div>
       )}
@@ -223,20 +301,25 @@ export default function CheckoutView() {
       />
 
       {/* Voucher Input Box */}
-      <div className="bg-[#111118] border border-white/[0.08] rounded-md p-5 mb-6">
-        <h4 className="font-mono-data text-[13px] text-[#6e6c68] tracking-wide uppercase mb-3">
+      <div
+        className={cn(
+          'border rounded-2xl p-5 mb-6 shadow-md transition-colors',
+          isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+        )}
+      >
+        <h4 className={cn('font-mono-data text-[13px] tracking-wide uppercase mb-3 font-extrabold', isDark ? 'text-[#a09e9a]' : 'text-slate-700')}>
           Mã giảm giá / Voucher (Nếu có)
         </h4>
 
         {appliedVoucher ? (
-          <div className="bg-[rgba(46,204,113,0.12)] border border-[rgba(46,204,113,0.3)] rounded p-3 text-xs flex justify-between items-center text-[#2ecc71]">
+          <div className="bg-emerald-500/15 border border-emerald-500/30 rounded-xl p-3.5 text-xs flex justify-between items-center text-emerald-500 font-bold">
             <div>
-              <p className="font-bold">✓ {appliedVoucher.message}</p>
+              <p className="font-black">✓ {appliedVoucher.message}</p>
               <p className="text-[11px] opacity-80">Mã: {appliedVoucher.code}</p>
             </div>
             <button
               onClick={handleRemoveVoucher}
-              className="text-[#e07060] hover:underline bg-transparent border-0 cursor-pointer text-xs font-bold"
+              className="text-red-500 hover:underline bg-transparent border-0 cursor-pointer text-xs font-black"
             >
               Gỡ bỏ
             </button>
@@ -249,19 +332,24 @@ export default function CheckoutView() {
                 value={voucherCode}
                 onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
                 placeholder="Nhập mã voucher"
-                className="flex-1 px-3 py-2 bg-[#09090e] border border-white/10 rounded text-xs text-[#f0ede8] focus:border-[#e8b84b] outline-none font-mono-data uppercase"
+                className={cn(
+                  'flex-1 px-3.5 py-2.5 border rounded-xl text-xs outline-none font-mono-data uppercase transition-all',
+                  isDark
+                    ? 'bg-[#09090e] border-white/10 text-[#f0ede8]'
+                    : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500 font-bold'
+                )}
               />
               <button
                 type="button"
                 onClick={handleApplyVoucher}
                 disabled={voucherLoading || !voucherCode.trim()}
-                className="bg-[#e8b84b] text-[#09090e] border-0 rounded px-4 py-2 text-xs font-bold cursor-pointer disabled:opacity-50"
+                className="bg-amber-500 hover:bg-amber-600 text-slate-950 border-0 rounded-xl px-4 py-2.5 text-xs font-black cursor-pointer disabled:opacity-50 shadow-md"
               >
                 {voucherLoading ? 'Đang áp dụng...' : 'Áp dụng'}
               </button>
             </div>
             {voucherError && (
-              <p className="text-[11px] text-[#e07060] mt-2">⚠ {voucherError}</p>
+              <p className="text-[11px] text-red-500 font-bold mt-2">⚠ {voucherError}</p>
             )}
           </div>
         )}
@@ -305,7 +393,7 @@ export default function CheckoutView() {
         <button
           type="button"
           onClick={handleCancelBooking}
-          className="w-full sm:w-1/3 py-4 px-4 bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 rounded-xl text-sm font-bold cursor-pointer transition-all duration-200 flex items-center justify-center gap-2 shadow-sm"
+          className="w-full sm:w-1/3 py-4 px-4 bg-red-500/15 hover:bg-red-500/25 text-red-500 border border-red-500/30 rounded-2xl text-sm font-bold cursor-pointer transition-all duration-200 flex items-center justify-center gap-2 shadow-sm"
           title="Huỷ giữ chỗ ngay để chọn vé khác"
         >
           <span>✕</span> Huỷ giữ chỗ
@@ -315,9 +403,10 @@ export default function CheckoutView() {
           id="pay-now-btn"
           onClick={handleConfirm}
           disabled={isPending}
-          className="w-full sm:w-2/3 bg-[#e8b84b] text-[#09090e] border-0 rounded-xl py-4 text-base font-bold cursor-pointer tracking-wide transition-all duration-200 hover:shadow-[0_8px_30px_rgba(232,184,75,0.4)] hover:-translate-y-px disabled:opacity-50"
+          className="w-full sm:w-2/3 bg-amber-500 hover:bg-amber-600 text-slate-950 border-0 rounded-2xl py-4 text-base font-black cursor-pointer tracking-wide transition-all duration-200 hover:shadow-lg hover:-translate-y-px disabled:opacity-50 shadow-md flex items-center justify-center gap-2"
         >
-          {isPending ? 'Đang xử lý đặt vé...' : 'Thanh toán ngay'}
+          <span>💳</span>
+          <span>{isPending ? 'Đang kết nối cổng thanh toán...' : 'Thanh toán qua VNPay'}</span>
         </button>
       </div>
     </div>

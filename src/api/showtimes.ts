@@ -195,3 +195,17 @@ export async function exchangeReservationAPI(
   })
   return data
 }
+
+/** POST /api/v1/payments/create-url */
+export async function createPaymentUrlAPI(reservationId: number): Promise<{ payment_url: string; vnp_txn_ref: string }> {
+  const { data } = await apiClient.post('/api/v1/payments/create-url', {
+    reservation_id: reservationId,
+  })
+  return data
+}
+
+/** GET /api/v1/reservations/{id} */
+export async function fetchReservationDetailAPI(reservationId: number): Promise<ReservationItem> {
+  const { data } = await apiClient.get<ReservationItem>(`/api/v1/reservations/${reservationId}`)
+  return data
+}
