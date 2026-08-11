@@ -2080,7 +2080,11 @@ export default function AdminView() {
     setAutoSyncLoading(true)
     setActionMsg(null)
     try {
-      const { data } = await apiClient.post<any>(`/api/v1/movies/tmdb/auto-sync?limit=${syncLimit}`)
+      const { data } = await apiClient.post<any>(
+        `/api/v1/movies/tmdb/auto-sync?limit=${syncLimit}`,
+        {},
+        { timeout: 120000 }
+      )
       let msgText = data.message ?? 'Đã đồng bộ tự động thành công từ TMDB!'
       if (data.failed_items && data.failed_items.length > 0) {
         const reasons = data.failed_items
@@ -2409,6 +2413,19 @@ export default function AdminView() {
 
               <button
                 type="button"
+                onClick={() => setMovieSubTab('ended')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
+                  movieSubTab === 'ended'
+                    ? 'bg-rose-500/15 text-rose-400 border-rose-500/40 shadow-sm'
+                    : 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
+                }`}
+              >
+                <span>⏹</span>
+                <span>Phim Ngừng Chiếu ({movies.filter((m) => m.status === 'ended').length})</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setMovieSubTab('all')}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
                   movieSubTab === 'all'
@@ -2439,6 +2456,7 @@ export default function AdminView() {
                     const filtered = movies.filter((m) => {
                       if (movieSubTab === 'now_showing') return m.status === 'now_showing'
                       if (movieSubTab === 'coming_soon') return m.status === 'coming_soon'
+                      if (movieSubTab === 'ended') return m.status === 'ended'
                       return true
                     })
                     const paginated = filtered.slice((moviePage - 1) * PAGE_SIZE, moviePage * PAGE_SIZE)
@@ -4030,41 +4048,138 @@ export default function AdminView() {
                   </div>
                 </div>
 
-                {autoMovieSelectionMode === 'custom' && (
-                  <div className={`pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-2 max-h-[150px] overflow-y-auto pr-1 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
-                    {movies.map((m) => {
-                      const isChecked = autoSelectedMovieIds.includes(m.id)
-                      return (
-                        <label
-                          key={m.id}
-                          className={`flex items-center gap-2 p-2 rounded-lg border transition-colors cursor-pointer select-none ${
-                            isChecked
-                              ? isDark
-                                ? 'bg-[rgba(232,184,75,0.12)] border-[#e8b84b] text-[#f0ede8]'
-                                : 'bg-amber-50 border-amber-500 text-amber-900 shadow-sm font-semibold'
-                              : isDark
-                                ? 'bg-[#111118] border-white/10 text-[#a09e9a] hover:border-white/20'
-                                : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setAutoSelectedMovieIds([...autoSelectedMovieIds, m.id])
-                              } else {
-                                setAutoSelectedMovieIds(autoSelectedMovieIds.filter((id) => id !== m.id))
-                              }
-                            }}
-                            className="accent-[#e8b84b] cursor-pointer"
-                          />
-                          <span className="truncate font-medium">{m.title}</span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                )}
+                {autoMovieSelectionMode === 'custom' && (() => {
+                  const nowShowing = movies.filter((m) => m.status === 'now_showing')
+                  const comingSoon = movies.filter((m) => m.status === 'coming_soon')
+                  const ended = movies.filter((m) => m.status !== 'now_showing' && m.status !== 'coming_soon')
+
+                  const renderMovieGrid = (movieList: typeof movies) => (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {movieList.map((m) => {
+                        const isChecked = autoSelectedMovieIds.includes(m.id)
+                        return (
+                          <label
+                            key={m.id}
+                            className={`flex items-center gap-2 p-2 rounded-lg border transition-colors cursor-pointer select-none ${
+                              isChecked
+                                ? isDark
+                                  ? 'bg-[rgba(232,184,75,0.12)] border-[#e8b84b] text-[#f0ede8]'
+                                  : 'bg-amber-50 border-amber-500 text-amber-900 shadow-sm font-semibold'
+                                : isDark
+                                  ? 'bg-[#111118] border-white/10 text-[#a09e9a] hover:border-white/20'
+                                  : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setAutoSelectedMovieIds([...autoSelectedMovieIds, m.id])
+                                } else {
+                                  setAutoSelectedMovieIds(autoSelectedMovieIds.filter((id) => id !== m.id))
+                                }
+                              }}
+                              className="accent-[#e8b84b] cursor-pointer"
+                            />
+                            <span className="truncate font-medium">{m.title}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )
+
+                  return (
+                    <div className={`pt-3 border-t space-y-4 max-h-[280px] overflow-y-auto pr-1 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
+                      {/* Section 1: Phim Đang Chiếu */}
+                      {nowShowing.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-bold text-emerald-400 flex items-center gap-1.5 font-mono-data">
+                              <span>▶</span>
+                              <span>PHIM ĐANG CHIẾU ({nowShowing.length})</span>
+                            </span>
+                            <div className="flex items-center gap-2 text-[11px]">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nsIds = nowShowing.map((m) => m.id)
+                                  const newSet = new Set([...autoSelectedMovieIds, ...nsIds])
+                                  setAutoSelectedMovieIds(Array.from(newSet))
+                                }}
+                                className="text-emerald-400 hover:underline font-semibold cursor-pointer"
+                              >
+                                ✓ Chọn tất cả Đang chiếu
+                              </button>
+                              <span className={isDark ? 'text-white/20' : 'text-slate-300'}>|</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nsIds = new Set(nowShowing.map((m) => m.id))
+                                  setAutoSelectedMovieIds(autoSelectedMovieIds.filter((id) => !nsIds.has(id)))
+                                }}
+                                className={isDark ? 'text-[#a09e9a] hover:text-[#f0ede8] hover:underline cursor-pointer' : 'text-slate-500 hover:text-slate-800 hover:underline cursor-pointer'}
+                              >
+                                ✕ Bỏ chọn
+                              </button>
+                            </div>
+                          </div>
+                          {renderMovieGrid(nowShowing)}
+                        </div>
+                      )}
+
+                      {/* Section 2: Phim Sắp Ra Mắt */}
+                      {comingSoon.length > 0 && (
+                        <div className={`space-y-2 ${nowShowing.length > 0 ? 'pt-3 border-t ' + (isDark ? 'border-white/10' : 'border-slate-200') : ''}`}>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-bold text-amber-400 flex items-center gap-1.5 font-mono-data">
+                              <span>📅</span>
+                              <span>PHIM SẮP RA MẮT ({comingSoon.length})</span>
+                            </span>
+                            <div className="flex items-center gap-2 text-[11px]">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const csIds = comingSoon.map((m) => m.id)
+                                  const newSet = new Set([...autoSelectedMovieIds, ...csIds])
+                                  setAutoSelectedMovieIds(Array.from(newSet))
+                                }}
+                                className="text-amber-400 hover:underline font-semibold cursor-pointer"
+                              >
+                                ✓ Chọn tất cả Sắp chiếu
+                              </button>
+                              <span className={isDark ? 'text-white/20' : 'text-slate-300'}>|</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const csIds = new Set(comingSoon.map((m) => m.id))
+                                  setAutoSelectedMovieIds(autoSelectedMovieIds.filter((id) => !csIds.has(id)))
+                                }}
+                                className={isDark ? 'text-[#a09e9a] hover:text-[#f0ede8] hover:underline cursor-pointer' : 'text-slate-500 hover:text-slate-800 hover:underline cursor-pointer'}
+                              >
+                                ✕ Bỏ chọn
+                              </button>
+                            </div>
+                          </div>
+                          {renderMovieGrid(comingSoon)}
+                        </div>
+                      )}
+
+                      {/* Section 3: Phim Đã Kết Thúc (Nếu có) */}
+                      {ended.length > 0 && (
+                        <div className={`space-y-2 pt-3 border-t ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-bold text-slate-400 flex items-center gap-1.5 font-mono-data">
+                              <span>⏹</span>
+                              <span>PHIM ĐÃ KẾT THÚC ({ended.length})</span>
+                            </span>
+                          </div>
+                          {renderMovieGrid(ended)}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
 
               {/* Room Selection Section */}
