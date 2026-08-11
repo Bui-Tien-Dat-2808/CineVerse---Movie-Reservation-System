@@ -32,7 +32,7 @@ interface PaginatedResponse<T> {
   }
 }
 
-/** Convert backend room_type ("imax", "3d", "standard", "vip") -> Frontend label */
+/** Convert backend room_type ("imax", "3d", "standard", "vip", "kids") -> Frontend label */
 function mapRoomType(rt?: string): ShowTime['type'] {
   if (!rt) return 'Standard'
   const lower = rt.toLowerCase()
@@ -40,6 +40,7 @@ function mapRoomType(rt?: string): ShowTime['type'] {
   if (lower.includes('4dx')) return '4DX'
   if (lower.includes('vip')) return 'VIP'
   if (lower.includes('3d')) return '3D'
+  if (lower.includes('kids') || lower.includes('kid') || lower.includes('trẻ em')) return 'Kids'
   return 'Standard'
 }
 

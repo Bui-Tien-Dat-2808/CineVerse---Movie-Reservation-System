@@ -1,5 +1,4 @@
 import React from 'react'
-import { generateTicketQRSVG } from '../../../utils/qrGenerator'
 import type { ReservationItem } from '../../../types'
 
 interface ETicketModalProps {
@@ -13,7 +12,6 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
   if (!isOpen || !reservation) return null
 
   const ticketCode = reservation.ticket_code || `CVN-${reservation.id}`
-  const qrSvg = generateTicketQRSVG(ticketCode, 180)
 
   const movieTitle = reservation.showtime?.movie_title || 'Bộ Phim Rạp CineVerse'
   const roomName = reservation.showtime?.room_name || 'Phòng Chiếu CineVerse'
@@ -53,9 +51,9 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in print:bg-white print:p-0">
-      <div className="relative w-full max-w-md bg-[#111118] border border-white/15 rounded-3xl shadow-2xl overflow-hidden print:shadow-none print:border-0 print:w-full">
+      <div className="relative w-full max-w-md max-h-[90vh] bg-[#111118] border border-white/15 rounded-3xl shadow-2xl overflow-hidden flex flex-col print:shadow-none print:border-0 print:w-full">
         {/* Top Header Controls */}
-        <div className="flex justify-between items-center px-6 py-4 border-b border-white/10 bg-[#161622] print:hidden">
+        <div className="flex justify-between items-center px-6 py-4 border-b border-white/10 bg-[#161622] shrink-0 print:hidden">
           <div className="flex items-center gap-2">
             <span className="text-amber-400 text-lg">🎟️</span>
             <span className="font-display font-bold text-sm text-[#f0ede8]">Vé Điện Tử CineVerse</span>
@@ -63,18 +61,15 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-[#a09e9a] hover:text-white flex items-center justify-center text-sm transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-[#f0ede8] hover:text-white flex items-center justify-center text-sm font-bold border border-white/15 transition-colors cursor-pointer"
+            title="Đóng cửa sổ"
           >
             ✕
           </button>
         </div>
 
-        {/* Cinema Ticket Stub Card */}
-        <div className="p-6 space-y-6 relative print:p-4">
-          {/* Decorative Side Ticket Notches */}
-          <div className="absolute top-1/2 -left-4 w-8 h-8 bg-black rounded-full border-r border-white/10 print:hidden" />
-          <div className="absolute top-1/2 -right-4 w-8 h-8 bg-black rounded-full border-l border-white/10 print:hidden" />
-
+        {/* Cinema Ticket Content */}
+        <div className="p-6 space-y-5 overflow-y-auto flex-1 print:p-4">
           {/* Ticket Header & Status */}
           <div className="flex justify-between items-center text-xs">
             <div>
@@ -125,20 +120,28 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
             </div>
           </div>
 
-          {/* Ticket Barcode / QR Code Section */}
-          <div className="bg-white p-5 rounded-2xl text-center text-slate-900 space-y-3 shadow-inner relative overflow-hidden">
-            <div className="text-xs font-mono-data font-bold text-slate-500 tracking-widest uppercase">
-              MÃ VÉ CHIẾU: <span className="text-slate-900 font-extrabold text-sm">{ticketCode}</span>
+          {/* Ticket Barcode Section (Matching Payment Result Barcode) */}
+          <div className="bg-white p-5 rounded-2xl text-center text-slate-900 space-y-3 shadow-inner">
+            <div className="text-[11px] font-mono-data font-bold text-slate-500 tracking-widest uppercase">
+              MÃ VÉ VÀO RẠP (TICKET CODE)
+            </div>
+            <div className="font-mono-data font-black text-2xl tracking-widest text-amber-600 block">
+              {ticketCode}
             </div>
 
-            {/* QR Code SVG */}
-            <div
-              className="w-44 h-44 mx-auto p-2 bg-white rounded-xl shadow-sm border border-slate-200"
-              dangerouslySetInnerHTML={{ __html: qrSvg }}
-            />
+            {/* High-contrast Barcode visualization */}
+            <div className="w-56 mx-auto h-14 flex items-center justify-between px-3 bg-white rounded-lg border border-slate-300 py-1.5">
+              {Array.from({ length: 34 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-full bg-slate-950"
+                  style={{ width: i % 4 === 0 ? '3.5px' : i % 3 === 0 ? '1px' : '2px' }}
+                />
+              ))}
+            </div>
 
-            <div className="text-[11px] text-slate-500 font-medium">
-              📱 Đưa mã QR này cho nhân viên tại rạp để soát vé vào phòng chiếu.
+            <div className="text-[11px] text-slate-500 font-medium pt-1">
+              🎟️ Đưa mã vạch này cho nhân viên tại rạp để soát vé vào phòng chiếu.
             </div>
           </div>
 
@@ -156,23 +159,23 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="p-4 bg-[#161622] border-t border-white/10 flex gap-3 print:hidden">
+        {/* Action Buttons Footer */}
+        <div className="p-4 bg-[#161622] border-t border-white/10 flex gap-3 shrink-0 print:hidden">
           <button
             type="button"
             onClick={handlePrint}
-            className="flex-1 bg-white/10 hover:bg-white/20 text-[#f0ede8] font-bold py-3 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            className="flex-1 bg-white/10 hover:bg-white/20 text-[#f0ede8] font-bold py-3 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer border border-white/10"
           >
             <span>🖨️</span>
-            <span>In / Lưu Vé Về Máy</span>
+            <span>In / Lưu vé</span>
           </button>
           <button
             type="button"
             onClick={onClose}
             className="flex-1 bg-[#e8b84b] hover:bg-[#f0c868] text-[#09090e] font-bold py-3 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md"
           >
-            <span>✓</span>
-            <span>Đóng Vé</span>
+            <span>✕</span>
+            <span>Đóng cửa sổ</span>
           </button>
         </div>
       </div>

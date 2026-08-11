@@ -5,7 +5,7 @@ import { useTheme } from '../context/ThemeContext'
 import { updateProfileAPI } from '../api/auth'
 import { fetchMyReservationsAPI, cancelReservationAPI, exchangeReservationAPI, fetchShowtimesByMovie, fetchSeatMap, type ReservationItem } from '../api/showtimes'
 import { apiClient } from '../api/client'
-import { fmt } from '../lib/utils'
+import { fmt, cn } from '../lib/utils'
 import type { ShowTime, SeatItem } from '../types'
 
 import { ETicketModal } from '../components/features/ticket/ETicketModal'
@@ -44,7 +44,7 @@ export default function ProfileView() {
   // Booking History States
   const [reservations, setReservations] = useState<ReservationItem[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [historyFilter, setHistoryFilter] = useState<'all' | 'confirmed' | 'cancelled'>('all')
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'confirmed' | 'pending' | 'cancelled'>('all')
 
   // User Vouchers States
   const [userVouchers, setUserVouchers] = useState<any[]>([])
@@ -95,6 +95,8 @@ export default function ProfileView() {
   // Cancel Confirmation Modal State
   const [cancelTarget, setCancelTarget] = useState<ReservationItem | null>(null)
   const [cancelLoading, setCancelLoading] = useState(false)
+  const [cancelPendingTarget, setCancelPendingTarget] = useState<ReservationItem | null>(null)
+  const [cancelPendingLoading, setCancelPendingLoading] = useState(false)
 
   // Exchange Ticket Modal State
   const [exchangeTarget, setExchangeTarget] = useState<ReservationItem | null>(null)
@@ -272,6 +274,7 @@ export default function ProfileView() {
   const filteredReservations = reservations.filter((r) => {
     if (historyFilter === 'confirmed') return r.status === 'confirmed'
     if (historyFilter === 'cancelled') return r.status === 'cancelled'
+    if (historyFilter === 'pending') return r.status === 'pending'
     return true
   })
 
@@ -538,11 +541,11 @@ export default function ProfileView() {
       {activeTab === 'history' && (
         <div className="space-y-6">
           {/* Sub-filter */}
-          <div className={`flex justify-between items-center rounded-xl p-4 border transition-colors ${
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 rounded-xl p-4 border transition-colors ${
             isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-md'
           }`}>
             <h3 className={`font-display font-bold text-base ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Danh sách vé đã đặt</h3>
-            <div className="flex gap-2">
+            <div className="flex gap-1.5 flex-wrap">
               <button
                 type="button"
                 onClick={() => setHistoryFilter('all')}
@@ -564,6 +567,17 @@ export default function ProfileView() {
                 }`}
               >
                 Đã xác nhận ({reservations.filter((r) => r.status === 'confirmed').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryFilter('pending')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer border transition-all ${
+                  historyFilter === 'pending'
+                    ? 'bg-amber-500 text-slate-950 border-amber-500 font-bold'
+                    : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a]' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Chờ thanh toán ({reservations.filter((r) => r.status === 'pending').length})
               </button>
               <button
                 type="button"
@@ -602,6 +616,7 @@ export default function ProfileView() {
                 const isCancelled = item.status === 'cancelled'
                 const isExchanged = item.status === 'exchanged'
                 const isConfirmed = item.status === 'confirmed'
+                const isPending = item.status === 'pending'
                 const startTimeMs = item.showtime?.start_time ? new Date(item.showtime.start_time).getTime() : 0
                 const isUpcoming = isConfirmed && startTimeMs > 0 && (startTimeMs - Date.now() >= 30 * 60 * 1000)
                 const totalPriceNum =
@@ -627,7 +642,13 @@ export default function ProfileView() {
                   >
                     <div
                       className={`absolute top-0 left-0 bottom-0 w-1.5 ${
-                        isCancelled ? 'bg-[#e07060]' : isExchanged ? 'bg-purple-500' : 'bg-[#2ecc71]'
+                        isCancelled
+                          ? 'bg-[#e07060]'
+                          : isExchanged
+                          ? 'bg-purple-500'
+                          : isPending
+                          ? 'bg-amber-500'
+                          : 'bg-[#2ecc71]'
                       }`}
                     />
 
@@ -649,10 +670,18 @@ export default function ProfileView() {
                                 ? 'bg-[rgba(224,112,96,0.15)] text-[#e07060] border border-[rgba(224,112,96,0.3)]'
                                 : isExchanged
                                 ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                                : isPending
+                                ? 'bg-amber-500/15 text-amber-500 border border-amber-500/30 font-black'
                                 : 'bg-[rgba(46,204,113,0.15)] text-[#2ecc71] border border-[rgba(46,204,113,0.3)]'
                             }`}
                           >
-                            {isCancelled ? 'Đã hủy' : isExchanged ? 'Đã đổi suất' : 'Đã xác nhận'}
+                            {isCancelled
+                              ? 'Đã hủy'
+                              : isExchanged
+                              ? 'Đã đổi suất'
+                              : isPending
+                              ? 'Chờ thanh toán'
+                              : 'Đã xác nhận'}
                           </span>
                           <span className={`text-[11px] font-mono-data font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
                             Mã vé: {item.ticket_code || `#${item.id}`}
@@ -684,41 +713,70 @@ export default function ProfileView() {
                       </div>
 
                       <div className="flex flex-wrap gap-2 mt-2">
+                        {isPending && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  const payRes = await createPaymentUrlAPI(item.id)
+                                  if (payRes?.payment_url) {
+                                    window.location.href = payRes.payment_url
+                                  } else {
+                                    alert('Không nhận được đường dẫn thanh toán từ máy chủ.')
+                                  }
+                                } catch (e: any) {
+                                  console.error('Lỗi tạo link thanh toán VNPay:', e)
+                                  const detail = e.response?.data?.detail
+                                  alert(
+                                    detail
+                                      ? `Không thể kết nối tới cổng thanh toán: ${detail}`
+                                      : 'Không thể kết nối tới cổng thanh toán. Vui lòng thử lại hoặc chọn "Huỷ thanh toán".'
+                                  )
+                                }
+                              }}
+                              className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1 shadow-md"
+                            >
+                              <span>💳</span>
+                              <span>Thanh toán ngay</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setCancelPendingTarget(item)}
+                              className={`border rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                                isDark
+                                  ? 'bg-red-500/15 hover:bg-red-500/25 text-red-400 border-red-500/30'
+                                  : 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
+                              }`}
+                            >
+                              <span>✕</span>
+                              <span>Huỷ thanh toán</span>
+                            </button>
+                          </>
+                        )}
                         {isConfirmed && (
                           <button
                             type="button"
                             onClick={() => setTicketModalReservation(item)}
-                            className="bg-[#e8b84b] hover:bg-[#f0c868] text-[#09090e] font-bold px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                            className="bg-[#e8b84b] hover:bg-[#f0c868] text-[#09090e] font-bold px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1 shadow-sm"
                           >
-                            <span>📱</span>
-                            <span>Xem Vé QR</span>
+                            <span>🎟️</span>
+                            <span>Xem Mã Vé</span>
                           </button>
                         )}
                         {isUpcoming && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleStartExchange(item)}
-                              className={`border rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                                isDark
-                                  ? 'bg-[#e8b84b]/15 hover:bg-[#e8b84b]/30 text-[#e8b84b] border-[#e8b84b]/30'
-                                  : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
-                              }`}
-                            >
-                              🔄 Đổi suất
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCancelTarget(item)}
-                              className={`border rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                                isDark
-                                  ? 'bg-white/5 hover:bg-[rgba(192,57,43,0.2)] text-[#a09e9a] hover:text-[#e07060] border-white/10'
-                                  : 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
-                              }`}
-                            >
-                              Hủy vé
-                            </button>
-                          </>
+                          <button
+                            type="button"
+                            onClick={() => setCancelTarget(item)}
+                            className={`border rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                              isDark
+                                ? 'bg-white/5 hover:bg-[rgba(192,57,43,0.2)] text-[#a09e9a] hover:text-[#e07060] border-white/10'
+                                : 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
+                            }`}
+                          >
+                            Hủy vé
+                          </button>
                         )}
                       </div>
                     </div>
@@ -1117,6 +1175,68 @@ export default function ProfileView() {
                 })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* CANCEL PENDING CONFIRMATION MODAL */}
+      {cancelPendingTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
+          <div
+            className={cn(
+              'w-full max-w-md rounded-2xl p-6 shadow-2xl border space-y-5',
+              isDark ? 'bg-[#111118] border-white/15 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">⚠️</span>
+              <div>
+                <h3 className="font-display font-bold text-lg">Xác nhận huỷ thanh toán</h3>
+                <p className={cn('text-xs', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                  Mã vé: <span className="font-mono-data font-bold text-amber-500">{cancelPendingTarget.ticket_code || `#${cancelPendingTarget.id}`}</span>
+                </p>
+              </div>
+            </div>
+
+            <p className={cn('text-xs leading-relaxed p-3.5 rounded-xl border', isDark ? 'bg-[#181824] border-white/10 text-[#a09e9a]' : 'bg-slate-50 border-slate-200 text-slate-700')}>
+              Bạn có chắc muốn huỷ thanh toán cho vé <strong className="text-amber-500">{cancelPendingTarget.ticket_code || `#${cancelPendingTarget.id}`}</strong>? Ghế đã chọn sẽ được giải phóng và bạn sẽ không thể tiếp tục thanh toán đơn này.
+            </p>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={cancelPendingLoading}
+                onClick={() => setCancelPendingTarget(null)}
+                className={cn(
+                  'px-4 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer',
+                  isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                )}
+              >
+                Quay lại
+              </button>
+
+              <button
+                type="button"
+                disabled={cancelPendingLoading}
+                onClick={async () => {
+                  setCancelPendingLoading(true)
+                  try {
+                    await apiClient.post(`/api/v1/reservations/${cancelPendingTarget.id}/cancel`)
+                    setCancelPendingTarget(null)
+                    await loadReservations()
+                    setActiveTab('history')
+                    setHistoryFilter('cancelled')
+                  } catch (err: any) {
+                    alert(err.response?.data?.detail ?? 'Không thể huỷ thanh toán cho vé này.')
+                  } finally {
+                    setCancelPendingLoading(false)
+                  }
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl cursor-pointer shadow-md transition-all disabled:opacity-50"
+              >
+                {cancelPendingLoading ? 'Đang huỷ...' : 'Huỷ thanh toán'}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -640,7 +640,9 @@ function RoomSeatLayoutModal({
   const [detailedRoom, setDetailedRoom] = useState<RoomItem>(room)
   const [loading, setLoading] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
-  const [selectedToolSeatType, setSelectedToolSeatType] = useState<'standard' | 'vip' | 'couple' | 'kids'>('vip')
+  const [selectedToolSeatType, setSelectedToolSeatType] = useState<
+    'standard' | 'vip' | 'couple' | 'kids' | 'inactive'
+  >('standard')
   const [editableSeats, setEditableSeats] = useState<SeatItemAdmin[]>([])
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
@@ -669,9 +671,13 @@ function RoomSeatLayoutModal({
     setEditableSeats((prev) =>
       prev.map((s) => {
         if (s.id === seatId) {
-          const newType = selectedToolSeatType
-          const newWidth = newType === 'couple' ? 2 : 1
-          return { ...s, seat_type: newType, width: newWidth }
+          if (selectedToolSeatType === 'inactive') {
+            return { ...s, is_active: false }
+          } else {
+            const newType = selectedToolSeatType
+            const newWidth = newType === 'couple' ? 2 : 1
+            return { ...s, seat_type: newType, width: newWidth, is_active: true }
+          }
         }
         return s
       })
@@ -685,6 +691,7 @@ function RoomSeatLayoutModal({
       const updates = editableSeats.map((s) => ({
         seat_id: s.id,
         seat_type: s.seat_type,
+        is_active: s.is_active !== false,
       }))
       const res = await apiClient.put<RoomItem>(`/api/v1/rooms/${room.id}/seats`, updates)
       if (res.data) {
@@ -708,8 +715,13 @@ function RoomSeatLayoutModal({
     let vip = 0
     let couple = 0
     let kids = 0
+    let inactive = 0
 
     editableSeats.forEach((s) => {
+      if (s.is_active === false) {
+        inactive++
+        return
+      }
       const type = (s.seat_type || '').toLowerCase()
       if (type === 'couple') couple++
       else if (type === 'kids') kids++
@@ -717,7 +729,8 @@ function RoomSeatLayoutModal({
       else standard++
     })
 
-    return { standard, vip, couple, kids }
+    const activeTotal = standard + vip + couple + kids
+    return { standard, vip, couple, kids, inactive, activeTotal }
   }, [editableSeats])
 
   // Group seats by row_label
@@ -761,7 +774,7 @@ function RoomSeatLayoutModal({
               </span>
             </div>
             <p className={`text-xs mt-1 font-mono-data ${isDark ? 'text-[#a09e9a]' : 'text-slate-600 font-medium'}`}>
-              Cấu trúc: {detailedRoom.total_rows} hàng × {detailedRoom.total_cols} cột ({detailedRoom.total_seats} ghế)
+              Cấu trúc: {detailedRoom.total_rows} hàng × {detailedRoom.total_cols} cột ({stats.activeTotal} ghế khả dụng / {detailedRoom.total_seats} tổng)
             </p>
           </div>
 
@@ -849,6 +862,11 @@ function RoomSeatLayoutModal({
                         label: 'Ghế trẻ em (🎈)',
                         cls: isDark ? 'bg-teal-500/20 text-teal-300 border-teal-400' : 'bg-teal-200 text-teal-950 border-teal-400 font-extrabold'
                       },
+                      {
+                        type: 'inactive',
+                        label: '🚫 Không sử dụng',
+                        cls: isDark ? 'bg-slate-800 text-slate-400 border-slate-600' : 'bg-slate-200 text-slate-600 border-slate-400 font-bold'
+                      },
                     ] as const
                   ).map((tool) => (
                     <button
@@ -902,10 +920,18 @@ function RoomSeatLayoutModal({
                   </span>
                 </div>
               )}
+              {stats.inactive > 0 && (
+                <div className="flex items-center gap-2 opacity-75">
+                  <div className="w-4 h-4 rounded border border-dashed border-slate-500 bg-slate-700/40" />
+                  <span className="text-slate-400 font-semibold">
+                    Không sử dụng: <strong>{stats.inactive}</strong>
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className={`font-mono-data text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-              Tổng sức chứa: <strong className={isDark ? 'text-[#e8b84b]' : 'text-amber-900 font-bold'}>{detailedRoom.total_seats} ghế</strong>
+              Sức chứa thực tế: <strong className={isDark ? 'text-[#e8b84b]' : 'text-amber-900 font-bold'}>{stats.activeTotal} ghế</strong> (trên {detailedRoom.total_seats} vị trí)
             </div>
           </div>
 
@@ -939,6 +965,7 @@ function RoomSeatLayoutModal({
                   <div className="flex items-center gap-1.5">
                     {rowSeats.map((s) => {
                       const type = (s.seat_type || '').toLowerCase()
+                      const isInactive = s.is_active === false
                       const isCouple = type === 'couple'
                       const isVip = type === 'vip'
                       const isKids = type === 'kids'
@@ -954,7 +981,11 @@ function RoomSeatLayoutModal({
                                 : 'cursor-pointer hover:scale-115 hover:ring-2 hover:ring-slate-900'
                               : 'cursor-default hover:scale-105'
                           } ${
-                            isCouple
+                            isInactive
+                              ? isDark
+                                ? 'w-8 bg-slate-800/40 border-dashed border-slate-600/60 text-slate-500 opacity-50'
+                                : 'w-8 bg-slate-200/60 border-dashed border-slate-400 text-slate-400 opacity-60'
+                              : isCouple
                               ? isDark
                                 ? 'w-16 bg-pink-500/15 border-pink-500/40 text-pink-400'
                                 : 'w-16 bg-pink-100 border-pink-400 text-pink-950 font-black shadow-xs'
@@ -971,10 +1002,10 @@ function RoomSeatLayoutModal({
                               : 'w-8 bg-slate-100 border-slate-300 text-slate-800 font-bold'
                           }`}
                           title={`Ghế ${rowLabel}${s.col_number} (${
-                            isCouple ? 'Ghế đôi' : isKids ? 'Ghế trẻ em' : isVip ? 'Ghế VIP' : 'Ghế thường'
+                            isInactive ? 'Không sử dụng' : isCouple ? 'Ghế đôi' : isKids ? 'Ghế trẻ em' : isVip ? 'Ghế VIP' : 'Ghế thường'
                           })${isEditing ? ' - Click để đổi loại ghế' : ''}`}
                         >
-                          {isCouple ? `💑 ${s.col_number}` : isKids ? `🎈 ${s.col_number}` : s.col_number}
+                          {isInactive ? `🚫 ${s.col_number}` : isCouple ? `💑 ${s.col_number}` : isKids ? `🎈 ${s.col_number}` : s.col_number}
                         </div>
                       )
                     })}
