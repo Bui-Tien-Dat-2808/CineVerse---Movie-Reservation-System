@@ -10,6 +10,7 @@ import type { ShowTime, SeatItem } from '../types'
 
 import { ETicketModal } from '../components/features/ticket/ETicketModal'
 import { fetchMyLoyalty, type LoyaltyStatus } from '../api/loyalty'
+import { CleanDatePicker } from '../components/ui/CleanDatePicker'
 
 export default function ProfileView() {
   const navigate = useNavigate()
@@ -52,6 +53,9 @@ export default function ProfileView() {
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [loyaltyData, setLoyaltyData] = useState<LoyaltyStatus | null>(null)
   const [loyaltyLoading, setLoyaltyLoading] = useState(false)
+  const [loyaltyStartDate, setLoyaltyStartDate] = useState('')
+  const [loyaltyEndDate, setLoyaltyEndDate] = useState('')
+  const [showAllLoyaltyHistory, setShowAllLoyaltyHistory] = useState(false)
 
   useEffect(() => {
     if (activeTab === 'vouchers') {
@@ -62,10 +66,10 @@ export default function ProfileView() {
     }
   }, [activeTab])
 
-  async function loadLoyalty() {
+  async function loadLoyalty(sDate?: string, eDate?: string) {
     setLoyaltyLoading(true)
     try {
-      const data = await fetchMyLoyalty()
+      const data = await fetchMyLoyalty(sDate !== undefined ? sDate : loyaltyStartDate, eDate !== undefined ? eDate : loyaltyEndDate)
       setLoyaltyData(data)
     } catch (err) {
       console.error('Failed to load loyalty data:', err)
@@ -663,7 +667,7 @@ export default function ProfileView() {
                       />
 
                       <div>
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono-data ${
                               isCancelled
@@ -683,6 +687,25 @@ export default function ProfileView() {
                               ? 'Chờ thanh toán'
                               : 'Đã xác nhận'}
                           </span>
+
+                          {isCancelled && item.refund_status && (
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono-data border ${
+                                item.refund_status === 'success'
+                                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                  : item.refund_status === 'failed'
+                                  ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                                  : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                              }`}
+                            >
+                              {item.refund_status === 'success'
+                                ? '✓ Đã hoàn tiền'
+                                : item.refund_status === 'failed'
+                                ? '⚠️ Hoàn tiền thất bại (Cần hỗ trợ)'
+                                : '⏳ Đang xử lý hoàn tiền'}
+                            </span>
+                          )}
+
                           <span className={`text-[11px] font-mono-data font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
                             Mã vé: {item.ticket_code || `#${item.id}`}
                           </span>
@@ -1037,14 +1060,60 @@ export default function ProfileView() {
                 </div>
 
                 <div>
-                  <h4 className={`font-bold text-sm mb-3 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Lịch sử giao dịch điểm</h4>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                    <h4 className={`font-bold text-sm ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Lịch sử giao dịch điểm</h4>
+                    
+                    {/* Date Range Filter Bar */}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="w-44">
+                        <CleanDatePicker
+                          label="Từ ngày"
+                          value={loyaltyStartDate}
+                          onChange={(d) => {
+                            setLoyaltyStartDate(d)
+                            loadLoyalty(d, loyaltyEndDate)
+                          }}
+                          isDark={isDark}
+                          placeholder="Từ ngày..."
+                          align="left"
+                        />
+                      </div>
+                      <div className="w-44">
+                        <CleanDatePicker
+                          label="Đến ngày"
+                          value={loyaltyEndDate}
+                          onChange={(d) => {
+                            setLoyaltyEndDate(d)
+                            loadLoyalty(loyaltyStartDate, d)
+                          }}
+                          isDark={isDark}
+                          placeholder="Đến ngày..."
+                          align="right"
+                        />
+                      </div>
+                      {(loyaltyStartDate || loyaltyEndDate) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLoyaltyStartDate('')
+                            setLoyaltyEndDate('')
+                            loadLoyalty('', '')
+                          }}
+                          className="px-2.5 py-2 rounded-lg text-xs font-semibold bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 transition-colors self-end mb-0.5"
+                        >
+                          ✕ Xóa lọc
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
                   {loyaltyData.transactions.length === 0 ? (
                     <div className={`rounded-xl border py-8 text-center text-xs ${isDark ? 'text-[#a09e9a] border-white/10' : 'text-slate-500 border-slate-200'}`}>
-                      Chưa có giao dịch điểm nào.
+                      Chưa có giao dịch điểm nào trong khoảng thời gian này.
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {loyaltyData.transactions.map((tx) => (
+                      {(showAllLoyaltyHistory ? loyaltyData.transactions : loyaltyData.transactions.slice(0, 5)).map((tx) => (
                         <div key={tx.id} className={`rounded-xl border p-3 flex items-center justify-between ${isDark ? 'border-white/10 bg-[#09090e]' : 'border-slate-200 bg-white'}`}>
                           <div>
                             <p className={`text-sm font-semibold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
@@ -1059,6 +1128,23 @@ export default function ProfileView() {
                           </span>
                         </div>
                       ))}
+
+                      {/* Show More / Show Less Button */}
+                      {loyaltyData.transactions.length > 5 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllLoyaltyHistory(!showAllLoyaltyHistory)}
+                          className={`w-full py-2.5 rounded-xl border text-xs font-bold transition-colors mt-3 ${
+                            isDark
+                              ? 'border-white/10 bg-[#09090e] text-amber-400 hover:bg-white/5'
+                              : 'border-slate-200 bg-slate-50 text-amber-700 hover:bg-slate-100'
+                          }`}
+                        >
+                          {showAllLoyaltyHistory
+                            ? '▲ Thu gọn'
+                            : `▼ Xem thêm (${loyaltyData.transactions.length - 5} giao dịch khác)`}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

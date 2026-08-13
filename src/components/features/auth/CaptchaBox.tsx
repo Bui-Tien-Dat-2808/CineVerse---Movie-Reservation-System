@@ -10,9 +10,10 @@ import { useTheme } from '../../../context/ThemeContext'
 
 interface CaptchaBoxProps {
   onCodeChange: (code: string) => void
+  refreshKey?: number | string
 }
 
-export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
+export default function CaptchaBox({ onCodeChange, refreshKey }: CaptchaBoxProps) {
   const { theme } = useTheme()
   const isLight = theme === 'light'
   const [code, setCode] = useState('')
@@ -20,7 +21,7 @@ export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
   const generateCaptcha = useCallback(() => {
     const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
     let result = ''
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 6; i++) {
       result += chars.charAt(Math.floor(Math.random() * chars.length))
     }
     setCode(result)
@@ -29,13 +30,13 @@ export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
 
   useEffect(() => {
     generateCaptcha()
-  }, [generateCaptcha])
+  }, [generateCaptcha, refreshKey])
 
   return (
     <div className="flex items-center gap-2">
       {/* Visual distorted Captcha box — Display only */}
       <div
-        className={`relative border rounded px-3 py-2 select-none overflow-hidden flex items-center justify-center min-w-[100px] h-[38px] ${
+        className={`relative border rounded px-3 py-2 select-none overflow-hidden flex items-center justify-center min-w-[130px] h-[38px] ${
           isLight ? 'bg-amber-500/10 border-amber-500/40' : 'bg-[#1a1a2e] border-[#e8b84b]/40'
         }`}
         style={{
@@ -54,7 +55,7 @@ export default function CaptchaBox({ onCodeChange }: CaptchaBoxProps) {
 
         {/* Captcha Text */}
         <span
-          className={`font-mono-data text-lg font-black tracking-[6px] italic transform -skew-x-6 ${
+          className={`font-mono-data text-base font-black tracking-[3px] italic transform -skew-x-6 ${
             isLight
               ? 'text-amber-800 drop-shadow-[0_1px_2px_rgba(255,255,255,0.8)]'
               : 'text-[#e8b84b] drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'

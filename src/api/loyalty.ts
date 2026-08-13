@@ -18,13 +18,28 @@ export interface LoyaltyStatus {
   transactions: LoyaltyTransaction[]
 }
 
-export async function fetchMyLoyalty(): Promise<LoyaltyStatus> {
-  const { data } = await apiClient.get<LoyaltyStatus>('/api/v1/loyalty/me')
+export async function fetchMyLoyalty(startDate?: string, endDate?: string): Promise<LoyaltyStatus> {
+  const params = new URLSearchParams()
+  if (startDate) params.append('start_date', startDate)
+  if (endDate) params.append('end_date', endDate)
+
+  const url = `/api/v1/loyalty/me${params.toString() ? `?${params.toString()}` : ''}`
+  const { data } = await apiClient.get<LoyaltyStatus>(url)
   return data
 }
 
 export async function fetchLoyaltyUsers(): Promise<any[]> {
   const { data } = await apiClient.get<any[]>('/api/v1/loyalty/users')
+  return data
+}
+
+export async function fetchUserLoyaltyDetail(userId: number, startDate?: string, endDate?: string): Promise<LoyaltyStatus> {
+  const params = new URLSearchParams()
+  if (startDate) params.append('start_date', startDate)
+  if (endDate) params.append('end_date', endDate)
+
+  const url = `/api/v1/loyalty/users/${userId}${params.toString() ? `?${params.toString()}` : ''}`
+  const { data } = await apiClient.get<LoyaltyStatus>(url)
   return data
 }
 

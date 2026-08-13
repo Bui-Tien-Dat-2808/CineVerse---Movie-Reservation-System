@@ -19,6 +19,7 @@ export default function AuthModal() {
   const [showLoginPassword, setShowLoginPassword] = useState(false)
   const [loginCaptchaInput, setLoginCaptchaInput] = useState('')
   const [loginCaptchaCode, setLoginCaptchaCode] = useState('')
+  const [loginCaptchaRefreshKey, setLoginCaptchaRefreshKey] = useState(0)
 
   // Register Form States
   const [firstName, setFirstName] = useState('')
@@ -34,6 +35,7 @@ export default function AuthModal() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [regCaptchaInput, setRegCaptchaInput] = useState('')
   const [regCaptchaCode, setRegCaptchaCode] = useState('')
+  const [regCaptchaRefreshKey, setRegCaptchaRefreshKey] = useState(0)
   const [agreeTerms, setAgreeTerms] = useState(false)
 
   // Policy Modal States
@@ -66,6 +68,8 @@ export default function AuthModal() {
     // Validate CAPTCHA
     if (loginCaptchaInput.toUpperCase() !== loginCaptchaCode.toUpperCase()) {
       setError('Mã xác thực (CAPTCHA) không chính xác. Vui lòng nhập lại.')
+      setLoginCaptchaRefreshKey((prev) => prev + 1)
+      setLoginCaptchaInput('')
       return
     }
 
@@ -80,6 +84,8 @@ export default function AuthModal() {
     } catch (err: any) {
       const msg = err.response?.data?.detail ?? 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.'
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+      setLoginCaptchaRefreshKey((prev) => prev + 1)
+      setLoginCaptchaInput('')
     } finally {
       setLoading(false)
     }
@@ -101,6 +107,8 @@ export default function AuthModal() {
 
     if (regCaptchaInput.toUpperCase() !== regCaptchaCode.toUpperCase()) {
       setError('Mã xác thực (CAPTCHA) không chính xác. Vui lòng nhập lại.')
+      setRegCaptchaRefreshKey((prev) => prev + 1)
+      setRegCaptchaInput('')
       return
     }
 
@@ -129,6 +137,8 @@ export default function AuthModal() {
     } catch (err: any) {
       const msg = err.response?.data?.detail ?? 'Đăng ký thất bại. Vui lòng thử lại.'
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+      setRegCaptchaRefreshKey((prev) => prev + 1)
+      setRegCaptchaInput('')
     } finally {
       setLoading(false)
     }
@@ -290,11 +300,11 @@ export default function AuthModal() {
                   Mã xác thực (CAPTCHA)
                 </label>
                 <div className="flex gap-3 items-center">
-                  <CaptchaBox onCodeChange={handleLoginCaptchaChange} />
+                  <CaptchaBox onCodeChange={handleLoginCaptchaChange} refreshKey={loginCaptchaRefreshKey} />
                   <input
                     type="text"
                     required
-                    maxLength={4}
+                    maxLength={6}
                     value={loginCaptchaInput}
                     onChange={(e) => setLoginCaptchaInput(e.target.value.toUpperCase())}
                     placeholder="NHẬP MÃ"
@@ -506,11 +516,11 @@ export default function AuthModal() {
                   Mã xác thực (CAPTCHA)
                 </label>
                 <div className="flex gap-3 items-center">
-                  <CaptchaBox onCodeChange={handleRegCaptchaChange} />
+                  <CaptchaBox onCodeChange={handleRegCaptchaChange} refreshKey={regCaptchaRefreshKey} />
                   <input
                     type="text"
                     required
-                    maxLength={4}
+                    maxLength={6}
                     value={regCaptchaInput}
                     onChange={(e) => setRegCaptchaInput(e.target.value.toUpperCase())}
                     placeholder="NHẬP MÃ"

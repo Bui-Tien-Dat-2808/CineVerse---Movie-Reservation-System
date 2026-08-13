@@ -55,6 +55,7 @@ export interface AuthUser {
   region?: string
   role: 'admin' | 'user' | string
   is_active: boolean
+  must_change_password?: boolean
   loyalty_points?: number
   loyalty_tier?: string
 }
