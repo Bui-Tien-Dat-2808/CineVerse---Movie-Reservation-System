@@ -50,6 +50,25 @@ interface ProposedShowtimeItem {
   vip_price: number
 }
 
+interface RefundItem {
+  id: number
+  reservation_id: number
+  payment_transaction_id: number
+  amount: number
+  vnp_request_id: string
+  status: 'pending' | 'processing' | 'success' | 'failed' | 'manual_required'
+  vnpay_response_code?: string
+  vnpay_response_message?: string
+  admin_note?: string
+  resolved_by_admin_id?: number
+  resolved_at?: string
+  created_at: string
+  ticket_code?: string
+  user_email?: string
+  user_full_name?: string
+  movie_title?: string
+}
+
 interface ShowtimeItem {
   id: number
   movie_id: number
@@ -1563,16 +1582,16 @@ export default function AdminView() {
     | null
 
   const [activeTabState, setActiveTabState] = useState<
-    'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'concessions' | 'loyalty' | 'analytics' | 'users' | 'scanner'
+    'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'concessions' | 'loyalty' | 'analytics' | 'users' | 'scanner' | 'refunds'
   >(() => {
-    if (tabParam) return tabParam
+    if (tabParam) return tabParam as any
     const stored = localStorage.getItem('admin_active_tab')
     return (stored as any) || 'movies'
   })
 
   const activeTab = tabParam || activeTabState
 
-  const setActiveTab = (tab: 'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'concessions' | 'loyalty' | 'analytics' | 'users' | 'scanner') => {
+  const setActiveTab = (tab: 'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'concessions' | 'loyalty' | 'analytics' | 'users' | 'scanner' | 'refunds') => {
     setActiveTabState(tab)
     localStorage.setItem('admin_active_tab', tab)
     setSearchParams({ tab })
@@ -2317,8 +2336,175 @@ export default function AdminView() {
     )
   }
 
+  // ─────────────────────────────────────────
+  // Refunds Management State & Actions
+  // ─────────────────────────────────────────
+  const [refunds, setRefunds] = useState<RefundItem[]>([])
+  const [refundLoading, setRefundLoading] = useState(false)
+  const [refundStatusFilter, setRefundStatusFilter] = useState<string>('all')
+  const [refundPage, setRefundPage] = useState(1)
+  const [refundTotal, setRefundTotal] = useState(0)
+
+  // Manual Resolve Refund Modal State
+  const [resolveModalOpen, setResolveModalOpen] = useState(false)
+  const [selectedRefund, setSelectedRefund] = useState<RefundItem | null>(null)
+  const [resolveAdminNote, setResolveAdminNote] = useState('Đã chuyển khoản ngân hàng ngoài hệ thống')
+  const [resolvingLoading, setResolvingLoading] = useState(false)
+
+  // Compulsory Password Change State for Admin
+  const [oldPwd, setOldPwd] = useState('')
+  const [newPwd, setNewPwd] = useState('')
+  const [confirmPwd, setConfirmPwd] = useState('')
+  const [changePwdLoading, setChangePwdLoading] = useState(false)
+  const [changePwdErr, setChangePwdErr] = useState('')
+
+  async function fetchRefunds() {
+    setRefundLoading(true)
+    try {
+      const res = await apiClient.get<{ items: RefundItem[]; total: number }>(
+        `/api/v1/admin/refunds?status=${refundStatusFilter}&page=${refundPage}&page_size=15`
+      )
+      setRefunds(res.data.items || [])
+      setRefundTotal(res.data.total || 0)
+    } catch (err: any) {
+      console.error('Failed to load refunds:', err)
+      notify('error', 'Không thể tải danh sách yêu cầu hoàn tiền từ máy chủ.')
+    } finally {
+      setRefundLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'refunds') {
+      fetchRefunds()
+    }
+  }, [activeTab, refundStatusFilter, refundPage])
+
+  async function handleResolveRefundManually() {
+    if (!selectedRefund) return
+    setResolvingLoading(true)
+    try {
+      await apiClient.post(`/api/v1/admin/refunds/${selectedRefund.id}/resolve`, {
+        admin_note: resolveAdminNote,
+      })
+      notify('success', `Đã đánh dấu hoàn tiền thủ công cho đơn vé ${selectedRefund.ticket_code || `#${selectedRefund.reservation_id}`}`)
+      setResolveModalOpen(false)
+      setSelectedRefund(null)
+      await fetchRefunds()
+    } catch (err: any) {
+      notify('error', err.response?.data?.detail || 'Không thể cập nhật trạng thái hoàn tiền.')
+    } finally {
+      setResolvingLoading(false)
+    }
+  }
+
+  async function handleRetryRefund(refund: RefundItem) {
+    try {
+      const res = await apiClient.post<RefundItem>(`/api/v1/admin/refunds/${refund.id}/retry`)
+      if (res.data.status === 'success') {
+        notify('success', `Thử lại hoàn tiền tự động qua VNPay thành công!`)
+      } else {
+        notify('error', res.data.vnpay_response_message || 'VNPay từ chối hoàn tiền tự động.')
+      }
+      await fetchRefunds()
+    } catch (err: any) {
+      notify('error', err.response?.data?.detail || 'Lỗi gọi lại API VNPay.')
+    }
+  }
+
+  async function handleChangePwdSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (newPwd !== confirmPwd) {
+      setChangePwdErr('Mật khẩu mới và xác nhận mật khẩu không khớp.')
+      return
+    }
+    if (newPwd.length < 8) {
+      setChangePwdErr('Mật khẩu mới phải có tối thiểu 8 ký tự.')
+      return
+    }
+    setChangePwdLoading(true)
+    setChangePwdErr('')
+    try {
+      await apiClient.post('/api/v1/auth/change-password', {
+        old_password: oldPwd,
+        new_password: newPwd,
+      })
+      notify('success', 'Đổi mật khẩu thành công!')
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
+    } catch (err: any) {
+      setChangePwdErr(err.response?.data?.detail || 'Không thể đổi mật khẩu. Vui lòng kiểm tra lại mật khẩu cũ.')
+    } finally {
+      setChangePwdLoading(false)
+    }
+  }
+
   return (
     <div className="max-w-[1280px] mx-auto px-6 py-6 pb-20">
+      {/* Compulsory Password Change Modal Overlay */}
+      {user?.must_change_password && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[9999] p-4">
+          <div className="max-w-md w-full bg-[#111118] border border-amber-500/40 rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="text-center">
+              <span className="text-4xl block mb-2">🔐</span>
+              <h3 className="text-lg font-bold text-[#f0ede8]">Yêu Cầu Đổi Mật Khẩu Khẩn Cấp</h3>
+              <p className="text-xs text-[#a09e9a] mt-1">
+                Tài khoản Admin của bạn đang ở trạng thái bắt buộc đổi mật khẩu. Vui lòng đổi mật khẩu mới để bảo mật hệ thống.
+              </p>
+            </div>
+
+            {changePwdErr && (
+              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 text-xs font-semibold">
+                ⚠️ {changePwdErr}
+              </div>
+            )}
+
+            <form onSubmit={handleChangePwdSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-[#a09e9a] mb-1 font-medium">Mật khẩu hiện tại:</label>
+                <input
+                  type="password"
+                  required
+                  value={oldPwd}
+                  onChange={(e) => setOldPwd(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#161622] border border-white/10 text-white outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[#a09e9a] mb-1 font-medium">Mật khẩu mới (tối thiểu 8 ký tự):</label>
+                <input
+                  type="password"
+                  required
+                  value={newPwd}
+                  onChange={(e) => setNewPwd(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#161622] border border-white/10 text-white outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[#a09e9a] mb-1 font-medium">Xác nhận mật khẩu mới:</label>
+                <input
+                  type="password"
+                  required
+                  value={confirmPwd}
+                  onChange={(e) => setConfirmPwd(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#161622] border border-white/10 text-[#f0ede8] outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={changePwdLoading}
+                className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold transition-all disabled:opacity-50 cursor-pointer text-sm shadow-lg mt-2"
+              >
+                {changePwdLoading ? 'Đang cập nhật...' : '🔑 Đổi Mật Khẩu & Tiếp Tục'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Action Status Banner */}
       {actionMsg && (
@@ -3986,6 +4172,262 @@ export default function AdminView() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 9: REFUNDS MANAGEMENT */}
+      {activeTab === 'refunds' && (
+        <div className="space-y-6">
+          {/* Header Banner */}
+          <div className={`p-6 rounded-2xl border shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-colors ${
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+          }`}>
+            <div>
+              <h3 className={`font-display font-bold text-xl flex items-center gap-2 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                <span>💸</span>
+                <span>Quản Lý Hoàn Tiền Vé Đã Hủy (VNPay Refund)</span>
+              </h3>
+              <p className={`text-xs mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                Theo dõi trạng thái hoàn tiền tự động qua VNPay và chuyển khoản thủ công cho khách khi VNPay Sandbox bị hạn chế.
+              </p>
+            </div>
+          </div>
+
+          {/* Status Filters Bar */}
+          <div className={`flex flex-wrap items-center justify-between p-3 rounded-xl border gap-2 transition-colors ${
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+          }`}>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { key: 'all', label: 'Tất cả trạng thái' },
+                { key: 'manual_required', label: '⚠️ Cần xử lý thủ công' },
+                { key: 'success', label: '✓ Đã hoàn tiền' },
+                { key: 'processing', label: '⏳ Đang xử lý' },
+                { key: 'failed', label: '❌ Thất bại' },
+              ].map((filter) => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  onClick={() => { setRefundStatusFilter(filter.key); setRefundPage(1); }}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                    refundStatusFilter === filter.key
+                      ? 'bg-[#e8b84b]/15 text-[#e8b84b] border-[#e8b84b]/40 shadow-sm'
+                      : isDark
+                      ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
+                      : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={fetchRefunds}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 cursor-pointer ${
+                isDark ? 'bg-white/5 border-white/10 text-[#f0ede8] hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
+              }`}
+            >
+              🔄 Tải lại
+            </button>
+          </div>
+
+          {/* Refund Transactions Table */}
+          <div className={`border rounded-2xl overflow-hidden shadow-xl transition-colors ${
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+          }`}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className={`font-mono-data uppercase border-b ${
+                  isDark ? 'bg-[#161622] text-[#f0ede8] border-white/10' : 'bg-slate-100 text-slate-700 border-slate-200'
+                }`}>
+                  <tr>
+                    <th className="p-4">Mã Vé / Khách Hàng</th>
+                    <th className="p-4">Phim Xem</th>
+                    <th className="p-4">Số Tiền</th>
+                    <th className="p-4">Mã Giao Dịch VNPay</th>
+                    <th className="p-4">Trạng Thái</th>
+                    <th className="p-4">Ngày Tạo</th>
+                    <th className="p-4 text-right">Thao Tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {refundLoading ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-[#a09e9a]">
+                        <div className="text-xl animate-spin inline-block mb-2">⏳</div>
+                        <p>Đang tải dữ liệu hoàn tiền...</p>
+                      </td>
+                    </tr>
+                  ) : refunds.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-[#a09e9a]">
+                        <p className="italic">Không có yêu cầu hoàn tiền nào phù hợp với bộ lọc.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    refunds.map((r) => (
+                      <tr key={r.id} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="p-4">
+                          <div className="font-mono-data font-bold text-[#e8b84b]">
+                            {r.ticket_code || `R#${r.reservation_id}`}
+                          </div>
+                          <div className={`text-xs ${isDark ? 'text-[#f0ede8]' : 'text-slate-800'}`}>
+                            {r.user_full_name || 'Khách xem phim'}
+                          </div>
+                          <div className={`text-[10px] font-mono-data ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>
+                            {r.user_email}
+                          </div>
+                        </td>
+
+                        <td className="p-4 font-semibold">
+                          <p className={isDark ? 'text-[#f0ede8]' : 'text-slate-900'}>{r.movie_title || 'N/A'}</p>
+                          <span className={`text-[10px] font-mono-data ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                            Hủy vé
+                          </span>
+                        </td>
+
+                        <td className="p-4 font-mono-data font-bold text-[#e8b84b] text-sm">
+                          {fmt(r.amount)}
+                        </td>
+
+                        <td className="p-4 font-mono-data">
+                          <div className={`text-xs ${isDark ? 'text-[#f0ede8]' : 'text-slate-700'}`}>
+                            {r.vnp_request_id}
+                          </div>
+                          {r.vnpay_response_message && (
+                            <p className="text-[10px] text-rose-400 truncate max-w-[180px]" title={r.vnpay_response_message}>
+                              {r.vnpay_response_message}
+                            </p>
+                          )}
+                        </td>
+
+                        <td className="p-4">
+                          {r.status === 'manual_required' && (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 inline-flex items-center gap-1">
+                              <span>⚠️</span> Cần xử lý thủ công
+                            </span>
+                          )}
+                          {r.status === 'success' && (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 inline-flex items-center gap-1">
+                              <span>✓</span> Đã hoàn tiền
+                            </span>
+                          )}
+                          {r.status === 'processing' && (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30 inline-flex items-center gap-1">
+                              <span>⏳</span> Đang xử lý
+                            </span>
+                          )}
+                          {r.status === 'failed' && (
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 inline-flex items-center gap-1">
+                              <span>❌</span> Thất bại
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="p-4 font-mono-data text-[#a09e9a]">
+                          {new Date(r.created_at).toLocaleString('vi-VN')}
+                        </td>
+
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {r.status === 'manual_required' && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedRefund(r)
+                                    setResolveModalOpen(true)
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs cursor-pointer shadow-sm"
+                                >
+                                  Đánh dấu đã chuyển khoản
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRetryRefund(r)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 font-bold text-xs cursor-pointer"
+                                >
+                                  🔄 Thử lại qua VNPay
+                                </button>
+                              </>
+                            )}
+                            {r.status === 'success' && (
+                              <span className="text-[10px] text-emerald-400 italic">
+                                Ghi chú: {r.admin_note || 'Đã xử lý'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Resolve Refund Modal */}
+      {resolveModalOpen && selectedRefund && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className={`max-w-md w-full rounded-2xl border p-6 space-y-4 shadow-2xl ${
+            isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className="flex items-center justify-between border-b pb-3 border-white/10">
+              <h3 className="font-display font-bold text-base flex items-center gap-2">
+                <span>💸</span>
+                <span>Xác Nhận Hoàn Tiền Thủ Công</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setResolveModalOpen(false)}
+                className="text-[#a09e9a] hover:text-white text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <p><strong>Mã Vé:</strong> <span className="text-[#e8b84b] font-mono-data font-bold">{selectedRefund.ticket_code || `R#${selectedRefund.reservation_id}`}</span></p>
+              <p><strong>Khách hàng:</strong> {selectedRefund.user_full_name} ({selectedRefund.user_email})</p>
+              <p><strong>Số tiền cần hoàn:</strong> <span className="text-emerald-400 font-mono-data font-bold text-sm">{fmt(selectedRefund.amount)}</span></p>
+              <p><strong>Mã Yêu Cầu VNPay:</strong> <span className="font-mono-data">{selectedRefund.vnp_request_id}</span></p>
+            </div>
+
+            <div className="space-y-1.5 pt-2">
+              <label className="text-xs font-bold text-[#a09e9a] block">Ghi chú xử lý của Admin (VD: Mã giao dịch chuyển khoản ngân hàng):</label>
+              <textarea
+                rows={3}
+                value={resolveAdminNote}
+                onChange={(e) => setResolveAdminNote(e.target.value)}
+                className={`w-full p-2.5 rounded-xl border text-xs outline-none focus:border-[#e8b84b] ${
+                  isDark ? 'bg-[#161622] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
+                }`}
+                placeholder="Nhập ghi chú chuyển khoản..."
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setResolveModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-[#f0ede8]"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={resolvingLoading}
+                onClick={handleResolveRefundManually}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-slate-950 disabled:opacity-50"
+              >
+                {resolvingLoading ? 'Đang cập nhật...' : '✓ Đã Chuyển Khoản Trực Tiếp'}
+              </button>
             </div>
           </div>
         </div>

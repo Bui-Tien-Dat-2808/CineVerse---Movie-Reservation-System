@@ -663,7 +663,7 @@ export default function ProfileView() {
                       />
 
                       <div>
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono-data ${
                               isCancelled
@@ -683,6 +683,25 @@ export default function ProfileView() {
                               ? 'Chờ thanh toán'
                               : 'Đã xác nhận'}
                           </span>
+
+                          {isCancelled && item.refund_status && (
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono-data border ${
+                                item.refund_status === 'success'
+                                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                  : item.refund_status === 'failed'
+                                  ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                                  : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                              }`}
+                            >
+                              {item.refund_status === 'success'
+                                ? '✓ Đã hoàn tiền'
+                                : item.refund_status === 'failed'
+                                ? '⚠️ Hoàn tiền thất bại (Cần hỗ trợ)'
+                                : '⏳ Đang xử lý hoàn tiền'}
+                            </span>
+                          )}
+
                           <span className={`text-[11px] font-mono-data font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
                             Mã vé: {item.ticket_code || `#${item.id}`}
                           </span>
