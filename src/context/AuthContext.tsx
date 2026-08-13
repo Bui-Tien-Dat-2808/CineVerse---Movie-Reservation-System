@@ -11,7 +11,7 @@ interface AuthContextValue {
   closeAuthModal: () => void
   authMode: 'login' | 'register'
   setAuthMode: (mode: 'login' | 'register') => void
-  login: (e: string, p: string) => Promise<void>
+  login: (e: string, p: string, turnstileToken?: string) => Promise<void>
   register: (req: RegisterRequest) => Promise<void>
   logout: () => void
 }
@@ -58,8 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  async function login(account: string, pass: string) {
-    await loginAPI(account, pass)
+  async function login(account: string, pass: string, turnstileToken?: string) {
+    await loginAPI(account, pass, turnstileToken)
     const u = await fetchMeAPI()
     setUser(u)
     localStorage.setItem('cached_user', JSON.stringify(u))

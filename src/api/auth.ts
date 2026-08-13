@@ -15,6 +15,7 @@ export interface RegisterRequest {
   date_of_birth?: string
   gender?: string
   region?: string
+  turnstile_token?: string
 }
 
 export interface UpdateProfileRequest {
@@ -27,10 +28,11 @@ export interface UpdateProfileRequest {
 }
 
 /** POST /api/v1/auth/login — accepts email or phone_number */
-export async function loginAPI(account: string, password: string): Promise<LoginResponse> {
+export async function loginAPI(account: string, password: string, turnstile_token?: string): Promise<LoginResponse> {
   const { data } = await apiClient.post<LoginResponse>('/api/v1/auth/login', {
     account,
     password,
+    turnstile_token,
   })
   localStorage.setItem('access_token', data.access_token)
   localStorage.setItem('refresh_token', data.refresh_token)

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../context/AuthContext'
 import { useBooking } from '../../../context/BookingContext'
 import { useTheme } from '../../../context/ThemeContext'
-import CaptchaBox from './CaptchaBox'
+import TurnstileBox from './TurnstileBox'
 import PolicyModal from './PolicyModal'
 
 export default function AuthModal() {
@@ -17,8 +17,7 @@ export default function AuthModal() {
   const [account, setAccount] = useState('') // Email or Phone number
   const [loginPassword, setLoginPassword] = useState('')
   const [showLoginPassword, setShowLoginPassword] = useState(false)
-  const [loginCaptchaInput, setLoginCaptchaInput] = useState('')
-  const [loginCaptchaCode, setLoginCaptchaCode] = useState('')
+  const [loginTurnstileToken, setLoginTurnstileToken] = useState('')
   const [loginCaptchaRefreshKey, setLoginCaptchaRefreshKey] = useState(0)
 
   // Register Form States
@@ -33,8 +32,7 @@ export default function AuthModal() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showRegPassword, setShowRegPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [regCaptchaInput, setRegCaptchaInput] = useState('')
-  const [regCaptchaCode, setRegCaptchaCode] = useState('')
+  const [regTurnstileToken, setRegTurnstileToken] = useState('')
   const [regCaptchaRefreshKey, setRegCaptchaRefreshKey] = useState(0)
   const [agreeTerms, setAgreeTerms] = useState(false)
 
@@ -65,17 +63,15 @@ export default function AuthModal() {
     e.preventDefault()
     setError('')
 
-    // Validate CAPTCHA
-    if (loginCaptchaInput.toUpperCase() !== loginCaptchaCode.toUpperCase()) {
-      setError('Mã xác thực (CAPTCHA) không chính xác. Vui lòng nhập lại.')
-      setLoginCaptchaRefreshKey((prev) => prev + 1)
-      setLoginCaptchaInput('')
+    // Validate Turnstile CAPTCHA Token
+    if (!loginTurnstileToken) {
+      setError('Vui lòng hoàn thành xác minh Cloudflare Turnstile ("Tôi không phải người máy").')
       return
     }
 
     setLoading(true)
     try {
-      await login(account, loginPassword)
+      await login(account, loginPassword, loginTurnstileToken)
       // Chuyển ngay về trang chủ sau khi đăng nhập thành công
       reset()
       navigate('/')
@@ -85,7 +81,7 @@ export default function AuthModal() {
       const msg = err.response?.data?.detail ?? 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.'
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
       setLoginCaptchaRefreshKey((prev) => prev + 1)
-      setLoginCaptchaInput('')
+      setLoginTurnstileToken('')
     } finally {
       setLoading(false)
     }
@@ -105,10 +101,8 @@ export default function AuthModal() {
       return
     }
 
-    if (regCaptchaInput.toUpperCase() !== regCaptchaCode.toUpperCase()) {
-      setError('Mã xác thực (CAPTCHA) không chính xác. Vui lòng nhập lại.')
-      setRegCaptchaRefreshKey((prev) => prev + 1)
-      setRegCaptchaInput('')
+    if (!regTurnstileToken) {
+      setError('Vui lòng hoàn thành xác minh Cloudflare Turnstile ("Tôi không phải người máy").')
       return
     }
 
@@ -128,6 +122,7 @@ export default function AuthModal() {
         date_of_birth: dob || undefined,
         gender: gender,
         region: region,
+        turnstile_token: regTurnstileToken,
       })
       // Chuyển ngay về trang chủ sau khi đăng ký thành công
       reset()
@@ -138,7 +133,7 @@ export default function AuthModal() {
       const msg = err.response?.data?.detail ?? 'Đăng ký thất bại. Vui lòng thử lại.'
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
       setRegCaptchaRefreshKey((prev) => prev + 1)
-      setRegCaptchaInput('')
+      setRegTurnstileToken('')
     } finally {
       setLoading(false)
     }
@@ -155,7 +150,9 @@ export default function AuthModal() {
     <>
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
         <div
-          className={`border rounded-2xl p-6 sm:p-8 max-w-lg w-full relative shadow-2xl my-8 transition-colors ${
+          className={`border rounded-2xl p-5 sm:p-7 w-full relative shadow-2xl my-4 transition-all duration-200 ${
+            authMode === 'register' ? 'max-w-xl' : 'max-w-md'
+          } ${
             isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-[#111118] border-white/10 text-[#f0ede8]'
           }`}
         >
@@ -175,7 +172,7 @@ export default function AuthModal() {
           </button>
 
           {/* CineVerse Logo Header */}
-          <div className="flex justify-center items-center gap-2 mb-6">
+          <div className="flex justify-center items-center gap-2 mb-4">
             <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
               <rect width="28" height="28" rx="6" fill="#e8b84b" />
               <path
@@ -195,7 +192,7 @@ export default function AuthModal() {
 
           {/* Toggle Tab Bar */}
           <div
-            className={`grid grid-cols-2 p-1 rounded-xl border mb-6 ${
+            className={`grid grid-cols-2 p-1 rounded-xl border mb-4 ${
               isLight ? 'bg-slate-100 border-slate-200' : 'bg-[#181824] border-white/10'
             }`}
           >
@@ -294,23 +291,16 @@ export default function AuthModal() {
                 </div>
               </div>
 
-              {/* Visual CAPTCHA input */}
+              {/* Cloudflare Turnstile "I'm not a robot" CAPTCHA */}
               <div>
                 <label className={`block text-xs mb-1 ${labelStyle}`}>
-                  Mã xác thực (CAPTCHA)
+                  Xác minh người dùng
                 </label>
-                <div className="flex gap-3 items-center">
-                  <CaptchaBox onCodeChange={handleLoginCaptchaChange} refreshKey={loginCaptchaRefreshKey} />
-                  <input
-                    type="text"
-                    required
-                    maxLength={6}
-                    value={loginCaptchaInput}
-                    onChange={(e) => setLoginCaptchaInput(e.target.value.toUpperCase())}
-                    placeholder="NHẬP MÃ"
-                    className={`w-full px-3 py-2 border rounded-xl text-sm outline-none font-mono-data tracking-widest text-center uppercase ${inputStyle}`}
-                  />
-                </div>
+                <TurnstileBox
+                  onVerify={(token) => setLoginTurnstileToken(token)}
+                  onExpire={() => setLoginTurnstileToken('')}
+                  resetKey={loginCaptchaRefreshKey}
+                />
               </div>
 
               {/* Submit button */}
@@ -358,10 +348,10 @@ export default function AuthModal() {
               </div>
             </form>
           ) : (
-            /* REGISTER FORM */
-            <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
-              {/* First Name & Last Name (Họ và Tên) */}
-              <div className="grid grid-cols-2 gap-3">
+            /* REGISTER FORM — Optimized 2-Column Responsive Grid Layout */
+            <form onSubmit={handleRegisterSubmit} className="space-y-3">
+              {/* Row 1: Họ & Tên */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={`block text-xs mb-1 ${labelStyle}`}>Họ</label>
                   <input
@@ -369,8 +359,8 @@ export default function AuthModal() {
                     required
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="Nguyễn"
-                    className={`w-full px-3 py-2 border rounded-xl text-sm outline-none transition-colors ${inputStyle}`}
+                    placeholder="Ex: Nguyễn"
+                    className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition-colors ${inputStyle}`}
                   />
                 </div>
                 <div>
@@ -380,45 +370,45 @@ export default function AuthModal() {
                     required
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Văn An"
-                    className={`w-full px-3 py-2 border rounded-xl text-sm outline-none transition-colors ${inputStyle}`}
+                    placeholder="Ex: Văn A"
+                    className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition-colors ${inputStyle}`}
                   />
                 </div>
               </div>
 
-              {/* Email */}
-              <div>
-                <label className={`block text-xs mb-1 ${labelStyle}`}>Email</label>
-                <div className="relative">
-                  <span className={`absolute left-3 top-2 text-sm ${iconStyle}`}>✉</span>
-                  <input
-                    type="email"
-                    required
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="example@domain.com"
-                    className={`w-full pl-9 pr-3 py-2 border rounded-xl text-sm outline-none font-mono-data transition-colors ${inputStyle}`}
-                  />
+              {/* Row 2: Email & Số điện thoại */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className={`block text-xs mb-1 ${labelStyle}`}>Email</label>
+                  <div className="relative">
+                    <span className={`absolute left-3 top-2 text-xs ${iconStyle}`}>✉</span>
+                    <input
+                      type="email"
+                      required
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      placeholder="example@domain.com"
+                      className={`w-full pl-8 pr-3 py-2 border rounded-xl text-xs outline-none font-mono-data transition-colors ${inputStyle}`}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className={`block text-xs mb-1 ${labelStyle}`}>Số điện thoại</label>
+                  <div className="relative">
+                    <span className={`absolute left-3 top-2 text-xs ${iconStyle}`}>📱</span>
+                    <input
+                      type="tel"
+                      required
+                      value={regPhone}
+                      onChange={(e) => setRegPhone(e.target.value)}
+                      placeholder="0987654321"
+                      className={`w-full pl-8 pr-3 py-2 border rounded-xl text-xs outline-none font-mono-data transition-colors ${inputStyle}`}
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Phone number */}
-              <div>
-                <label className={`block text-xs mb-1 ${labelStyle}`}>Số điện thoại</label>
-                <div className="relative">
-                  <span className={`absolute left-3 top-2 text-sm ${iconStyle}`}>📱</span>
-                  <input
-                    type="tel"
-                    required
-                    value={regPhone}
-                    onChange={(e) => setRegPhone(e.target.value)}
-                    placeholder="0987654321"
-                    className={`w-full pl-9 pr-3 py-2 border rounded-xl text-sm outline-none font-mono-data transition-colors ${inputStyle}`}
-                  />
-                </div>
-              </div>
-
-              {/* DOB, Gender & Region */}
+              {/* Row 3: Ngày sinh, Giới tính & Khu vực */}
               <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className={`block text-[11px] mb-1 ${labelStyle}`}>Ngày sinh</label>
@@ -463,74 +453,67 @@ export default function AuthModal() {
                 </div>
               </div>
 
-              {/* Password */}
-              <div>
-                <label className={`block text-xs mb-1 ${labelStyle}`}>Mật khẩu</label>
-                <div className="relative">
-                  <span className={`absolute left-3 top-2 text-sm ${iconStyle}`}>🔒</span>
-                  <input
-                    type={showRegPassword ? 'text' : 'password'}
-                    required
-                    minLength={8}
-                    value={regPassword}
-                    onChange={(e) => setRegPassword(e.target.value)}
-                    placeholder="Ít nhất 8 ký tự (chữ hoa & số)"
-                    className={`w-full pl-9 pr-10 py-2 border rounded-xl text-sm outline-none transition-colors ${inputStyle}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowRegPassword(!showRegPassword)}
-                    className={`absolute right-3 top-2 bg-transparent border-0 cursor-pointer text-xs ${iconStyle}`}
-                  >
-                    {showRegPassword ? '👁️' : '🙈'}
-                  </button>
+              {/* Row 4: Mật khẩu & Xác nhận mật khẩu */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className={`block text-xs mb-1 ${labelStyle}`}>Mật khẩu</label>
+                  <div className="relative">
+                    <span className={`absolute left-3 top-2 text-xs ${iconStyle}`}>🔒</span>
+                    <input
+                      type={showRegPassword ? 'text' : 'password'}
+                      required
+                      minLength={8}
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="Ít nhất 8 ký tự"
+                      className={`w-full pl-8 pr-9 py-2 border rounded-xl text-xs outline-none transition-colors ${inputStyle}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPassword(!showRegPassword)}
+                      className={`absolute right-2.5 top-2 bg-transparent border-0 cursor-pointer text-xs ${iconStyle}`}
+                    >
+                      {showRegPassword ? '👁️' : '🙈'}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className={`block text-xs mb-1 ${labelStyle}`}>Xác nhận mật khẩu</label>
+                  <div className="relative">
+                    <span className={`absolute left-3 top-2 text-xs ${iconStyle}`}>🔒</span>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Nhập lại mật khẩu"
+                      className={`w-full pl-8 pr-9 py-2 border rounded-xl text-xs outline-none transition-colors ${inputStyle}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className={`absolute right-2.5 top-2 bg-transparent border-0 cursor-pointer text-xs ${iconStyle}`}
+                    >
+                      {showConfirmPassword ? '👁️' : '🙈'}
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* Confirm Password */}
-              <div>
-                <label className={`block text-xs mb-1 ${labelStyle}`}>Xác nhận mật khẩu</label>
-                <div className="relative">
-                  <span className={`absolute left-3 top-2 text-sm ${iconStyle}`}>🔒</span>
-                  <input
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    required
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Nhập lại mật khẩu"
-                    className={`w-full pl-9 pr-10 py-2 border rounded-xl text-sm outline-none transition-colors ${inputStyle}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className={`absolute right-3 top-2 bg-transparent border-0 cursor-pointer text-xs ${iconStyle}`}
-                  >
-                    {showConfirmPassword ? '👁️' : '🙈'}
-                  </button>
-                </div>
-              </div>
-
-              {/* CAPTCHA input */}
-              <div>
+              {/* Row 5: Cloudflare Turnstile "I'm not a robot" CAPTCHA */}
+              <div className="py-0.5">
                 <label className={`block text-xs mb-1 ${labelStyle}`}>
-                  Mã xác thực (CAPTCHA)
+                  Xác minh người dùng
                 </label>
-                <div className="flex gap-3 items-center">
-                  <CaptchaBox onCodeChange={handleRegCaptchaChange} refreshKey={regCaptchaRefreshKey} />
-                  <input
-                    type="text"
-                    required
-                    maxLength={6}
-                    value={regCaptchaInput}
-                    onChange={(e) => setRegCaptchaInput(e.target.value.toUpperCase())}
-                    placeholder="NHẬP MÃ"
-                    className={`w-full px-3 py-2 border rounded-xl text-sm outline-none font-mono-data tracking-widest text-center uppercase ${inputStyle}`}
-                  />
-                </div>
+                <TurnstileBox
+                  onVerify={(token) => setRegTurnstileToken(token)}
+                  onExpire={() => setRegTurnstileToken('')}
+                  resetKey={regCaptchaRefreshKey}
+                />
               </div>
 
-              {/* Terms Checkbox with clickable Policy links */}
-              <div className="flex items-start gap-2 pt-1">
+              {/* Row 6: Terms Checkbox */}
+              <div className="flex items-start gap-2 pt-0.5">
                 <input
                   type="checkbox"
                   id="agreeTerms"
@@ -569,7 +552,7 @@ export default function AuthModal() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-[#e8b84b] hover:bg-[#d4a338] text-[#09090e] border-0 rounded-xl py-3 font-bold text-sm cursor-pointer hover:shadow-[0_4px_16px_rgba(232,184,75,0.35)] transition-all disabled:opacity-50 mt-2"
+                className="w-full bg-[#e8b84b] hover:bg-[#d4a338] text-[#09090e] border-0 rounded-xl py-2.5 font-bold text-xs cursor-pointer hover:shadow-[0_4px_16px_rgba(232,184,75,0.35)] transition-all disabled:opacity-50 mt-1"
               >
                 {loading ? 'Đang xử lý...' : 'Đăng ký ngay →'}
               </button>
