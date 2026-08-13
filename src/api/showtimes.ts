@@ -157,10 +157,8 @@ export interface ReservationItem {
   id: number
   showtime_id: number
   user_id: number
-  ticket_code?: string
   total_price: string | number
   status: 'confirmed' | 'cancelled' | string
-  refund_status?: string
   notes?: string
   reservation_seats: ReservationSeatItem[]
   showtime?: {

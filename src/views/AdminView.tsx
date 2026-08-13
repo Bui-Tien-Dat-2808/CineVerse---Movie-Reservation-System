@@ -4,8 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { apiClient } from '../api/client'
 import { fmt } from '../lib/utils'
-import { adjustUserPoints, fetchLoyaltyUsers, fetchUserLoyaltyDetail, type LoyaltyStatus, type LoyaltyTransaction } from '../api/loyalty'
-import { CleanDatePicker, formatVNFullDate } from '../components/ui/CleanDatePicker'
+import { adjustUserPoints, fetchLoyaltyUsers, type LoyaltyTransaction } from '../api/loyalty'
 
 interface MovieItem {
   id: number
@@ -36,25 +35,6 @@ interface RoomItem {
   total_cols: number
   total_seats: number
   seats?: SeatItemAdmin[]
-}
-
-interface RefundItem {
-  id: number
-  reservation_id: number
-  payment_transaction_id: number
-  amount: number
-  vnp_request_id: string
-  status: 'pending' | 'processing' | 'success' | 'failed' | 'manual_required'
-  vnpay_response_code?: string
-  vnpay_response_message?: string
-  admin_note?: string
-  resolved_by_admin_id?: number
-  resolved_at?: string
-  created_at: string
-  ticket_code?: string
-  user_email?: string
-  user_full_name?: string
-  movie_title?: string
 }
 
 interface ProposedShowtimeItem {
@@ -215,6 +195,171 @@ interface ProposedShowtimeItem {
   vip_price: number
 }
 
+function formatVNFullDate(dateStr: string): string {
+  if (!dateStr) return ''
+  const [y, m, d] = dateStr.split('-').map(Number)
+  if (!y || !m || !d) return ''
+  const dt = new Date(y, m - 1, d)
+  const daysOfWeek = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy']
+  const dayName = daysOfWeek[dt.getDay()]
+  return `${dayName}, ${d < 10 ? '0' + d : d}/${m < 10 ? '0' + m : m}/${y}`
+}
+
+interface CleanDatePickerProps {
+  value: string
+  onChange: (dateStr: string) => void
+  minDate?: string
+  label?: string
+}
+
+function CleanDatePicker({ value, onChange, minDate, label }: CleanDatePickerProps) {
+  const [open, setOpen] = useState(false)
+  const [viewDate, setViewDate] = useState(() => {
+    if (value) {
+      const [y, m] = value.split('-').map(Number)
+      return new Date(y, m - 1, 1)
+    }
+    return new Date()
+  })
+
+  useEffect(() => {
+    if (value) {
+      const [y, m] = value.split('-').map(Number)
+      setViewDate(new Date(y, m - 1, 1))
+    }
+  }, [value])
+
+  const year = viewDate.getFullYear()
+  const month = viewDate.getMonth()
+
+  const monthNames = [
+    'Tháng Một', 'Tháng Hai', 'Tháng Ba', 'Tháng Tư', 'Tháng Năm', 'Tháng Sáu',
+    'Tháng Bảy', 'Tháng Tám', 'Tháng Chín', 'Tháng Mười', 'Tháng Mười Một', 'Tháng Mười Hai'
+  ]
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  let firstDayIndex = new Date(year, month, 1).getDay() - 1
+  if (firstDayIndex < 0) firstDayIndex = 6
+
+  function prevMonth() {
+    setViewDate(new Date(year, month - 1, 1))
+  }
+
+  function nextMonth() {
+    setViewDate(new Date(year, month + 1, 1))
+  }
+
+  function handleSelectDay(day: number) {
+    const mStr = (month + 1).toString().padStart(2, '0')
+    const dStr = day.toString().padStart(2, '0')
+    const selectedStr = `${year}-${mStr}-${dStr}`
+    if (minDate && selectedStr < minDate) return
+    onChange(selectedStr)
+    setOpen(false)
+  }
+
+  const selectedYMD = value ? value : ''
+
+  return (
+    <div className="relative">
+      {label && <label className="block text-[#a09e9a] mb-1 font-medium text-xs">{label}</label>}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full px-3 py-2 bg-[#111118] border border-white/10 hover:border-[#e8b84b]/50 rounded-lg text-[#f0ede8] font-mono-data text-xs flex justify-between items-center cursor-pointer transition-colors"
+      >
+        <span>{value ? formatVNFullDate(value) : 'Chọn ngày...'}</span>
+        <span className="text-[#a09e9a] text-sm">📅</span>
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full mt-2 z-50 bg-[#111118] border border-white/20 rounded-xl p-4 shadow-2xl w-[290px] space-y-3">
+            <div className="flex justify-between items-center text-xs font-bold text-[#f0ede8]">
+              <button
+                type="button"
+                onClick={prevMonth}
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 text-[#e8b84b] cursor-pointer"
+              >
+                ◀
+              </button>
+              <span>{monthNames[month]} {year}</span>
+              <button
+                type="button"
+                onClick={nextMonth}
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 text-[#e8b84b] cursor-pointer"
+              >
+                ▶
+              </button>
+            </div>
+
+            <div className="grid grid-cols-7 text-center text-[11px] font-bold text-[#6e6c68]">
+              <span>T2</span>
+              <span>T3</span>
+              <span>T4</span>
+              <span>T5</span>
+              <span>T6</span>
+              <span>T7</span>
+              <span className="text-[#e07060]">CN</span>
+            </div>
+
+            <div className="grid grid-cols-7 gap-1 text-center text-xs font-mono-data">
+              {Array.from({ length: firstDayIndex }).map((_, i) => (
+                <div key={`empty-${i}`} className="w-8 h-8" />
+              ))}
+
+              {Array.from({ length: daysInMonth }, (_, i) => {
+                const dayNum = i + 1
+                const mStr = (month + 1).toString().padStart(2, '0')
+                const dStr = dayNum.toString().padStart(2, '0')
+                const dayYMD = `${year}-${mStr}-${dStr}`
+                const isSelected = dayYMD === selectedYMD
+                const isDisabled = Boolean(minDate && dayYMD < minDate)
+
+                return (
+                  <button
+                    key={dayNum}
+                    type="button"
+                    disabled={isDisabled}
+                    onClick={() => handleSelectDay(dayNum)}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#e8b84b] text-[#09090e] font-bold scale-105 shadow-md'
+                        : isDisabled
+                          ? 'text-white/20 cursor-not-allowed'
+                          : 'text-[#c0bdb8] hover:bg-white/10 hover:text-[#f0ede8]'
+                    }`}
+                  >
+                    {dayNum}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="pt-2 border-t border-white/10 flex justify-between items-center text-[11px]">
+              <button
+                type="button"
+                onClick={() => {
+                  const todayStr = new Date().toISOString().split('T')[0]
+                  if (!minDate || todayStr >= minDate) {
+                    onChange(todayStr)
+                    setOpen(false)
+                  }
+                }}
+                className="text-[#e8b84b] hover:underline cursor-pointer"
+              >
+                Hôm nay
+              </button>
+              <span className="text-[#6e6c68] font-mono-data">{daysInMonth} ngày trong tháng</span>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─────────────────────────────────────────
 // ImageUploadField — reusable file picker with preview
 // ─────────────────────────────────────────
@@ -338,7 +483,6 @@ function LoyaltyAdminTab({ isDark }: { isDark: boolean }) {
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [msg, setMsg] = useState('')
-  const [selectedUser, setSelectedUser] = useState<any | null>(null)
 
   async function loadUsers() {
     setLoading(true)
@@ -395,7 +539,7 @@ function LoyaltyAdminTab({ isDark }: { isDark: boolean }) {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className={`font-display text-2xl font-black ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>🏆 Tiến Độ Tích Điểm Thành Viên</h2>
-          <p className={`text-sm mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Theo dõi tổng điểm, phân hạng và xem chi tiết lịch sử giao dịch tích điểm của thành viên.</p>
+          <p className={`text-sm mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Theo dõi tổng điểm, phân hạng và điểm còn thiếu để thăng hạng của khách hàng.</p>
         </div>
       </div>
 
@@ -425,12 +569,7 @@ function LoyaltyAdminTab({ isDark }: { isDark: boolean }) {
             const info = getTierProgress(pts)
 
             return (
-              <div
-                key={user.id}
-                className={`rounded-2xl border p-5 transition-all duration-200 ${
-                  isDark ? 'bg-[#111118] border-white/10 hover:border-amber-500/40' : 'bg-white border-slate-200 hover:border-amber-400 shadow-xs'
-                }`}
-              >
+              <div key={user.id} className={`rounded-2xl border p-5 ${isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'}`}>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
                   <div>
                     <div className="flex items-center gap-2">
@@ -447,23 +586,10 @@ function LoyaltyAdminTab({ isDark }: { isDark: boolean }) {
                     <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>{user.email}</p>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <div className="text-left sm:text-right">
-                      <span className={`text-lg font-black font-display ${isDark ? 'text-[#e8b84b]' : 'text-amber-700'}`}>
-                        {pts.toLocaleString('vi-VN')} điểm
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedUser(user)}
-                      className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs ${
-                        isDark
-                          ? 'border-amber-500/40 bg-amber-500/15 text-[#e8b84b] hover:bg-amber-500/25'
-                          : 'border-amber-400 bg-amber-50 text-amber-950 hover:bg-amber-100'
-                      }`}
-                    >
-                      <span>📜 Xem lịch sử giao dịch</span>
-                    </button>
+                  <div className="text-left sm:text-right">
+                    <span className={`text-lg font-black font-display ${isDark ? 'text-[#e8b84b]' : 'text-amber-700'}`}>
+                      {pts.toLocaleString('vi-VN')} điểm
+                    </span>
                   </div>
                 </div>
 
@@ -498,205 +624,6 @@ function LoyaltyAdminTab({ isDark }: { isDark: boolean }) {
           })}
         </div>
       )}
-
-      {/* Admin User Detail Modal */}
-      {selectedUser && (
-        <UserLoyaltyDetailModal
-          user={selectedUser}
-          isDark={isDark}
-          onClose={() => {
-            setSelectedUser(null)
-            loadUsers()
-          }}
-        />
-      )}
-    </div>
-  )
-}
-
-function UserLoyaltyDetailModal({
-  user,
-  isDark,
-  onClose,
-}: {
-  user: any
-  isDark: boolean
-  onClose: () => void
-}) {
-  const [detail, setDetail] = useState<LoyaltyStatus | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [showAllHistory, setShowAllHistory] = useState(false)
-  const [errorMsg, setErrorMsg] = useState('')
-
-  async function loadDetail(sDate?: string, eDate?: string) {
-    setLoading(true)
-    try {
-      const data = await fetchUserLoyaltyDetail(user.id, sDate !== undefined ? sDate : startDate, eDate !== undefined ? eDate : endDate)
-      setDetail(data)
-    } catch {
-      setErrorMsg('Không thể tải chi tiết điểm của người dùng')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadDetail()
-  }, [user.id])
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div
-        className={`w-full max-w-3xl rounded-2xl border p-6 sm:p-8 shadow-2xl space-y-6 my-8 max-h-[92vh] overflow-y-auto ${
-          isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
-        }`}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b pb-4 border-slate-200/10">
-          <div>
-            <h3 className="font-display text-xl font-bold flex items-center gap-2">
-              <span>🏆 Chi Tiết Tích Điểm - {user.full_name || user.email}</span>
-            </h3>
-            <p className={`text-xs mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-              ID: #{user.id} • Email: {user.email} {user.phone_number ? `• SĐT: ${user.phone_number}` : ''}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-500/10 hover:bg-slate-500/20 text-lg flex items-center justify-center cursor-pointer transition-colors"
-          >
-            ✕
-          </button>
-        </div>
-
-        {errorMsg && <div className="text-xs text-rose-500 font-medium">{errorMsg}</div>}
-
-        {loading ? (
-          <div className="py-12 text-center text-sm">⏳ Đang tải lịch sử tích điểm...</div>
-        ) : detail ? (
-          <div className="space-y-6">
-            {/* Status Summary Banner */}
-            <div className={`p-5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-              isDark ? 'bg-[#09090e] border-white/10' : 'bg-amber-50/60 border-amber-200 shadow-xs'
-            }`}>
-              <div>
-                <span className={`text-xs uppercase tracking-wider font-semibold ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Hạng Hiện Tại</span>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-2xl">{detail.tier_icon}</span>
-                  <span className="font-display text-2xl font-bold" style={{ color: detail.tier_color }}>
-                    Hạng {detail.tier_label}
-                  </span>
-                </div>
-              </div>
-              <div>
-                <span className={`text-xs uppercase tracking-wider font-semibold ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Tổng Điểm</span>
-                <p className={`font-display text-3xl font-black ${isDark ? 'text-[#e8b84b]' : 'text-amber-800'}`}>
-                  {detail.points.toLocaleString('vi-VN')} điểm
-                </p>
-              </div>
-            </div>
-
-            {/* Date Range Filter */}
-            <div>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                <h4 className="font-bold text-base">📜 Lịch Sử Giao Dịch ({detail.transactions.length})</h4>
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="w-48">
-                    <CleanDatePicker
-                      label="Từ ngày"
-                      value={startDate}
-                      onChange={(d) => {
-                        setStartDate(d)
-                        loadDetail(d, endDate)
-                      }}
-                      isDark={isDark}
-                      placeholder="Từ ngày..."
-                      align="left"
-                    />
-                  </div>
-                  <div className="w-48">
-                    <CleanDatePicker
-                      label="Đến ngày"
-                      value={endDate}
-                      onChange={(d) => {
-                        setEndDate(d)
-                        loadDetail(startDate, d)
-                      }}
-                      isDark={isDark}
-                      placeholder="Đến ngày..."
-                      align="right"
-                    />
-                  </div>
-                  {(startDate || endDate) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStartDate('')
-                        setEndDate('')
-                        loadDetail('', '')
-                      }}
-                      className="px-2.5 py-2 rounded-lg text-xs font-semibold bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 transition-colors self-end mb-0.5"
-                    >
-                      ✕ Xóa lọc
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Transactions List */}
-              {detail.transactions.length === 0 ? (
-                <div className={`p-8 text-center rounded-xl border text-xs ${isDark ? 'border-white/10 text-[#a09e9a]' : 'border-slate-200 text-slate-500'}`}>
-                  Không tìm thấy giao dịch nào trong khoảng thời gian này.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {(showAllHistory ? detail.transactions : detail.transactions.slice(0, 5)).map((tx) => (
-                    <div
-                      key={tx.id}
-                      className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
-                        isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-50 border-slate-200'
-                      }`}
-                    >
-                      <div>
-                        <span className="font-semibold block">
-                          {tx.reason === 'booking' ? 'Đặt vé xem phim' : tx.reason === 'admin_adjust' ? 'Admin điều chỉnh điểm' : tx.reason || 'Giao dịch'}
-                        </span>
-                        <span className={`text-[11px] mt-0.5 block ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                          {tx.created_at ? new Date(tx.created_at).toLocaleString('vi-VN') : '—'}
-                          {tx.reservation_id ? ` • Mã đơn: #${tx.reservation_id}` : ''}
-                        </span>
-                      </div>
-                      <span className={`font-black text-sm ${tx.points >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {tx.points >= 0 ? '+' : ''}{tx.points}
-                      </span>
-                    </div>
-                  ))}
-
-                  {/* Show More / Show Less Button */}
-                  {detail.transactions.length > 5 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllHistory(!showAllHistory)}
-                      className={`w-full py-2.5 rounded-xl border text-xs font-bold transition-colors mt-2 ${
-                        isDark
-                          ? 'border-white/10 bg-[#09090e] text-amber-400 hover:bg-white/5'
-                          : 'border-slate-200 bg-slate-100 text-amber-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      {showAllHistory
-                        ? '▲ Thu gọn'
-                        : `▼ Xem thêm (${detail.transactions.length - 5} giao dịch khác)`}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        ) : null}
-      </div>
     </div>
   )
 }
@@ -1275,6 +1202,9 @@ function ConcessionAdminTab({ isDark }: { isDark: boolean }) {
           <h2 className={`font-display text-2xl font-black ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
             🍿 Quản Lý Bắp Rang & Nước
           </h2>
+          <p className={`text-sm mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+            Quản lý danh sách combo đồ ăn kèm vé — khách sẽ thấy khi thanh toán
+          </p>
         </div>
         <button
           type="button"
@@ -1574,7 +1504,7 @@ function ConcessionAdminTab({ isDark }: { isDark: boolean }) {
                       )}
                     </div>
                     <div className="flex items-center justify-between mt-auto pt-2">
-                      <span className="font-mono-data font-bold text-[#e8b84b]">{fmt(item.price)}</span>
+                      <span className="font-mono-data font-bold text-[#e8b84b]">{Number(item.price).toLocaleString('vi-VN')}đ</span>
                       <div className="flex gap-1.5">
                         <button type="button"
                           onClick={() => {
@@ -1630,11 +1560,10 @@ export default function AdminView() {
     | 'analytics'
     | 'users'
     | 'scanner'
-    | 'refunds'
     | null
 
   const [activeTabState, setActiveTabState] = useState<
-    'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'concessions' | 'loyalty' | 'analytics' | 'users' | 'scanner' | 'refunds'
+    'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'concessions' | 'loyalty' | 'analytics' | 'users' | 'scanner'
   >(() => {
     if (tabParam) return tabParam
     const stored = localStorage.getItem('admin_active_tab')
@@ -1643,7 +1572,7 @@ export default function AdminView() {
 
   const activeTab = tabParam || activeTabState
 
-  const setActiveTab = (tab: 'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'concessions' | 'loyalty' | 'analytics' | 'users' | 'scanner' | 'refunds') => {
+  const setActiveTab = (tab: 'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'concessions' | 'loyalty' | 'analytics' | 'users' | 'scanner') => {
     setActiveTabState(tab)
     localStorage.setItem('admin_active_tab', tab)
     setSearchParams({ tab })
@@ -1941,106 +1870,6 @@ export default function AdminView() {
     revenue: number
   }>>([])
 
-  // Refund Management State
-  const [refunds, setRefunds] = useState<RefundItem[]>([])
-  const [refundTotal, setRefundTotal] = useState(0)
-  const [refundPage, setRefundPage] = useState(1)
-  const [refundStatusFilter, setRefundStatusFilter] = useState<string>('all')
-  const [refundLoading, setRefundLoading] = useState(false)
-  const [resolveModalOpen, setResolveModalOpen] = useState(false)
-  const [selectedRefund, setSelectedRefund] = useState<RefundItem | null>(null)
-  const [resolveAdminNote, setResolveAdminNote] = useState('Đã chuyển khoản ngân hàng ngoài hệ thống')
-  const [resolvingLoading, setResolvingLoading] = useState(false)
-
-  async function fetchRefunds() {
-    setRefundLoading(true)
-    try {
-      const res = await apiClient.get<{ items: RefundItem[]; total: number }>(
-        `/api/v1/admin/refunds?status=${refundStatusFilter}&page=${refundPage}&page_size=15`
-      )
-      setRefunds(res.data.items || [])
-      setRefundTotal(res.data.total || 0)
-    } catch (err: any) {
-      console.error('Failed to load refunds:', err)
-      setActionMsg({ type: 'error', text: 'Không thể tải danh sách yêu cầu hoàn tiền từ máy chủ.' })
-    } finally {
-      setRefundLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    if (activeTab === 'refunds') {
-      fetchRefunds()
-    }
-  }, [activeTab, refundStatusFilter, refundPage])
-
-  async function handleResolveRefundManually() {
-    if (!selectedRefund) return
-    setResolvingLoading(true)
-    try {
-      await apiClient.post(`/api/v1/admin/refunds/${selectedRefund.id}/resolve`, {
-        admin_note: resolveAdminNote,
-      })
-      notify('success', `Đã đánh dấu xử lý hoàn tiền thủ công cho đơn #${selectedRefund.vnp_request_id}!`)
-      setResolveModalOpen(false)
-      setSelectedRefund(null)
-      await fetchRefunds()
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Không thể cập nhật trạng thái hoàn tiền.')
-    } finally {
-      setResolvingLoading(false)
-    }
-  }
-
-  async function handleRetryRefund(refund: RefundItem) {
-    try {
-      const res = await apiClient.post<RefundItem>(`/api/v1/admin/refunds/${refund.id}/retry`)
-      if (res.data.status === 'success') {
-        notify('success', `Thử lại hoàn tiền tự động qua VNPay thành công!`)
-      } else {
-        notify('error', res.data.vnpay_response_message || 'VNPay từ chối hoàn tiền tự động.')
-      }
-      await fetchRefunds()
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Lỗi gọi lại API VNPay.')
-    }
-  }
-
-  // Compulsory Password Change State for Admin
-  const [oldPwd, setOldPwd] = useState('')
-  const [newPwd, setNewPwd] = useState('')
-  const [confirmPwd, setConfirmPwd] = useState('')
-  const [changePwdLoading, setChangePwdLoading] = useState(false)
-  const [changePwdErr, setChangePwdErr] = useState('')
-
-  async function handleChangePwdSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (newPwd !== confirmPwd) {
-      setChangePwdErr('Mật khẩu mới và xác nhận mật khẩu không khớp.')
-      return
-    }
-    if (newPwd.length < 8) {
-      setChangePwdErr('Mật khẩu mới phải có tối thiểu 8 ký tự.')
-      return
-    }
-    setChangePwdLoading(true)
-    setChangePwdErr('')
-    try {
-      await apiClient.post('/api/v1/auth/change-password', {
-        old_password: oldPwd,
-        new_password: newPwd,
-      })
-      notify('success', 'Đổi mật khẩu thành công!')
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
-    } catch (err: any) {
-      setChangePwdErr(err.response?.data?.detail || 'Không thể đổi mật khẩu. Vui lòng kiểm tra lại mật khẩu cũ.')
-    } finally {
-      setChangePwdLoading(false)
-    }
-  }
-
   // Check Admin Access Guard - Redirect non-admin users to home
   useEffect(() => {
     if (!isAuthenticated || user?.role !== 'admin') {
@@ -2316,14 +2145,10 @@ export default function AdminView() {
     if (!autoPreviewList || autoPreviewList.length === 0) return
     setAutoConfirming(true)
     try {
-      const res = await apiClient.post(
-        '/api/v1/showtimes/admin/auto-schedule/confirm',
-        {
-          showtimes: autoPreviewList,
-          replace_existing: autoReplaceExisting,
-        },
-        { timeout: 120000 }
-      )
+      const res = await apiClient.post('/api/v1/showtimes/admin/auto-schedule/confirm', {
+        showtimes: autoPreviewList,
+        replace_existing: autoReplaceExisting,
+      })
 
       // Extract unique movie titles from autoPreviewList
       const movieTitlesSet = new Set<string>()
@@ -2495,70 +2320,6 @@ export default function AdminView() {
   return (
     <div className="max-w-[1280px] mx-auto px-6 py-6 pb-20">
 
-      {/* Compulsory Password Change Modal Overlay */}
-      {user?.must_change_password && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[9999] p-4">
-          <div className="max-w-md w-full bg-[#111118] border border-amber-500/40 rounded-2xl p-6 shadow-2xl space-y-4">
-            <div className="text-center">
-              <span className="text-4xl block mb-2">🔐</span>
-              <h3 className="text-lg font-bold text-[#f0ede8]">Yêu Cầu Đổi Mật Khẩu Khẩn Cấp</h3>
-              <p className="text-xs text-[#a09e9a] mt-1">
-                Tài khoản Admin của bạn đang ở trạng thái bắt buộc đổi mật khẩu. Vui lòng đổi mật khẩu mới để bảo mật hệ thống.
-              </p>
-            </div>
-
-            {changePwdErr && (
-              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 text-xs font-semibold">
-                ⚠️ {changePwdErr}
-              </div>
-            )}
-
-            <form onSubmit={handleChangePwdSubmit} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[#a09e9a] mb-1 font-medium">Mật khẩu hiện tại:</label>
-                <input
-                  type="password"
-                  required
-                  value={oldPwd}
-                  onChange={(e) => setOldPwd(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#161622] border border-white/10 text-white outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[#a09e9a] mb-1 font-medium">Mật khẩu mới (tối thiểu 8 ký tự):</label>
-                <input
-                  type="password"
-                  required
-                  value={newPwd}
-                  onChange={(e) => setNewPwd(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#161622] border border-white/10 text-white outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[#a09e9a] mb-1 font-medium">Xác nhận mật khẩu mới:</label>
-                <input
-                  type="password"
-                  required
-                  value={confirmPwd}
-                  onChange={(e) => setConfirmPwd(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#161622] border border-white/10 text-[#f0ede8] outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={changePwdLoading}
-                className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold transition-all disabled:opacity-50 cursor-pointer text-sm shadow-lg mt-2"
-              >
-                {changePwdLoading ? 'Đang cập nhật...' : '🔑 Đổi Mật Khẩu & Tiếp Tục'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Action Status Banner */}
       {actionMsg && (
         <div
@@ -2583,265 +2344,6 @@ export default function AdminView() {
 
 
 
-      {/* TAB: REFUND MANAGEMENT */}
-      {activeTab === 'refunds' && (
-        <div className="space-y-6">
-          {/* Header Action Bar */}
-          <div className={`p-5 rounded-2xl border flex flex-col sm:flex-row justify-between items-center gap-4 transition-colors ${
-            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-md'
-          }`}>
-            <div>
-              <h3 className={`font-display font-bold text-lg flex items-center gap-2 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                <span>💸</span>
-                <span>Quản Lý Hoàn Tiền Vé</span>
-              </h3>
-            </div>
-          </div>
-
-          {/* Status Filters Bar */}
-          <div className={`flex flex-wrap items-center justify-between p-3 rounded-xl border gap-2 transition-colors ${
-            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
-          }`}>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { key: 'all', label: 'Tất cả trạng thái' },
-                { key: 'manual_required', label: '⚠️ Cần xử lý thủ công' },
-                { key: 'success', label: '✓ Đã hoàn tiền' },
-                { key: 'processing', label: '⏳ Đang xử lý' },
-                { key: 'failed', label: '❌ Thất bại' },
-              ].map((filter) => (
-                <button
-                  key={filter.key}
-                  type="button"
-                  onClick={() => { setRefundStatusFilter(filter.key); setRefundPage(1); }}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                    refundStatusFilter === filter.key
-                      ? 'bg-[#e8b84b]/15 text-[#e8b84b] border-[#e8b84b]/40 shadow-sm'
-                      : isDark
-                      ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
-                      : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {filter.label}
-                </button>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={fetchRefunds}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 cursor-pointer ${
-                isDark ? 'bg-white/5 border-white/10 text-[#f0ede8] hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
-              }`}
-            >
-              🔄 Tải lại
-            </button>
-          </div>
-
-          {/* Refund Transactions Table */}
-          <div className={`border rounded-2xl overflow-hidden shadow-xl transition-colors ${
-            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
-          }`}>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className={`font-mono-data uppercase border-b ${
-                  isDark ? 'bg-[#161622] text-[#f0ede8] border-white/10' : 'bg-slate-100 text-slate-700 border-slate-200'
-                }`}>
-                  <tr>
-                    <th className="p-4">Mã Vé / Khách Hàng</th>
-                    <th className="p-4">Phim Xem</th>
-                    <th className="p-4">Số Tiền</th>
-                    <th className="p-4">Mã Giao Dịch VNPay</th>
-                    <th className="p-4">Trạng Thái</th>
-                    <th className="p-4">Ngày Tạo</th>
-                    <th className="p-4 text-right">Thao Tác</th>
-                  </tr>
-                </thead>
-                <tbody className={`divide-y ${isDark ? 'divide-white/5' : 'divide-slate-100'}`}>
-                  {refundLoading ? (
-                    <tr>
-                      <td colSpan={7} className="p-8 text-center text-xs text-[#a09e9a]">
-                        <div className="inline-block w-6 h-6 border-2 border-[#e8b84b] border-t-transparent rounded-full animate-spin mb-2" />
-                        <p>Đang tải danh sách yêu cầu hoàn tiền...</p>
-                      </td>
-                    </tr>
-                  ) : refunds.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="p-8 text-center text-xs text-[#a09e9a] italic">
-                        Không có yêu cầu hoàn tiền nào phù hợp với bộ lọc.
-                      </td>
-                    </tr>
-                  ) : (
-                    refunds.map((r) => (
-                      <tr key={r.id} className={isDark ? 'hover:bg-white/[0.02] transition-colors' : 'hover:bg-slate-50 transition-colors'}>
-                        <td className="p-4">
-                          <div className="font-mono-data font-bold text-sm text-[#e8b84b]">
-                            {r.ticket_code || `R#${r.reservation_id}`}
-                          </div>
-                          <div className={`text-xs ${isDark ? 'text-[#f0ede8]' : 'text-slate-800'}`}>
-                            {r.user_full_name || 'Khách xem phim'}
-                          </div>
-                          <div className={`text-[10px] font-mono-data ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>
-                            {r.user_email}
-                          </div>
-                        </td>
-
-                        <td className="p-4 font-semibold">
-                          <p className={isDark ? 'text-[#f0ede8]' : 'text-slate-900'}>{r.movie_title || 'N/A'}</p>
-                          <span className={`text-[10px] font-mono-data ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                            Hủy vé
-                          </span>
-                        </td>
-
-                        <td className="p-4 font-mono-data font-bold text-[#e8b84b] text-sm">
-                          {fmt(r.amount)}
-                        </td>
-
-                        <td className="p-4 font-mono-data">
-                          <div className={`text-xs ${isDark ? 'text-[#f0ede8]' : 'text-slate-700'}`}>
-                            {r.vnp_request_id}
-                          </div>
-                          {r.vnpay_response_message && (
-                            <p className="text-[10px] text-rose-400 truncate max-w-[180px]" title={r.vnpay_response_message}>
-                              {r.vnpay_response_message}
-                            </p>
-                          )}
-                        </td>
-
-                        <td className="p-4">
-                          {r.status === 'manual_required' && (
-                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 inline-flex items-center gap-1">
-                              <span>⚠️</span> Cần xử lý thủ công
-                            </span>
-                          )}
-                          {r.status === 'success' && (
-                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 inline-flex items-center gap-1">
-                              <span>✓</span> Đã hoàn tiền
-                            </span>
-                          )}
-                          {(r.status === 'processing' || r.status === 'pending') && (
-                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30 inline-flex items-center gap-1">
-                              <span>⏳</span> Đang xử lý
-                            </span>
-                          )}
-                          {r.status === 'failed' && (
-                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 inline-flex items-center gap-1">
-                              <span>❌</span> Thất bại
-                            </span>
-                          )}
-                          {r.admin_note && (
-                            <p className="text-[10px] text-slate-400 mt-1 italic max-w-[160px] truncate" title={r.admin_note}>
-                              Ghi chú: {r.admin_note}
-                            </p>
-                          )}
-                        </td>
-
-                        <td className="p-4 font-mono-data text-[11px]">
-                          {new Date(r.created_at).toLocaleString('vi-VN')}
-                        </td>
-
-                        <td className="p-4 text-right">
-                          <div className="flex flex-col items-end gap-1.5">
-                            {r.status !== 'success' && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedRefund(r)
-                                  setResolveAdminNote('Đã chuyển khoản ngân hàng ngoài hệ thống')
-                                  setResolveModalOpen(true)
-                                }}
-                                className="bg-[#e8b84b] hover:bg-[#d6a538] text-[#09090e] px-3 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-sm"
-                              >
-                                Đánh dấu đã chuyển khoản
-                              </button>
-                            )}
-
-                            {(r.status === 'manual_required' || r.status === 'failed') && (
-                              <button
-                                type="button"
-                                onClick={() => handleRetryRefund(r)}
-                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
-                                  isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
-                                }`}
-                              >
-                                🔄 Thử lại qua VNPay
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Manual Resolve Refund Modal */}
-      {resolveModalOpen && selectedRefund && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`max-w-md w-full rounded-2xl border p-6 space-y-4 shadow-2xl ${
-            isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
-          }`}>
-            <div className="flex items-center justify-between border-b pb-3 border-white/10">
-              <h3 className="font-display font-bold text-base flex items-center gap-2">
-                <span>💸</span>
-                <span>Xác Nhận Hoàn Tiền Thủ Công</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setResolveModalOpen(false)}
-                className="text-[#a09e9a] hover:text-white text-lg font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <p><strong>Mã Vé:</strong> <span className="text-[#e8b84b] font-mono-data font-bold">{selectedRefund.ticket_code || `R#${selectedRefund.reservation_id}`}</span></p>
-              <p><strong>Khách hàng:</strong> {selectedRefund.user_full_name} ({selectedRefund.user_email})</p>
-              <p><strong>Số tiền cần hoàn:</strong> <span className="text-emerald-400 font-mono-data font-bold text-sm">{fmt(selectedRefund.amount)}</span></p>
-              <p><strong>Mã Yêu Cầu VNPay:</strong> <span className="font-mono-data">{selectedRefund.vnp_request_id}</span></p>
-            </div>
-
-            <div className="space-y-1.5 pt-2">
-              <label className="text-xs font-bold text-[#a09e9a] block">Ghi chú xử lý của Admin (VD: Mã giao dịch chuyển khoản ngân hàng):</label>
-              <textarea
-                rows={3}
-                value={resolveAdminNote}
-                onChange={(e) => setResolveAdminNote(e.target.value)}
-                className={`w-full p-2.5 rounded-xl border text-xs outline-none focus:border-[#e8b84b] ${
-                  isDark ? 'bg-[#161622] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
-                }`}
-                placeholder="Nhập ghi chú chuyển khoản..."
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
-              <button
-                type="button"
-                onClick={() => setResolveModalOpen(false)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold ${
-                  isDark ? 'bg-white/5 text-[#a09e9a] hover:text-white' : 'bg-slate-100 text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                disabled={resolvingLoading}
-                onClick={handleResolveRefundManually}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
-              >
-                {resolvingLoading ? 'Đang lưu...' : '✓ Đánh Dấu Đã Hoàn Tiền'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* TAB 1: MOVIE MANAGEMENT */}
       {activeTab === 'movies' && (
         <div className="space-y-6">
@@ -2849,6 +2351,7 @@ export default function AdminView() {
           <div className="bg-[#111118] border border-white/10 rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-center gap-4">
             <div>
               <h3 className="font-display font-bold text-lg text-[#f0ede8]">Danh Sách Phim Hệ Thống</h3>
+              <p className="text-xs text-[#a09e9a]">Quản lý phim theo từng mục Đang chiếu hoặc Sắp ra mắt.</p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -2881,7 +2384,7 @@ export default function AdminView() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => { setMovieSubTab('now_showing'); setMoviePage(1); }}
+                onClick={() => setMovieSubTab('now_showing')}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
                   movieSubTab === 'now_showing'
                     ? 'bg-[#2ecc71]/15 text-[#2ecc71] border-[#2ecc71]/40 shadow-sm'
@@ -2894,7 +2397,7 @@ export default function AdminView() {
 
               <button
                 type="button"
-                onClick={() => { setMovieSubTab('coming_soon'); setMoviePage(1); }}
+                onClick={() => setMovieSubTab('coming_soon')}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
                   movieSubTab === 'coming_soon'
                     ? 'bg-[#e8b84b]/15 text-[#e8b84b] border-[#e8b84b]/40 shadow-sm'
@@ -2907,7 +2410,7 @@ export default function AdminView() {
 
               <button
                 type="button"
-                onClick={() => { setMovieSubTab('ended'); setMoviePage(1); }}
+                onClick={() => setMovieSubTab('ended')}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
                   movieSubTab === 'ended'
                     ? 'bg-rose-500/15 text-rose-400 border-rose-500/40 shadow-sm'
@@ -2920,7 +2423,7 @@ export default function AdminView() {
 
               <button
                 type="button"
-                onClick={() => { setMovieSubTab('all'); setMoviePage(1); }}
+                onClick={() => setMovieSubTab('all')}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
                   movieSubTab === 'all'
                     ? 'bg-white/15 text-[#f0ede8] border-white/30 shadow-sm'
@@ -3021,7 +2524,6 @@ export default function AdminView() {
               const filtered = movies.filter((m) => {
                 if (movieSubTab === 'now_showing') return m.status === 'now_showing'
                 if (movieSubTab === 'coming_soon') return m.status === 'coming_soon'
-                if (movieSubTab === 'ended') return m.status === 'ended'
                 return true
               })
               return (
@@ -3650,7 +3152,7 @@ export default function AdminView() {
 
             <form onSubmit={handleCreateRoom} className="space-y-4">
               <div>
-                <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Tên Phòng Chiếu (Hệ thống sẽ tự động đặt tên nếu để trống)</label>
+                <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Tên Phòng Chiếu (Để trống coi như tự động đặt)</label>
                 <input
                   type="text"
                   value={rName}
@@ -3661,7 +3163,7 @@ export default function AdminView() {
                   className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none"
                 />
                 <span className="text-[11px] text-[#e8b84b] font-mono-data mt-1 block">
-                  💡Đây sẽ là phòng thứ {nextRoomNum} của phòng {' '}
+                  💡Đây sẽ là phòng thứ {nextRoomNum} của loại phòng {' '}
                   {rType === 'standard'
                     ? 'Standard'
                     : rType === 'imax'

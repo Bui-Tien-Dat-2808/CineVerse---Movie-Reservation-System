@@ -5,11 +5,8 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function fmt(n: number | string | null | undefined): string {
-  if (n === null || n === undefined) return '0₫'
-  const num = typeof n === 'string' ? parseFloat(n) : n
-  if (isNaN(num)) return '0₫'
-  return Math.round(num).toLocaleString('vi-VN') + '₫'
+export function fmt(n: number): string {
+  return n.toLocaleString('vi-VN') + '₫'
 }
 
 export function getDateList(count = 7): Date[] {

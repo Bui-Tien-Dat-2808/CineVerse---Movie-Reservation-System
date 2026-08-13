@@ -132,7 +132,7 @@ export default function PaymentResultView() {
                 <div className="flex justify-between items-center pt-2 border-t border-white/10 text-sm">
                   <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-600'}>Tổng thanh toán:</span>
                   <strong className="font-mono-data font-black text-lg text-emerald-400">
-                    {fmt(reservation.total_price)}
+                    {Number(reservation.total_price).toLocaleString('vi-VN')} đ
                   </strong>
                 </div>
               </div>

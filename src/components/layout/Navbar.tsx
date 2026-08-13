@@ -22,7 +22,6 @@ const PRIMARY_ADMIN_NAV_ITEMS = [
 
 // Secondary Admin Nav Items (Inside "Thêm" Dropdown Menu)
 const MORE_ADMIN_NAV_ITEMS = [
-  { label: 'Hoàn tiền', icon: '💸', tab: 'refunds', desc: 'Quản lý hoàn tiền VNPay' },
   { label: 'Voucher', icon: '🎟️', tab: 'vouchers', desc: 'Quản lý mã giảm giá' },
   { label: 'Tích điểm', icon: '🏆', tab: 'loyalty', desc: 'Điểm thưởng thành viên' },
   { label: 'Soát vé', icon: '🔍', tab: 'scanner', desc: 'Quét QR & check-in' },
