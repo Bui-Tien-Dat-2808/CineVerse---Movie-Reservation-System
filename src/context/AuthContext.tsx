@@ -14,6 +14,7 @@ interface AuthContextValue {
   login: (e: string, p: string, turnstileToken?: string) => Promise<void>
   register: (req: RegisterRequest) => Promise<void>
   logout: () => void
+  updateUserProfile: (updatedUser: AuthUser) => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -58,6 +59,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  function updateUserProfile(updatedUser: AuthUser) {
+    setUser(updatedUser)
+    localStorage.setItem('cached_user', JSON.stringify(updatedUser))
+  }
+
   async function login(account: string, pass: string, turnstileToken?: string) {
     await loginAPI(account, pass, turnstileToken)
     const u = await fetchMeAPI()
@@ -101,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         logout,
+        updateUserProfile,
       }}
     >
       {children}

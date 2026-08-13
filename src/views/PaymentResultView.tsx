@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
 import { fetchReservationDetailAPI, ReservationItem } from '../api/showtimes'
 import { cn } from '../lib/utils'
-import { getDeterministicBarcodeBars } from '../components/features/ticket/ETicketModal'
+import { BarcodeWidget } from '../components/common/BarcodeWidget'
 
 export default function PaymentResultView() {
   const [searchParams] = useSearchParams()
@@ -85,22 +85,8 @@ export default function PaymentResultView() {
                   {reservation.ticket_code || `CVN-${reservation.id}`}
                 </span>
 
-                {/* Dynamic Barcode visualization */}
-                {(() => {
-                  const currentCode = reservation.ticket_code || `CVN-${reservation.id}`
-                  const barcodeBars = getDeterministicBarcodeBars(currentCode, 26)
-                  return (
-                    <div className="w-48 mx-auto h-8 flex items-center justify-between px-2 bg-white rounded mt-2 border border-slate-300 opacity-90">
-                      {barcodeBars.map((w, i) => (
-                        <div
-                          key={i}
-                          className="h-full bg-slate-950"
-                          style={{ width: w }}
-                        />
-                      ))}
-                    </div>
-                  )
-                })()}
+                {/* Real CODE128 Barcode visualization matching Email */}
+                <BarcodeWidget value={reservation.ticket_code || `CVN-${reservation.id}`} height={50} className="mt-2" />
               </div>
 
               {/* Details Breakdown */}

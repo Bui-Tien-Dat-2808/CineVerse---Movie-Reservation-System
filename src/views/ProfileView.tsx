@@ -16,7 +16,7 @@ export default function ProfileView() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab') as 'profile' | 'history' | 'vouchers' | 'loyalty' | null
 
-  const { user, isAuthenticated, logout } = useAuth()
+  const { user, isAuthenticated, logout, updateUserProfile } = useAuth()
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
@@ -163,7 +163,7 @@ export default function ProfileView() {
         Array.from(exchangeSelectedSeats)
       )
       setExchangeTarget(null)
-      loadHistory()
+      loadReservations()
       setUpdateMsg({ type: 'success', text: 'Đổi suất chiếu thành công! Thông tin vé mới đã được cập nhật.' })
     } catch (err: any) {
       setExchangeError(err.response?.data?.detail || 'Đổi suất chiếu thất bại. Vui lòng thử lại.')
@@ -224,7 +224,7 @@ export default function ProfileView() {
     setUpdateLoading(true)
 
     try {
-      await updateProfileAPI({
+      const updatedUser = await updateProfileAPI({
         full_name: fullName,
         email: email,
         phone_number: phone || undefined,
@@ -232,6 +232,7 @@ export default function ProfileView() {
         gender: gender,
         region: region,
       })
+      updateUserProfile(updatedUser)
       setUpdateMsg({ type: 'success', text: 'Cập nhật thông tin cá nhân thành công!' })
       setIsEditing(false) // Exit edit mode after successful update
     } catch (err: any) {

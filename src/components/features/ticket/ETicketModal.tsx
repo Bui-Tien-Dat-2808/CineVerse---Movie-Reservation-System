@@ -1,5 +1,6 @@
 import React from 'react'
 import type { ReservationItem } from '../../../types'
+import { BarcodeWidget } from '../../common/BarcodeWidget'
 
 interface ETicketModalProps {
   isOpen: boolean
@@ -163,21 +164,8 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
               {ticketCode}
             </div>
 
-            {/* Dynamic & Unique High-contrast Barcode visualization */}
-            {(() => {
-              const barcodeBars = getDeterministicBarcodeBars(ticketCode, 34)
-              return (
-                <div className="w-56 mx-auto h-14 flex items-center justify-between px-3 bg-white rounded-lg border border-slate-300 py-1.5">
-                  {barcodeBars.map((w, i) => (
-                    <div
-                      key={i}
-                      className="h-full bg-slate-950"
-                      style={{ width: w }}
-                    />
-                  ))}
-                </div>
-              )
-            })()}
+            {/* Authentic Code128 Barcode visualization matching Email */}
+            <BarcodeWidget value={ticketCode} height={55} className="my-1" />
 
             <div className="text-[11px] text-slate-500 font-medium pt-1">
               🎟️ Đưa mã vạch này cho nhân viên tại rạp để soát vé vào phòng chiếu.
