@@ -88,11 +88,11 @@ export default function Navbar() {
           className="flex items-center gap-2.5 bg-transparent border-0 cursor-pointer group select-none shrink-0"
           aria-label="CineVerse Home"
         >
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <rect width="28" height="28" rx="6" fill="#e8b84b" />
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" className="transition-transform group-hover:scale-105">
+            <rect width="28" height="28" rx="6" fill={isDark ? "#e8b84b" : "#d97706"} />
             <path
               d="M7 20 L14 8 L21 20"
-              stroke="#09090e"
+              stroke={isDark ? "#09090e" : "#ffffff"}
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -103,16 +103,21 @@ export default function Navbar() {
               y1="16"
               x2="18.5"
               y2="16"
-              stroke="#09090e"
+              stroke={isDark ? "#09090e" : "#ffffff"}
               strokeWidth="2"
               strokeLinecap="round"
             />
           </svg>
-          <span className={cn(
-            'font-display font-bold text-xl tracking-tight transition-colors',
-            isDark ? 'text-[#f0ede8] group-hover:text-[#e8b84b]' : 'text-slate-900 group-hover:text-amber-600'
-          )}>
-            CineVerse
+          <span className="font-display font-black text-xl tracking-tight flex items-center">
+            <span className={isDark ? 'text-[#f0ede8]' : 'text-slate-900'}>Cine</span>
+            <span className={cn(
+              'bg-gradient-to-r text-transparent bg-clip-text font-black',
+              isDark
+                ? 'from-[#f5d061] via-[#e8b84b] to-[#c9972a]'
+                : 'from-amber-600 via-amber-500 to-amber-700'
+            )}>
+              Verse
+            </span>
           </span>
         </button>
 

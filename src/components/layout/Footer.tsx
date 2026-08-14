@@ -15,7 +15,12 @@ export default function Footer() {
             />
             <line x1="9.5" y1="16" x2="18.5" y2="16" stroke="#09090e" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          <span className="font-display font-bold text-base text-[#f0ede8] tracking-tight">CineVerse</span>
+          <span className="font-display font-black text-base tracking-tight flex items-center">
+            <span className="text-[#f0ede8]">Cine</span>
+            <span className="bg-gradient-to-r from-[#f5d061] via-[#e8b84b] to-[#c9972a] text-transparent bg-clip-text font-black">
+              Verse
+            </span>
+          </span>
         </div>
         <p className="font-mono-data text-[11px] text-[#6e6c68] tracking-widest uppercase">
           © 2025 CineVerse · All rights reserved

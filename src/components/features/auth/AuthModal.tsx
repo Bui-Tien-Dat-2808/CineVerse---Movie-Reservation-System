@@ -1,9 +1,9 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../context/AuthContext'
 import { useBooking } from '../../../context/BookingContext'
 import { useTheme } from '../../../context/ThemeContext'
-import TurnstileBox from './TurnstileBox'
+import ImageCaptcha from './ImageCaptcha'
 import PolicyModal from './PolicyModal'
 
 export default function AuthModal() {
@@ -17,7 +17,8 @@ export default function AuthModal() {
   const [account, setAccount] = useState('') // Email or Phone number
   const [loginPassword, setLoginPassword] = useState('')
   const [showLoginPassword, setShowLoginPassword] = useState(false)
-  const [loginTurnstileToken, setLoginTurnstileToken] = useState('')
+  const [loginCaptchaId, setLoginCaptchaId] = useState('')
+  const [loginCaptchaAnswer, setLoginCaptchaAnswer] = useState('')
   const [loginCaptchaRefreshKey, setLoginCaptchaRefreshKey] = useState(0)
 
   // Register Form States
@@ -32,7 +33,8 @@ export default function AuthModal() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showRegPassword, setShowRegPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [regTurnstileToken, setRegTurnstileToken] = useState('')
+  const [regCaptchaId, setRegCaptchaId] = useState('')
+  const [regCaptchaAnswer, setRegCaptchaAnswer] = useState('')
   const [regCaptchaRefreshKey, setRegCaptchaRefreshKey] = useState(0)
   const [agreeTerms, setAgreeTerms] = useState(false)
 
@@ -43,14 +45,6 @@ export default function AuthModal() {
   // Status & Error States
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-
-  const handleLoginCaptchaChange = useCallback((code: string) => {
-    setLoginCaptchaCode(code)
-  }, [])
-
-  const handleRegCaptchaChange = useCallback((code: string) => {
-    setRegCaptchaCode(code)
-  }, [])
 
   if (!isAuthModalOpen) return null
 
@@ -63,15 +57,14 @@ export default function AuthModal() {
     e.preventDefault()
     setError('')
 
-    // Validate Turnstile CAPTCHA Token
-    if (!loginTurnstileToken) {
-      setError('Vui lòng hoàn thành xác minh Cloudflare Turnstile ("Tôi không phải người máy").')
+    if (!loginCaptchaAnswer.trim()) {
+      setError('Vui lòng nhập mã xác thực CAPTCHA.')
       return
     }
 
     setLoading(true)
     try {
-      await login(account, loginPassword, loginTurnstileToken)
+      await login(account, loginPassword, loginCaptchaId, loginCaptchaAnswer)
       // Chuyển ngay về trang chủ sau khi đăng nhập thành công
       reset()
       navigate('/')
@@ -80,8 +73,8 @@ export default function AuthModal() {
     } catch (err: any) {
       const msg = err.response?.data?.detail ?? 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.'
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+      setLoginCaptchaAnswer('')
       setLoginCaptchaRefreshKey((prev) => prev + 1)
-      setLoginTurnstileToken('')
     } finally {
       setLoading(false)
     }
@@ -101,8 +94,8 @@ export default function AuthModal() {
       return
     }
 
-    if (!regTurnstileToken) {
-      setError('Vui lòng hoàn thành xác minh Cloudflare Turnstile ("Tôi không phải người máy").')
+    if (!regCaptchaAnswer.trim()) {
+      setError('Vui lòng nhập mã xác thực CAPTCHA.')
       return
     }
 
@@ -122,7 +115,8 @@ export default function AuthModal() {
         date_of_birth: dob || undefined,
         gender: gender,
         region: region,
-        turnstile_token: regTurnstileToken,
+        captcha_id: regCaptchaId,
+        captcha_answer: regCaptchaAnswer,
       })
       // Chuyển ngay về trang chủ sau khi đăng ký thành công
       reset()
@@ -132,8 +126,8 @@ export default function AuthModal() {
     } catch (err: any) {
       const msg = err.response?.data?.detail ?? 'Đăng ký thất bại. Vui lòng thử lại.'
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+      setRegCaptchaAnswer('')
       setRegCaptchaRefreshKey((prev) => prev + 1)
-      setRegTurnstileToken('')
     } finally {
       setLoading(false)
     }
@@ -172,21 +166,24 @@ export default function AuthModal() {
           </button>
 
           {/* CineVerse Logo Header */}
-          <div className="flex justify-center items-center gap-2 mb-4">
-            <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
-              <rect width="28" height="28" rx="6" fill="#e8b84b" />
+          <div className="flex justify-center items-center gap-2.5 mb-4 select-none">
+            <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+              <rect width="28" height="28" rx="6" fill={isLight ? "#d97706" : "#e8b84b"} />
               <path
                 d="M7 20 L14 8 L21 20"
-                stroke="#09090e"
+                stroke={isLight ? "#ffffff" : "#09090e"}
                 strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 fill="none"
               />
-              <line x1="9.5" y1="16" x2="18.5" y2="16" stroke="#09090e" strokeWidth="2" strokeLinecap="round" />
+              <line x1="9.5" y1="16" x2="18.5" y2="16" stroke={isLight ? "#ffffff" : "#09090e"} strokeWidth="2" strokeLinecap="round" />
             </svg>
-            <span className={`font-display font-bold text-xl tracking-tight ${isLight ? 'text-slate-900' : 'text-[#f0ede8]'}`}>
-              CineVerse
+            <span className="font-display font-black text-2xl tracking-tight flex items-center">
+              <span className={isLight ? 'text-slate-900' : 'text-[#f0ede8]'}>Cine</span>
+              <span className={isLight ? 'bg-gradient-to-r from-amber-600 via-amber-500 to-amber-700 text-transparent bg-clip-text font-black' : 'bg-gradient-to-r from-[#f5d061] via-[#e8b84b] to-[#c9972a] text-transparent bg-clip-text font-black'}>
+                Verse
+              </span>
             </span>
           </div>
 
@@ -291,16 +288,25 @@ export default function AuthModal() {
                 </div>
               </div>
 
-              {/* Cloudflare Turnstile "I'm not a robot" CAPTCHA */}
+              {/* Image CAPTCHA */}
               <div>
                 <label className={`block text-xs mb-1 ${labelStyle}`}>
-                  Xác minh người dùng
+                  CAPTCHA xác thực
                 </label>
-                <TurnstileBox
-                  onVerify={(token) => setLoginTurnstileToken(token)}
-                  onExpire={() => setLoginTurnstileToken('')}
-                  resetKey={loginCaptchaRefreshKey}
-                />
+                <div className="flex flex-col gap-2">
+                  <ImageCaptcha
+                    onChallengeReady={(id) => setLoginCaptchaId(id)}
+                    refreshKey={loginCaptchaRefreshKey}
+                  />
+                  <input
+                    type="text"
+                    required
+                    value={loginCaptchaAnswer}
+                    onChange={(e) => setLoginCaptchaAnswer(e.target.value)}
+                    placeholder="Nhập mã chữ/số bên trên"
+                    className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition-colors ${inputStyle}`}
+                  />
+                </div>
               </div>
 
               {/* Submit button */}
@@ -500,16 +506,25 @@ export default function AuthModal() {
                 </div>
               </div>
 
-              {/* Row 5: Cloudflare Turnstile "I'm not a robot" CAPTCHA */}
+              {/* Image CAPTCHA */}
               <div className="py-0.5">
                 <label className={`block text-xs mb-1 ${labelStyle}`}>
-                  Xác minh người dùng
+                  Mã xác thực
                 </label>
-                <TurnstileBox
-                  onVerify={(token) => setRegTurnstileToken(token)}
-                  onExpire={() => setRegTurnstileToken('')}
-                  resetKey={regCaptchaRefreshKey}
-                />
+                <div className="flex flex-col gap-2">
+                  <ImageCaptcha
+                    onChallengeReady={(id) => setRegCaptchaId(id)}
+                    refreshKey={regCaptchaRefreshKey}
+                  />
+                  <input
+                    type="text"
+                    required
+                    value={regCaptchaAnswer}
+                    onChange={(e) => setRegCaptchaAnswer(e.target.value)}
+                    placeholder="Nhập mã chữ/số bên trên"
+                    className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition-colors ${inputStyle}`}
+                  />
+                </div>
               </div>
 
               {/* Row 6: Terms Checkbox */}

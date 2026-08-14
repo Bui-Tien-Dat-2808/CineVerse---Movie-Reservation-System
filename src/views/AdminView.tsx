@@ -1789,6 +1789,58 @@ export default function AdminView() {
     return { upcomingShowtimesCount: upcoming, pastShowtimesCount: past }
   }, [showtimes])
 
+  // Showtimes matching active time filter tab (upcoming / past / all)
+  const showtimesForActiveTab = useMemo(() => {
+    const nowMs = Date.now()
+    return showtimes.filter((st) => {
+      const isPast = new Date(st.end_time || st.start_time).getTime() < nowMs || st.status === 'completed'
+      if (stTimeFilter === 'upcoming') return !isPast
+      if (stTimeFilter === 'past') return isPast
+      return true
+    })
+  }, [showtimes, stTimeFilter])
+
+  // Filter options for Movie dropdown based on active tab showtimes
+  const moviesForShowtimeFilter = useMemo(() => {
+    if (stTimeFilter === 'all' && stFilterRoomId === 'all') {
+      return movies
+    }
+    const activeMovieIds = new Set<number>()
+    showtimesForActiveTab.forEach((st) => {
+      if (st.movie_id && (stFilterRoomId === 'all' || st.room_id === stFilterRoomId)) {
+        activeMovieIds.add(st.movie_id)
+      }
+    })
+    return movies.filter((m) => activeMovieIds.has(m.id))
+  }, [movies, showtimesForActiveTab, stFilterRoomId, stTimeFilter])
+
+  // Filter options for Room dropdown based on active tab showtimes
+  const roomsForShowtimeFilter = useMemo(() => {
+    if (stTimeFilter === 'all' && stFilterMovieId === 'all') {
+      return safeRooms
+    }
+    const activeRoomIds = new Set<number>()
+    showtimesForActiveTab.forEach((st) => {
+      if (st.room_id && (stFilterMovieId === 'all' || st.movie_id === stFilterMovieId)) {
+        activeRoomIds.add(st.room_id)
+      }
+    })
+    return safeRooms.filter((r) => activeRoomIds.has(r.id))
+  }, [safeRooms, showtimesForActiveTab, stFilterMovieId, stTimeFilter])
+
+  // Reset selected movie/room if no longer present in filtered dropdown options
+  useEffect(() => {
+    if (stFilterMovieId !== 'all' && !moviesForShowtimeFilter.some((m) => m.id === stFilterMovieId)) {
+      setStFilterMovieId('all')
+    }
+  }, [moviesForShowtimeFilter, stFilterMovieId])
+
+  useEffect(() => {
+    if (stFilterRoomId !== 'all' && !roomsForShowtimeFilter.some((r) => r.id === stFilterRoomId)) {
+      setStFilterRoomId('all')
+    }
+  }, [roomsForShowtimeFilter, stFilterRoomId])
+
   const filteredShowtimes = useMemo(() => {
     const nowMs = Date.now()
     return showtimes.filter((st) => {
@@ -2536,8 +2588,8 @@ export default function AdminView() {
           {/* Header Action Bar */}
           <div className="bg-[#111118] border border-white/10 rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-center gap-4">
             <div>
-              <h3 className="font-display font-bold text-lg text-[#f0ede8]">Danh Sách Phim Hệ Thống</h3>
-              <p className="text-xs text-[#a09e9a]">Quản lý phim theo từng mục Đang chiếu hoặc Sắp ra mắt.</p>
+              <h3 className="font-display font-bold text-lg text-[#f0ede8]">Danh Sách Phim Trong Hệ Thống</h3>
+              <p className="text-xs text-[#a09e9a]">Quản lý phim theo từng mục Đang chiếu / Sắp ra mắt / Đã ngừng chiếu.</p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -3154,8 +3206,8 @@ export default function AdminView() {
                   }}
                   className="w-full px-2.5 py-1.5 bg-[#111118] border border-white/10 rounded-lg text-[#f0ede8] outline-none cursor-pointer"
                 >
-                  <option value="all">-- Tất cả phim ({movies.length}) --</option>
-                  {movies.map((m) => (
+                  <option value="all">-- Tất cả phim ({moviesForShowtimeFilter.length}) --</option>
+                  {moviesForShowtimeFilter.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.title}
                     </option>
@@ -3173,8 +3225,8 @@ export default function AdminView() {
                   }}
                   className="w-full px-2.5 py-1.5 bg-[#111118] border border-white/10 rounded-lg text-[#f0ede8] outline-none cursor-pointer"
                 >
-                  <option value="all">-- Tất cả phòng ({rooms.length}) --</option>
-                  {rooms.map((r) => (
+                  <option value="all">-- Tất cả phòng ({roomsForShowtimeFilter.length}) --</option>
+                  {roomsForShowtimeFilter.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name} ({r.room_type})
                     </option>

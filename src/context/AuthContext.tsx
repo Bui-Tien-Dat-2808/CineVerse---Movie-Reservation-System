@@ -11,7 +11,7 @@ interface AuthContextValue {
   closeAuthModal: () => void
   authMode: 'login' | 'register'
   setAuthMode: (mode: 'login' | 'register') => void
-  login: (e: string, p: string, turnstileToken?: string) => Promise<void>
+  login: (account: string, pass: string, captchaId?: string, captchaAnswer?: string) => Promise<void>
   register: (req: RegisterRequest) => Promise<void>
   logout: () => void
   updateUserProfile: (updatedUser: AuthUser) => void
@@ -46,15 +46,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.setItem('cached_user', JSON.stringify(u))
         })
         .catch(() => {
-          logoutAPI()
-          setUser(null)
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
           localStorage.removeItem('cached_user')
+          setUser(null)
         })
-        .finally(() => {
-          setIsAuthLoading(false)
-        })
+        .finally(() => setIsAuthLoading(false))
     } else {
-      localStorage.removeItem('cached_user')
       setIsAuthLoading(false)
     }
   }, [])
@@ -64,8 +62,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('cached_user', JSON.stringify(updatedUser))
   }
 
-  async function login(account: string, pass: string, turnstileToken?: string) {
-    await loginAPI(account, pass, turnstileToken)
+  async function login(account: string, pass: string, captchaId?: string, captchaAnswer?: string) {
+    await loginAPI(account, pass, captchaId, captchaAnswer)
     const u = await fetchMeAPI()
     setUser(u)
     localStorage.setItem('cached_user', JSON.stringify(u))
@@ -75,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function register(req: RegisterRequest) {
     await registerAPI(req)
     // Auto login after register
-    await login(req.email, req.password)
+    await login(req.email, req.password, req.captcha_id, req.captcha_answer)
   }
 
   async function logout() {
