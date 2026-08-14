@@ -15,6 +15,7 @@ interface MovieItem {
   release_date?: string
   status: 'now_showing' | 'coming_soon' | 'ended' | string
   rating?: string
+  genres?: Array<{ id?: number; name: string }>
 }
 
 interface SeatItemAdmin {
@@ -1605,7 +1606,7 @@ export default function AdminView() {
   }, [activeTab, searchParams, setSearchParams])
 
   // Sub-tab filter for Movies management (Đang chiếu vs Sắp ra mắt)
-  const [movieSubTab, setMovieSubTab] = useState<'now_showing' | 'coming_soon' | 'all'>('now_showing')
+  const [movieSubTab, setMovieSubTab] = useState<'now_showing' | 'coming_soon' | 'ended' | 'all'>('now_showing')
 
   // Pagination states
   const [moviePage, setMoviePage] = useState(1)

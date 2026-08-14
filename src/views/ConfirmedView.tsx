@@ -44,7 +44,7 @@ export default function ConfirmedView() {
     showtime: {
       id: showtime.id,
       movie_title: movie.title,
-      movie_poster_url: movie.posterUrl,
+      movie_poster_url: movie.img,
       room_name: showtime.hall,
       start_time: `${DATES[selectedDate].toISOString().split('T')[0]}T${showtime.time}:00Z`,
       end_time: `${DATES[selectedDate].toISOString().split('T')[0]}T${showtime.time}:00Z`,

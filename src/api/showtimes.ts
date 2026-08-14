@@ -162,6 +162,7 @@ export interface ReservationItem {
   status: 'confirmed' | 'cancelled' | string
   refund_status?: string
   notes?: string
+  is_used?: boolean
   reservation_seats: ReservationSeatItem[]
   showtime?: {
     id: number

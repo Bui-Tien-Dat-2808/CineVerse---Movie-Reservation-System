@@ -1,5 +1,5 @@
 import React from 'react'
-import type { ReservationItem } from '../../../types'
+import type { ReservationItem, ReservationSeatItem } from '../../../api/showtimes'
 import { BarcodeWidget } from '../../common/BarcodeWidget'
 
 interface ETicketModalProps {
@@ -70,7 +70,7 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
     : 'N/A'
 
   const seatsList = reservation.reservation_seats
-    .map((s) => s.seat_label ?? `Hàng ${s.row_label} - Ghế ${s.col_number}`)
+    .map((s: ReservationSeatItem) => s.seat_label ?? `Hàng ${s.row_label} - Ghế ${s.col_number}`)
     .join(', ')
 
   const totalPriceNum =

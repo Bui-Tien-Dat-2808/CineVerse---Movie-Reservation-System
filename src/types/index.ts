@@ -57,6 +57,7 @@ export interface AuthUser {
   is_active: boolean
   loyalty_points?: number
   loyalty_tier?: string
+  must_change_password?: boolean
 }
 
 export interface AppState {

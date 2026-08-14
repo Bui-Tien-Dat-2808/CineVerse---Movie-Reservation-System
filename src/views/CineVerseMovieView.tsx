@@ -218,7 +218,10 @@ export default function CineVerseMovieView() {
 
       if (seatIds.length > 0) {
         try {
-          await holdSeatsMutation.mutateAsync({ showtimeId: state.selectedShowtime.id, seatIds })
+          const showtimeId = state.selectedShowtime.id
+          if (showtimeId !== undefined) {
+            await holdSeatsMutation.mutateAsync({ showtimeId, seatIds })
+          }
         } catch (e) {
           // If not logged in yet or already held, proceed to checkout page safely
         }

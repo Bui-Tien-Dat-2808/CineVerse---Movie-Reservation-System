@@ -77,6 +77,7 @@ apiClient.interceptors.response.use(
       if (!refreshToken) {
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
+        localStorage.removeItem('cached_user')
         return Promise.reject(err)
       }
 
@@ -111,6 +112,7 @@ apiClient.interceptors.response.use(
         processQueue(refreshErr, null)
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
+        localStorage.removeItem('cached_user')
         return Promise.reject(refreshErr)
       } finally {
         isRefreshing = false

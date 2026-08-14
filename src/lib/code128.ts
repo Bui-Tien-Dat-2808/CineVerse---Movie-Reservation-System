@@ -29,7 +29,7 @@ export interface BarcodeRect {
  * Encodes input text into Code128-B black bar specifications for SVG rendering.
  * Returns array of SVG bar rectangles { x, width } and total width.
  */
-export function generateCode128SvgBars(text: str, barHeight: number = 60, moduleWidth: number = 2) {
+export function generateCode128SvgBars(text: string, barHeight: number = 60, moduleWidth: number = 2) {
   const codeIndices: number[] = [START_B_INDEX]
   let checkSum = START_B_INDEX
 
