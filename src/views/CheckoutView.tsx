@@ -49,7 +49,7 @@ export default function CheckoutView() {
     }
   }
 
-  const { isAuthenticated, openAuthModal } = useAuth()
+  const { isAuthenticated, isAuthLoading, openAuthModal } = useAuth()
   const [paymentMethod, setPaymentMethod] = useState('vnpay')
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -84,12 +84,20 @@ export default function CheckoutView() {
     return 600
   })
 
-  // Guard: redirect safely if missing booking info
+  // Guard: redirect safely if unauthenticated or missing booking info
   useEffect(() => {
+    if (isAuthLoading) return
+
+    if (!isAuthenticated) {
+      openAuthModal('login', 'Vui lòng đăng ký hoặc đăng nhập tài khoản trước khi mua vé xem phim!')
+      navigate(movie ? `/movie/${movie.id}` : '/', { replace: true })
+      return
+    }
+
     if (!movie || !showtime || state.selectedSeats.size === 0) {
       navigate(movie ? `/movie/${movie.id}` : '/', { replace: true })
     }
-  }, [movie, showtime, state.selectedSeats.size, navigate])
+  }, [isAuthenticated, isAuthLoading, movie, navigate, openAuthModal, showtime, state.selectedSeats.size])
 
   // Countdown timer effect with reload persistence
   useEffect(() => {

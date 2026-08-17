@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useBooking } from '../context/BookingContext'
+import { useAuth } from '../context/AuthContext'
 import { useMovie } from '../hooks/useMovies'
 import { useSeatMap, useShowtimes, useHoldSeats } from '../hooks/useShowtimes'
 import { useTheme } from '../context/ThemeContext'
@@ -36,6 +37,7 @@ export default function CineVerseMovieView() {
   const navigate = useNavigate()
   const { theme } = useTheme()
   const isDark = theme === 'dark'
+  const { isAuthenticated, openAuthModal } = useAuth()
 
   const [isTrailerOpen, setIsTrailerOpen] = useState(false)
   const [isSubscribed, setIsSubscribed] = useState(false)
@@ -231,6 +233,11 @@ export default function CineVerseMovieView() {
   async function handleContinueToCheckout() {
     if (!state.selectedShowtime || state.selectedSeats.size === 0) return
 
+    if (!isAuthenticated) {
+      openAuthModal('login', 'Vui lòng đăng ký hoặc đăng nhập tài khoản trước khi mua vé xem phim!')
+      return
+    }
+
     if (seatMap && seatMap.seats) {
       const labelToIdMap = new Map<string, number>()
       seatMap.seats.forEach((s) => labelToIdMap.set(`${s.row_label}${s.col_number}`, s.seat_id))
@@ -245,7 +252,7 @@ export default function CineVerseMovieView() {
             await holdSeatsMutation.mutateAsync({ showtimeId, seatIds })
           }
         } catch (e) {
-          // If not logged in yet or already held, proceed to checkout page safely
+          // If hold fails, error handled
         }
       }
     }

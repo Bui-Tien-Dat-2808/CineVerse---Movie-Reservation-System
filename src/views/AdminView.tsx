@@ -2623,7 +2623,7 @@ export default function AdminView() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setMovieSubTab('now_showing')}
+                onClick={() => { setMovieSubTab('now_showing'); setMoviePage(1); }}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
                   movieSubTab === 'now_showing'
                     ? 'bg-[#2ecc71]/15 text-[#2ecc71] border-[#2ecc71]/40 shadow-sm'
@@ -2636,7 +2636,7 @@ export default function AdminView() {
 
               <button
                 type="button"
-                onClick={() => setMovieSubTab('coming_soon')}
+                onClick={() => { setMovieSubTab('coming_soon'); setMoviePage(1); }}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
                   movieSubTab === 'coming_soon'
                     ? 'bg-[#e8b84b]/15 text-[#e8b84b] border-[#e8b84b]/40 shadow-sm'
@@ -2649,7 +2649,7 @@ export default function AdminView() {
 
               <button
                 type="button"
-                onClick={() => setMovieSubTab('ended')}
+                onClick={() => { setMovieSubTab('ended'); setMoviePage(1); }}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
                   movieSubTab === 'ended'
                     ? 'bg-rose-500/15 text-rose-400 border-rose-500/40 shadow-sm'
@@ -2662,7 +2662,7 @@ export default function AdminView() {
 
               <button
                 type="button"
-                onClick={() => setMovieSubTab('all')}
+                onClick={() => { setMovieSubTab('all'); setMoviePage(1); }}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
                   movieSubTab === 'all'
                     ? 'bg-white/15 text-[#f0ede8] border-white/30 shadow-sm'
@@ -2676,102 +2676,97 @@ export default function AdminView() {
 
           {/* Movies List Table */}
           <div className="bg-[#111118] border border-white/10 rounded-2xl overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-[#a09e9a]">
-                <thead className="bg-[#161622] text-[#f0ede8] font-mono-data uppercase border-b border-white/10">
-                  <tr>
-                    <th className="p-4">Phim</th>
-                    <th className="p-4">Trạng Thái</th>
-                    <th className="p-4">Thời Lượng</th>
-                    <th className="p-4">Ngày Khởi Chiếu</th>
-                    <th className="p-4 text-right">Thao Tác</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {(() => {
-                    const filtered = movies.filter((m) => {
-                      if (movieSubTab === 'now_showing') return m.status === 'now_showing'
-                      if (movieSubTab === 'coming_soon') return m.status === 'coming_soon'
-                      if (movieSubTab === 'ended') return m.status === 'ended'
-                      return true
-                    })
-                    const paginated = filtered.slice((moviePage - 1) * PAGE_SIZE, moviePage * PAGE_SIZE)
-                    return paginated.map((m) => (
-                      <tr key={m.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="p-4 flex items-center gap-3">
-                          <img
-                            src={
-                              m.poster_url ??
-                              'https://images.unsplash.com/photo-1534996858221-380b92700493?w=100'
-                            }
-                            alt={m.title}
-                            className="w-10 h-14 object-cover rounded-lg border border-white/10 shrink-0"
-                          />
-                          <div>
-                            <p className="font-display font-bold text-sm text-[#f0ede8]">{m.title}</p>
-                            <span className="text-[10px] font-mono-data text-[#6e6c68]">ID: #{m.id}</span>
-                          </div>
-                        </td>
-
-                        <td className="p-4">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleMovieStatus(m)}
-                            title="Bấm để đổi thủ công (Hệ thống tự động chuyển sang 'Đã chiếu xong' khi hết suất chiếu)"
-                            className={`px-3 py-1 rounded-full text-[10px] font-bold font-mono-data uppercase border cursor-pointer transition-all ${
-                              m.status === 'now_showing'
-                                ? 'bg-[rgba(46,204,113,0.15)] text-[#2ecc71] border-[rgba(46,204,113,0.3)] hover:bg-[rgba(46,204,113,0.3)]'
-                                : m.status === 'coming_soon'
-                                ? 'bg-[rgba(232,184,75,0.15)] text-[#e8b84b] border-[rgba(232,184,75,0.3)] hover:bg-[rgba(232,184,75,0.3)]'
-                                : 'bg-white/5 text-[#6e6c68] border-white/10'
-                            }`}
-                          >
-                            {m.status === 'now_showing'
-                              ? '▶ Đang chiếu'
-                              : m.status === 'coming_soon'
-                              ? '📅 Sắp ra mắt'
-                              : '⏹ Ngừng chiếu'}
-                          </button>
-                        </td>
-
-                        <td className="p-4 font-mono-data">
-                          {m.duration_minutes ? `${m.duration_minutes} phút` : 'N/A'}
-                        </td>
-
-                        <td className="p-4 font-mono-data">
-                          {m.release_date || 'Chưa cập nhật'}
-                        </td>
-
-                        <td className="p-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteMovie(m.id, m.title)}
-                            className="bg-white/5 hover:bg-[rgba(192,57,43,0.2)] text-[#a09e9a] hover:text-[#e07060] border border-white/10 hover:border-[rgba(192,57,43,0.4)] rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all cursor-pointer"
-                          >
-                            Xóa phim
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  })()}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination Control for Movies */}
             {(() => {
               const filtered = movies.filter((m) => {
                 if (movieSubTab === 'now_showing') return m.status === 'now_showing'
                 if (movieSubTab === 'coming_soon') return m.status === 'coming_soon'
+                if (movieSubTab === 'ended') return m.status === 'ended'
                 return true
               })
+              const paginated = filtered.slice((moviePage - 1) * PAGE_SIZE, moviePage * PAGE_SIZE)
               return (
-                <PaginationControl
-                  currentPage={moviePage}
-                  totalItems={filtered.length}
-                  pageSize={PAGE_SIZE}
-                  onPageChange={setMoviePage}
-                />
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-[#a09e9a]">
+                      <thead className="bg-[#161622] text-[#f0ede8] font-mono-data uppercase border-b border-white/10">
+                        <tr>
+                          <th className="p-4">Phim</th>
+                          <th className="p-4">Trạng Thái</th>
+                          <th className="p-4">Thời Lượng</th>
+                          <th className="p-4">Ngày Khởi Chiếu</th>
+                          <th className="p-4 text-right">Thao Tác</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {paginated.map((m) => (
+                          <tr key={m.id} className="hover:bg-white/[0.02] transition-colors">
+                            <td className="p-4 flex items-center gap-3">
+                              <img
+                                src={
+                                  m.poster_url ??
+                                  'https://images.unsplash.com/photo-1534996858221-380b92700493?w=100'
+                                }
+                                alt={m.title}
+                                className="w-10 h-14 object-cover rounded-lg border border-white/10 shrink-0"
+                              />
+                              <div>
+                                <p className="font-display font-bold text-sm text-[#f0ede8]">{m.title}</p>
+                                <span className="text-[10px] font-mono-data text-[#6e6c68]">ID: #{m.id}</span>
+                              </div>
+                            </td>
+
+                            <td className="p-4">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleMovieStatus(m)}
+                                title="Bấm để đổi thủ công (Hệ thống tự động chuyển sang 'Đã chiếu xong' khi hết suất chiếu)"
+                                className={`px-3 py-1 rounded-full text-[10px] font-bold font-mono-data uppercase border cursor-pointer transition-all ${
+                                  m.status === 'now_showing'
+                                    ? 'bg-[rgba(46,204,113,0.15)] text-[#2ecc71] border-[rgba(46,204,113,0.3)] hover:bg-[rgba(46,204,113,0.3)]'
+                                    : m.status === 'coming_soon'
+                                    ? 'bg-[rgba(232,184,75,0.15)] text-[#e8b84b] border-[rgba(232,184,75,0.3)] hover:bg-[rgba(232,184,75,0.3)]'
+                                    : 'bg-white/5 text-[#6e6c68] border-white/10'
+                                }`}
+                              >
+                                {m.status === 'now_showing'
+                                  ? '▶ Đang chiếu'
+                                  : m.status === 'coming_soon'
+                                  ? '📅 Sắp ra mắt'
+                                  : '⏹ Ngừng chiếu'}
+                              </button>
+                            </td>
+
+                            <td className="p-4 font-mono-data">
+                              {m.duration_minutes ? `${m.duration_minutes} phút` : 'N/A'}
+                            </td>
+
+                            <td className="p-4 font-mono-data">
+                              {m.release_date || 'Chưa cập nhật'}
+                            </td>
+
+                            <td className="p-4 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteMovie(m.id, m.title)}
+                                className="bg-white/5 hover:bg-[rgba(192,57,43,0.2)] text-[#a09e9a] hover:text-[#e07060] border border-white/10 hover:border-[rgba(192,57,43,0.4)] rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all cursor-pointer"
+                              >
+                                Xóa phim
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Control for Movies */}
+                  <PaginationControl
+                    currentPage={moviePage}
+                    totalItems={filtered.length}
+                    pageSize={PAGE_SIZE}
+                    onPageChange={setMoviePage}
+                  />
+                </>
               )
             })()}
           </div>

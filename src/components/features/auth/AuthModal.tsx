@@ -8,7 +8,7 @@ import PolicyModal from './PolicyModal'
 
 export default function AuthModal() {
   const navigate = useNavigate()
-  const { isAuthModalOpen, closeAuthModal, authMode, setAuthMode, login, register } = useAuth()
+  const { isAuthModalOpen, closeAuthModal, authMode, setAuthMode, login, register, authNotice } = useAuth()
   const { reset } = useBooking()
   const { theme } = useTheme()
   const isLight = theme === 'light'
@@ -65,10 +65,6 @@ export default function AuthModal() {
     setLoading(true)
     try {
       await login(account, loginPassword, loginCaptchaId, loginCaptchaAnswer)
-      // Chuyển ngay về trang chủ sau khi đăng nhập thành công
-      reset()
-      navigate('/')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
       closeAuthModal()
     } catch (err: any) {
       const msg = err.response?.data?.detail ?? 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.'
@@ -186,6 +182,14 @@ export default function AuthModal() {
               </span>
             </span>
           </div>
+
+          {/* Prominent Auth Requirement Notice (e.g. when buying tickets) */}
+          {authNotice && (
+            <div className="mb-4 p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-400 text-xs font-bold flex items-center gap-2.5 shadow-md animate-fade-in">
+              <span className="text-base">🔒</span>
+              <span className="leading-snug">{authNotice}</span>
+            </div>
+          )}
 
           {/* Toggle Tab Bar */}
           <div

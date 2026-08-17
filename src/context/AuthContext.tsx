@@ -7,7 +7,9 @@ interface AuthContextValue {
   isAuthenticated: boolean
   isAuthLoading: boolean
   isAuthModalOpen: boolean
-  openAuthModal: (mode?: 'login' | 'register') => void
+  authNotice: string | null
+  setAuthNotice: (msg: string | null) => void
+  openAuthModal: (mode?: 'login' | 'register', notice?: string) => void
   closeAuthModal: () => void
   authMode: 'login' | 'register'
   setAuthMode: (mode: 'login' | 'register') => void
@@ -35,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   })
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
+  const [authNotice, setAuthNotice] = useState<string | null>(null)
 
   // Check existing login on mount
   useEffect(() => {
@@ -68,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(u)
     localStorage.setItem('cached_user', JSON.stringify(u))
     setIsAuthModalOpen(false)
+    setAuthNotice(null)
   }
 
   async function register(req: RegisterRequest) {
@@ -82,13 +86,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('cached_user')
   }
 
-  function openAuthModal(mode: 'login' | 'register' = 'login') {
+  function openAuthModal(mode: 'login' | 'register' = 'login', notice?: string) {
     setAuthMode(mode)
+    setAuthNotice(notice || null)
     setIsAuthModalOpen(true)
   }
 
   function closeAuthModal() {
     setIsAuthModalOpen(false)
+    setAuthNotice(null)
   }
 
   return (
@@ -98,6 +104,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         isAuthLoading,
         isAuthModalOpen,
+        authNotice,
+        setAuthNotice,
         openAuthModal,
         closeAuthModal,
         authMode,
