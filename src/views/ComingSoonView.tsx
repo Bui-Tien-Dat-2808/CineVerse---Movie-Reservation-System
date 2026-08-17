@@ -144,10 +144,11 @@ export default function ComingSoonView() {
             return (
               <div
                 key={m.id}
-                className={`border rounded-2xl overflow-hidden shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col group ${
+                onClick={() => navigate(`/movie/${m.id}`)}
+                className={`border rounded-2xl overflow-hidden shadow-xl transition-all duration-300 hover:-translate-y-1.5 flex flex-col group cursor-pointer ${
                   isLight
-                    ? 'bg-white border-slate-200 hover:border-amber-500/40 shadow-slate-200/60'
-                    : 'bg-[#111118] border-white/10 hover:border-[#e8b84b]/40 shadow-xl'
+                    ? 'bg-white border-slate-200 hover:border-amber-500/50 shadow-slate-200/60 hover:shadow-amber-500/10'
+                    : 'bg-[#111118] border-white/10 hover:border-[#e8b84b]/50 shadow-xl hover:shadow-[0_8px_30px_rgba(232,184,75,0.15)]'
                 }`}
               >
                 {/* Poster Card */}
@@ -181,10 +182,10 @@ export default function ComingSoonView() {
                 </div>
 
                 {/* Info Container */}
-                <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
                   <div>
                     <h3
-                      className={`font-display font-bold text-lg transition-colors line-clamp-1 mb-1 ${
+                      className={`font-display font-bold text-lg transition-colors line-clamp-1 mb-1.5 ${
                         isLight
                           ? 'text-slate-900 group-hover:text-amber-700'
                           : 'text-[#f0ede8] group-hover:text-[#e8b84b]'
@@ -192,37 +193,16 @@ export default function ComingSoonView() {
                     >
                       {m.title}
                     </h3>
-                    <p className={`text-xs line-clamp-2 leading-relaxed ${isLight ? 'text-slate-600' : 'text-[#a09e9a]'}`}>
+                    <p className={`text-xs line-clamp-3 leading-relaxed ${isLight ? 'text-slate-600' : 'text-[#a09e9a]'}`}>
                       {m.description || 'Siêu phẩm điện ảnh đáng mong chờ nhất năm tại rạp CineVerse.'}
                     </p>
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="space-y-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => toggleSubscribe(m.id)}
-                      title="Tính năng nhận thông báo qua email/trình duyệt khi phim bắt đầu mở bán vé"
-                      className={`w-full py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center justify-center gap-1.5 ${
-                        isSubscribed
-                          ? 'bg-[#2ecc71]/15 text-[#2ecc71] border-[#2ecc71]/40'
-                          : 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] hover:shadow-[0_4px_16px_rgba(232,184,75,0.3)]'
-                      }`}
-                    >
-                      <span>{isSubscribed ? '✓ Đã đăng ký (Sắp ra mắt)' : '🔔 Nhận thông báo mở bán vé'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/movie/${m.id}`)}
-                      className={`w-full py-2 border rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                        isLight
-                          ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                          : 'bg-white/5 hover:bg-white/10 text-[#a09e9a] hover:text-[#f0ede8] border-white/10'
-                      }`}
-                    >
-                      ▶ Xem thông tin chi tiết
-                    </button>
+                  <div className={`text-[11px] font-mono-data font-bold flex items-center justify-between pt-2 border-t ${
+                    isLight ? 'border-slate-100 text-amber-700' : 'border-white/5 text-[#e8b84b]'
+                  }`}>
+                    <span>▶ Xem chi tiết</span>
+                    <span className="text-base group-hover:translate-x-1 transition-transform">→</span>
                   </div>
                 </div>
               </div>

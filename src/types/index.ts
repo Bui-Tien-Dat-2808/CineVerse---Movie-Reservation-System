@@ -1,5 +1,11 @@
 export type View = 'home' | 'detail' | 'seats' | 'checkout' | 'confirmed'
 
+export interface CastMember {
+  name: string
+  character?: string
+  profile_url?: string
+}
+
 export interface Movie {
   id: number
   title: string
@@ -11,6 +17,9 @@ export interface Movie {
   director: string
   synopsis: string
   img: string
+  trailerUrl?: string
+  cast?: CastMember[]
+  status?: string
 }
 
 export interface ShowTime {

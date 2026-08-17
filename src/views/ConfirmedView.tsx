@@ -143,7 +143,7 @@ export default function ConfirmedView() {
           onClick={handleReset}
           className="flex-1 bg-[#e8b84b] text-[#09090e] border-0 rounded py-3.5 text-sm font-bold cursor-pointer hover:shadow-[0_8px_30px_rgba(232,184,75,0.4)] transition-all"
         >
-          Về trang chủ →
+          Quay lại →
         </button>
       </div>
 

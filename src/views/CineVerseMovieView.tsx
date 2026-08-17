@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useBooking } from '../context/BookingContext'
 import { useMovie } from '../hooks/useMovies'
@@ -17,12 +17,28 @@ function formatYYYYMMDD(d: Date): string {
   return `${year}-${month}-${day}`
 }
 
+function buildTrailerEmbedUrl(url: string): string {
+  if (!url) return ''
+  try {
+    const parsed = new URL(url)
+    parsed.searchParams.set('autoplay', '1')
+    parsed.searchParams.set('rel', '0')
+    return parsed.toString()
+  } catch {
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}autoplay=1&rel=0`
+  }
+}
+
 export default function CineVerseMovieView() {
   const { id } = useParams<{ id: string }>()
   const movieId = id ? Number(id) : null
   const navigate = useNavigate()
   const { theme } = useTheme()
   const isDark = theme === 'dark'
+
+  const [isTrailerOpen, setIsTrailerOpen] = useState(false)
+  const [isSubscribed, setIsSubscribed] = useState(false)
 
   const {
     state,
@@ -198,9 +214,15 @@ export default function CineVerseMovieView() {
     })
   }, [state.selectedSeats, seatItemMap, state.selectedShowtime])
 
-  function handleBackToHome() {
+  function handleBack() {
     reset()
-    navigate('/')
+    if (movie?.status === 'coming_soon') {
+      navigate('/sap-ra-mat')
+    } else if (window.history.length > 1) {
+      navigate(-1)
+    } else {
+      navigate('/')
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -258,10 +280,10 @@ export default function CineVerseMovieView() {
           </p>
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={handleBack}
             className="w-full bg-[#e8b84b] text-[#09090e] py-3 rounded-xl font-bold text-xs cursor-pointer hover:bg-[#f5c759] transition-all"
           >
-            Trở Về Trang Chủ
+            Quay lại
           </button>
         </div>
       </div>
@@ -276,13 +298,13 @@ export default function CineVerseMovieView() {
       <div className="flex items-center justify-between gap-4 mb-6">
         <button
           type="button"
-          onClick={handleBackToHome}
+          onClick={handleBack}
           className={cn(
             'inline-flex items-center gap-2 bg-transparent border-0 text-sm font-semibold cursor-pointer transition-colors w-fit',
             isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
           )}
         >
-          ← Quay lại trang chủ
+          ← Quay lại
         </button>
       </div>
 
@@ -294,339 +316,557 @@ export default function CineVerseMovieView() {
           : 'bg-white border-slate-200 text-slate-900 shadow-xl'
       )}>
 
-        {/* Date Selector Header Bar (Top Row in CineVerse design) */}
-        <section aria-label="Chọn ngày chiếu" className="mb-8 border-b pb-6 border-white/10">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-base">📅</span>
-            <h2 className={cn('font-display text-sm font-bold uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
-              Chọn ngày chiếu
-            </h2>
-          </div>
-
-          <fieldset className="border-0 p-0 m-0">
-            <legend className="sr-only">Danh sách ngày chiếu</legend>
-            <div className="flex flex-wrap gap-2.5 sm:gap-3 py-1">
-              {dateObjects.map((d, i) => {
-                const isToday = formatYYYYMMDD(d) === todayStr
-                const active = safeDateIdx === i
-                const dayNum = d.getDate()
-                const dayOfWeek = isToday ? 'Hôm nay' : d.toLocaleDateString('vi-VN', { weekday: 'short' })
-
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => selectDate(i)}
-                    aria-pressed={active}
-                    className={cn(
-                      'flex-shrink-0 min-w-[76px] px-4 py-3 rounded-2xl border text-center transition-all duration-200 cursor-pointer',
-                      active
-                        ? isDark
-                          ? 'border-[#e8b84b] bg-[rgba(232,184,75,0.15)] text-[#e8b84b] font-bold shadow-[0_0_15px_rgba(232,184,75,0.25)] scale-105'
-                          : 'border-amber-500 bg-amber-500/10 text-amber-700 font-bold shadow-md scale-105'
-                        : isDark
-                          ? 'border-white/10 bg-[#12121a] text-[#a09e9a] hover:border-white/20 hover:text-[#f0ede8] hover:bg-white/[0.04]'
-                          : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:text-slate-900'
-                    )}
-                  >
-                    <div className="text-[11px] font-medium uppercase tracking-wider mb-1 opacity-80">
-                      {dayOfWeek}
-                    </div>
-                    <div className="font-mono-data text-xl font-extrabold leading-none">
-                      {dayNum}
-                    </div>
-                  </button>
-                )
-              })}
+        {/* Date Selector Header Bar (Only for Now Showing movies) */}
+        {movie.status !== 'coming_soon' && (
+          <section aria-label="Chọn ngày chiếu" className="mb-8 border-b pb-6 border-white/10">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">📅</span>
+              <h2 className={cn('font-display text-sm font-bold uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                Chọn ngày chiếu
+              </h2>
             </div>
-          </fieldset>
-        </section>
 
-        {/* 2-Column Grid Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
+            <fieldset className="border-0 p-0 m-0">
+              <legend className="sr-only">Danh sách ngày chiếu</legend>
+              <div className="flex flex-wrap gap-2.5 sm:gap-3 py-1">
+                {dateObjects.map((d, i) => {
+                  const isToday = formatYYYYMMDD(d) === todayStr
+                  const active = safeDateIdx === i
+                  const dayNum = d.getDate()
+                  const dayOfWeek = isToday ? 'Hôm nay' : d.toLocaleDateString('vi-VN', { weekday: 'short' })
 
-          {/* LEFT COLUMN: Movie Info + Showtime + Selected Tickets + Total & Buy */}
-          <div className="lg:col-span-5 flex flex-col justify-between space-y-8">
-            
-            {/* 1. Movie Overview */}
-            <article className="space-y-4">
-              <div className="flex gap-5">
-                {/* Poster */}
-                <div className="flex-shrink-0 w-28 sm:w-36 rounded-2xl overflow-hidden shadow-lg border border-white/10 bg-[#14141e] aspect-[2/3]">
-                  <img
-                    src={movie.img}
-                    alt={`Poster phim ${movie.title}`}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-
-                {/* Info Text */}
-                <div className="flex-1 min-w-0 space-y-2">
-                  <div className="flex gap-1.5 flex-wrap">
-                    {movie.genre.map((g) => (
-                      <GenreBadge key={g} label={g} />
-                    ))}
-                  </div>
-
-                  <h1 className={cn('font-display text-2xl sm:text-3xl font-black leading-tight tracking-tight', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
-                    {movie.title}
-                  </h1>
-
-                  <div className={cn('flex flex-wrap gap-x-3 gap-y-1 text-xs font-mono-data', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
-                    {movie.year > 0 && <span>{movie.year}</span>}
-                    {movie.duration && movie.duration !== 'N/A' && <span>• {movie.duration}</span>}
-                    {movie.director && <span>• Đạo diễn: {movie.director}</span>}
-                  </div>
-
-                  <p className={cn('text-xs leading-relaxed line-clamp-3 pt-1', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
-                    {movie.synopsis || 'Nội dung phim đang được cập nhật.'}
-                  </p>
-                </div>
-              </div>
-            </article>
-
-            {/* 2. Showtime Picker (Selected Time) */}
-            <section aria-label="Chọn giờ chiếu" className={cn(
-              'p-5 rounded-2xl border space-y-3',
-              isDark ? 'bg-[#12121c] border-white/10' : 'bg-slate-50 border-slate-200'
-            )}>
-              <div className="flex items-center justify-between">
-                <h2 className={cn('font-display text-xs font-bold uppercase tracking-wider flex items-center gap-2', isDark ? 'text-[#e8b84b]' : 'text-amber-700')}>
-                  <span>⏰ Suất chiếu</span>
-                </h2>
-                {isLoadingShowtimes && (
-                  <span className="font-mono-data text-[11px] text-[#e8b84b] animate-pulse">
-                    Đang tải...
-                  </span>
-                )}
-              </div>
-
-              {isLoadingShowtimes ? (
-                <div className={cn('py-6 text-center text-xs font-mono-data animate-pulse', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
-                  ⏳ Đang kiểm tra lịch chiếu...
-                </div>
-              ) : isErrorShowtimes ? (
-                <div className={cn('py-4 px-3 text-center text-xs rounded-xl border space-y-2', isDark ? 'bg-red-950/20 border-red-800/40 text-red-400' : 'bg-red-50 border-red-200 text-red-700')}>
-                  <p>⚠ Không thể tải suất chiếu từ máy chủ.</p>
-                  <button
-                    type="button"
-                    onClick={() => refetchShowtimes()}
-                    className="px-3 py-1 bg-[#e8b84b] text-[#09090e] rounded-lg font-bold text-xs cursor-pointer hover:bg-[#f5c759]"
-                  >
-                    🔄 Thử lại
-                  </button>
-                </div>
-              ) : displayShowtimes.length === 0 ? (
-                <div className={cn('py-6 px-3 text-center text-xs font-mono-data rounded-xl border', isDark ? 'bg-[#0e0e15] border-white/5 text-[#a09e9a]' : 'bg-white border-slate-200 text-slate-500')}>
-                  🍿 Chưa có suất chiếu cho ngày này. Vui lòng chọn ngày khác.
-                </div>
-              ) : (
-                <div className="space-y-4 max-h-[260px] overflow-y-auto pr-2 scrollbar-thin">
-                  {groupedShowtimes.map(({ type, list }) => (
-                    <div key={type} className="space-y-2">
-                      <div className={cn('text-[11px] font-mono-data font-bold uppercase tracking-wide flex items-center justify-between', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
-                        <span>Phòng {type}</span>
-                        <span>{list.length} suất</span>
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => selectDate(i)}
+                      aria-pressed={active}
+                      className={cn(
+                        'flex-shrink-0 min-w-[76px] px-4 py-3 rounded-2xl border text-center transition-all duration-200 cursor-pointer',
+                        active
+                          ? isDark
+                            ? 'border-[#e8b84b] bg-[rgba(232,184,75,0.15)] text-[#e8b84b] font-bold shadow-[0_0_15px_rgba(232,184,75,0.25)] scale-105'
+                            : 'border-amber-500 bg-amber-500/10 text-amber-700 font-bold shadow-md scale-105'
+                          : isDark
+                            ? 'border-white/10 bg-[#12121a] text-[#a09e9a] hover:border-white/20 hover:text-[#f0ede8] hover:bg-white/[0.04]'
+                            : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:text-slate-900'
+                      )}
+                    >
+                      <div className="text-[11px] font-medium uppercase tracking-wider mb-1 opacity-80">
+                        {dayOfWeek}
                       </div>
+                      <div className="font-mono-data text-xl font-extrabold leading-none">
+                        {dayNum}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </fieldset>
+          </section>
+        )}
 
-                      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-2.5 p-0.5">
-                        {list.map((st) => {
-                          const isSelected = state.selectedShowtime?.id === st.id
+        {/* Main Content Layout: Dedicated Coming Soon View vs Now Showing 2-Column Grid */}
+        {movie.status === 'coming_soon' ? (
+          <div className="space-y-8">
+            <div className="flex flex-col md:flex-row gap-8 items-start">
+              {/* Poster with Release Date overlay */}
+              <div className="flex-shrink-0 w-48 sm:w-64 rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-[#14141e] aspect-[2/3] relative group mx-auto md:mx-0">
+                <img
+                  src={movie.img}
+                  alt={`Poster phim ${movie.title}`}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-3 left-3 bg-[#e8b84b] text-[#09090e] font-black text-xs px-2.5 py-1 rounded-lg shadow-lg">
+                  🎬 SẮP RA MẮT
+                </div>
+              </div>
+
+              {/* Detailed Coming Soon Content */}
+              <div className="flex-1 space-y-5 w-full">
+                <div className="flex gap-2 flex-wrap">
+                  {movie.genre.map((g) => (
+                    <GenreBadge key={g} label={g} />
+                  ))}
+                </div>
+
+                <h1 className={cn('font-display text-3xl sm:text-4xl font-black leading-tight tracking-tight', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                  {movie.title}
+                </h1>
+
+                <div className={cn('flex flex-wrap gap-x-4 gap-y-2 text-xs font-mono-data', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                  {movie.year > 0 && <span>Năm phát hành: {movie.year}</span>}
+                  {movie.duration && movie.duration !== 'N/A' && <span>• Thời lượng: {movie.duration}</span>}
+                  {movie.rating && <span className="bg-[#e8b84b]/20 text-[#e8b84b] px-2 py-0.5 rounded font-bold">• Độ tuổi: {movie.rating}</span>}
+                </div>
+
+                {/* Director & Cast info box */}
+                <div className={cn('space-y-3 p-4 rounded-2xl border text-xs', isDark ? 'bg-[#12121a] border-white/10' : 'bg-slate-50 border-slate-200')}>
+                  {movie.director && (
+                    <div>
+                      <span className={cn('font-bold block mb-1', isDark ? 'text-[#e8b84b]' : 'text-amber-700')}>🎬 ĐẠO DIỄN:</span>
+                      <span className={cn('font-semibold text-sm', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>{movie.director}</span>
+                    </div>
+                  )}
+
+                  {movie.cast && movie.cast.length > 0 && (
+                    <div>
+                      <span className={cn('font-bold block mb-2 text-xs uppercase tracking-wider', isDark ? 'text-[#e8b84b]' : 'text-amber-700')}>
+                        🎭 DIỄN VIÊN CHÍNH:
+                      </span>
+                      <div className="flex flex-wrap gap-3">
+                        {movie.cast.map((actor, idx) => {
+                          const name = typeof actor === 'string' ? actor : actor.name
+                          const char = typeof actor === 'object' ? actor.character : null
+                          const photo = typeof actor === 'object' ? actor.profile_url : null
 
                           return (
-                            <button
-                              key={st.id}
-                              type="button"
-                              onClick={() => selectShowtime(st)}
-                              aria-pressed={isSelected}
+                            <div
+                              key={name + idx}
                               className={cn(
-                                'flex flex-col items-center justify-center p-2.5 rounded-xl border text-center cursor-pointer transition-all duration-150',
-                                isSelected
-                                  ? isDark
-                                    ? 'border-[#e8b84b] bg-[rgba(232,184,75,0.2)] text-[#e8b84b] font-bold shadow-[0_0_12px_rgba(232,184,75,0.3)] scale-[1.03]'
-                                    : 'border-amber-500 bg-amber-100 text-amber-900 font-bold shadow-md scale-[1.03]'
-                                  : isDark
-                                    ? 'border-white/10 bg-[#181824] text-[#f0ede8] hover:border-white/20 hover:bg-white/[0.08]'
-                                    : 'border-slate-200 bg-white text-slate-800 hover:border-amber-400 hover:bg-amber-50/60'
+                                'flex items-center gap-2.5 p-2 pr-3.5 rounded-2xl border transition-all shadow-xs',
+                                isDark ? 'bg-[#181826] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-800'
                               )}
                             >
-                              <span className={cn(
-                                'text-[10px] font-mono-data font-bold px-2 py-0.5 rounded uppercase tracking-wider mb-1',
-                                isSelected
-                                  ? isDark
-                                    ? 'bg-[#e8b84b]/25 text-[#e8b84b] border border-[#e8b84b]/40'
-                                    : 'bg-amber-200 text-amber-950 font-extrabold'
-                                  : isDark
-                                    ? 'bg-white/10 text-[#a09e9a] border border-white/5'
-                                    : 'bg-slate-100 text-slate-600 border border-slate-200'
-                              )}>
-                                {st.hall || `Phòng ${st.type}`}
-                              </span>
-
-                              <span className="font-mono-data text-sm sm:text-base font-extrabold">{st.time}</span>
-
-                              <span className={cn('text-[10px] opacity-80 font-mono-data mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
-                                {fmt(st.price)}
-                              </span>
-                            </button>
+                              {photo ? (
+                                <img
+                                  src={photo}
+                                  alt={name}
+                                  className="w-10 h-10 rounded-xl object-cover border border-white/10 flex-shrink-0"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-xl bg-[#e8b84b]/20 text-[#e8b84b] font-bold text-xs flex items-center justify-center flex-shrink-0 border border-[#e8b84b]/30">
+                                  {name.charAt(0)}
+                                </div>
+                              )}
+                              <div className="text-left leading-tight">
+                                <div className="font-bold text-xs line-clamp-1">{name}</div>
+                                {char && (
+                                  <div className={cn('text-[10px] line-clamp-1 opacity-75 font-mono-data', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                                    {char}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           )
                         })}
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
-            </section>
 
-            {/* 3. Selected Tickets List */}
-            <section aria-label="Danh sách vé đã chọn" className={cn(
-              'p-5 rounded-2xl border space-y-3',
-              isDark ? 'bg-[#12121c] border-white/10' : 'bg-slate-50 border-slate-200'
-            )}>
-              <div className="flex items-center justify-between">
-                <h2 className={cn('font-display text-xs font-bold uppercase tracking-wider flex items-center gap-2', isDark ? 'text-[#e8b84b]' : 'text-amber-700')}>
-                  <span>🎟️ Vé đã chọn</span>
-                </h2>
-                <span className={cn('font-mono-data text-xs font-bold px-2 py-0.5 rounded', isDark ? 'bg-white/10 text-[#e8b84b]' : 'bg-amber-100 text-amber-900')}>
-                  {selectedTicketsList.length} ghế
-                </span>
-              </div>
-
-              {selectedTicketsList.length === 0 ? (
-                <div className={cn('py-4 text-center text-xs font-mono-data', isDark ? 'text-[#6e6c68]' : 'text-slate-500')}>
-                  Vui lòng chọn ghế trên sơ đồ bên phải
+                {/* Extended Synopsis */}
+                <div className="space-y-2">
+                  <h3 className={cn('font-display text-xs font-bold uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                    Nội dung phim
+                  </h3>
+                  <p className={cn('text-sm leading-relaxed', isDark ? 'text-[#f0ede8]/90' : 'text-slate-700')}>
+                    {movie.synopsis || 'Nội dung bộ phim đang được cập nhật.'}
+                  </p>
                 </div>
-              ) : (
-                <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
-                  {selectedTicketsList.map((t) => (
-                    <div
-                      key={t.key}
-                      className={cn(
-                        'flex items-center justify-between p-3 rounded-xl border transition-all text-xs',
-                        isDark ? 'bg-[#181826] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
-                      )}
+
+                {/* Action Buttons Bar */}
+                <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-white/10">
+                  {movie.trailerUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsTrailerOpen(true)}
+                      className="px-5 py-3 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-400 hover:bg-amber-500/25 hover:scale-105 transition-all text-xs font-bold cursor-pointer flex items-center gap-2"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono-data font-extrabold text-sm text-[#e8b84b]">
-                          {t.rowLabel}
-                        </span>
-                        <span className="font-mono-data font-bold">
-                          ghế {t.colNumber}
-                        </span>
-                        <span className={cn('text-[10px] px-1.5 py-0.5 rounded uppercase font-bold',
-                          t.seatType === 'couple'
-                            ? 'bg-pink-500/20 text-pink-400'
-                            : t.seatType === 'vip'
-                            ? 'bg-amber-500/20 text-amber-400'
-                            : 'bg-white/10 text-[#a09e9a]'
-                        )}>
-                          {t.seatType === 'couple' ? 'Đôi 💑' : t.seatType === 'vip' ? 'VIP' : 'Thường'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono-data font-bold text-xs text-[#e8b84b]">
-                          {fmt(t.price)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => toggleSeat(t.key)}
-                          className="text-[#a09e9a] hover:text-red-400 text-sm font-bold cursor-pointer p-0.5 leading-none transition-colors"
-                          title={`Bỏ chọn ghế ${t.key}`}
-                          aria-label={`Bỏ chọn ghế ${t.key}`}
-                        >
-                          ✕
-                        </button>
-                      </div>
+                      <span>▶</span> Xem Trailer HD
+                    </button>
+                  ) : (
+                    <div className={cn('px-4 py-2.5 rounded-xl border text-xs font-medium flex items-center gap-2 opacity-80', isDark ? 'bg-white/5 border-white/10 text-zinc-400' : 'bg-slate-100 border-slate-200 text-slate-500')}>
+                      <span>🎬</span> Trailer chưa được cập nhật
                     </div>
-                  ))}
-                </div>
-              )}
-            </section>
+                  )}
 
-            {/* 4. Total Price & Buy CTA */}
-            <div className={cn(
-              'pt-4 border-t flex items-center justify-between gap-4',
-              isDark ? 'border-white/10' : 'border-slate-200'
-            )}>
-              <div>
-                <span className={cn('text-[11px] font-mono-data uppercase tracking-wider block', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
-                  Tổng tiền
-                </span>
-                <span className="font-display font-black text-2xl sm:text-3xl text-[#e8b84b]">
-                  {fmt(currentTotalPrice)}
-                </span>
-              </div>
-
-              <button
-                type="button"
-                id="buy-tickets-btn"
-                onClick={handleContinueToCheckout}
-                disabled={!state.selectedShowtime || state.selectedSeats.size === 0}
-                className={cn(
-                  'px-8 py-3.5 rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-lg',
-                  state.selectedShowtime && state.selectedSeats.size > 0
-                    ? 'bg-[#e8b84b] text-[#09090e] hover:bg-[#f5c759] hover:shadow-[0_6px_24px_rgba(232,184,75,0.4)] hover:-translate-y-0.5 active:translate-y-0'
-                    : isDark
-                      ? 'bg-white/10 text-[#6e6c68] cursor-not-allowed opacity-50'
-                      : 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-60'
-                )}
-              >
-                Mua vé →
-              </button>
-            </div>
-
-          </div>
-
-          {/* RIGHT COLUMN: Interactive Seat Map & Legend */}
-          <div className="lg:col-span-7 flex flex-col space-y-4">
-
-            {/* Seat Legend (Moved to Top for Easy Visibility) */}
-            <div className={cn(
-              'p-3.5 rounded-2xl border flex items-center justify-between shadow-xs',
-              isDark ? 'bg-[#0f0f18] border-white/10' : 'bg-slate-50 border-slate-200'
-            )}>
-              <SeatLegend />
-            </div>
-
-            {/* Seat Map Container */}
-            <section aria-label="Sơ đồ chọn ghế" className={cn(
-              'p-4 sm:p-6 rounded-2xl border min-h-[380px] flex flex-col justify-center',
-              isDark ? 'bg-[#0f0f18] border-white/10' : 'bg-slate-50 border-slate-200'
-            )}>
-              {!state.selectedShowtime ? (
-                <div className={cn('py-20 text-center font-mono-data text-xs space-y-2', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
-                  <span className="text-3xl block mb-2">👈</span>
-                  <p>Vui lòng chọn một suất chiếu ở cột bên trái để hiển thị sơ đồ ghế.</p>
-                </div>
-              ) : isErrorSeatMap ? (
-                <div className={cn('py-12 text-center text-xs space-y-3 rounded-xl border p-4', isDark ? 'bg-red-950/20 border-red-800/40 text-red-400' : 'bg-red-50 border-red-200 text-red-700')}>
-                  <p>⚠ Không thể tải sơ đồ ghế từ hệ thống.</p>
                   <button
                     type="button"
-                    onClick={() => refetchSeatMap()}
-                    className="px-4 py-2 bg-[#e8b84b] text-[#09090e] rounded-lg font-bold text-xs cursor-pointer hover:bg-[#f5c759]"
+                    onClick={() => setIsSubscribed(!isSubscribed)}
+                    className={cn(
+                      'px-5 py-3 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center gap-2 shadow-md',
+                      isSubscribed
+                        ? 'bg-[#2ecc71]/15 text-[#2ecc71] border-[#2ecc71]/40'
+                        : 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] hover:bg-[#f5c759] hover:shadow-[0_4px_16px_rgba(232,184,75,0.3)]'
+                    )}
                   >
-                    🔄 Thử lại
+                    <span>{isSubscribed ? '✓ Đã đăng ký nhận thông báo' : '🔔 Nhận thông báo mở bán vé'}</span>
                   </button>
                 </div>
-              ) : (
-                <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-white/10 pb-2">
-                  <SeatMap
-                    selectedSeats={state.selectedSeats}
-                    onToggle={toggleSeat}
-                    seats={seatMap?.seats}
-                    isLoading={isLoadingSeatMap}
-                  />
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* 2-Column Grid Layout for Now Showing movies */
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
+
+            {/* LEFT COLUMN: Movie Info + Showtime + Selected Tickets + Total & Buy */}
+            <div className="lg:col-span-5 flex flex-col justify-between space-y-8">
+              
+              {/* 1. Movie Overview */}
+              <article className="space-y-4">
+                <div className="flex gap-5">
+                  {/* Poster */}
+                  <div className="flex-shrink-0 w-28 sm:w-36 rounded-2xl overflow-hidden shadow-lg border border-white/10 bg-[#14141e] aspect-[2/3]">
+                    <img
+                      src={movie.img}
+                      alt={`Poster phim ${movie.title}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  {/* Info Text */}
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="flex gap-1.5 flex-wrap">
+                      {movie.genre.map((g) => (
+                        <GenreBadge key={g} label={g} />
+                      ))}
+                    </div>
+
+                    <h1 className={cn('font-display text-2xl sm:text-3xl font-black leading-tight tracking-tight', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                      {movie.title}
+                    </h1>
+
+                    <div className={cn('flex flex-wrap gap-x-3 gap-y-1 text-xs font-mono-data', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      {movie.year > 0 && <span>{movie.year}</span>}
+                      {movie.duration && movie.duration !== 'N/A' && <span>• {movie.duration}</span>}
+                      {movie.director && <span>• Đạo diễn: {movie.director}</span>}
+                    </div>
+
+                    {movie.cast && movie.cast.length > 0 && (
+                      <div className="pt-1">
+                        <span className={cn('font-bold block mb-1.5 text-xs uppercase tracking-wider', isDark ? 'text-[#e8b84b]' : 'text-amber-700')}>
+                          🎭 Diễn viên:
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {movie.cast.map((actor, idx) => {
+                            const name = typeof actor === 'string' ? actor : actor.name
+                            const photo = typeof actor === 'object' ? actor.profile_url : null
+
+                            return (
+                              <div
+                                key={name + idx}
+                                className={cn(
+                                  'flex items-center gap-2 p-1.5 pr-2.5 rounded-xl border transition-all text-xs',
+                                  isDark ? 'bg-[#181826] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-800'
+                                )}
+                              >
+                                {photo ? (
+                                  <img
+                                    src={photo}
+                                    alt={name}
+                                    className="w-7 h-7 rounded-lg object-cover border border-white/10 flex-shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-7 h-7 rounded-lg bg-[#e8b84b]/20 text-[#e8b84b] font-bold text-[10px] flex items-center justify-center flex-shrink-0">
+                                    {name.charAt(0)}
+                                  </div>
+                                )}
+                                <span className="font-semibold text-xs line-clamp-1">{name}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <p className={cn('text-xs leading-relaxed line-clamp-3 pt-1', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      {movie.synopsis || 'Nội dung phim đang được cập nhật.'}
+                    </p>
+
+                    <div className="pt-1 flex flex-wrap gap-2">
+                      {movie.trailerUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setIsTrailerOpen(true)}
+                          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-400 hover:bg-amber-500/25 hover:scale-105 transition-all text-xs font-bold cursor-pointer"
+                        >
+                          <span>▶</span> Xem Trailer HD
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              )}
-            </section>
+              </article>
+
+              {/* 2. Showtime Picker (Selected Time) */}
+              <section aria-label="Chọn giờ chiếu" className={cn(
+                'p-5 rounded-2xl border space-y-3',
+                isDark ? 'bg-[#12121c] border-white/10' : 'bg-slate-50 border-slate-200'
+              )}>
+                <div className="flex items-center justify-between">
+                  <h2 className={cn('font-display text-xs font-bold uppercase tracking-wider flex items-center gap-2', isDark ? 'text-[#e8b84b]' : 'text-amber-700')}>
+                    <span>⏰ Suất chiếu</span>
+                  </h2>
+                  {isLoadingShowtimes && (
+                    <span className="font-mono-data text-[11px] text-[#e8b84b] animate-pulse">
+                      Đang tải...
+                    </span>
+                  )}
+                </div>
+
+                {isLoadingShowtimes ? (
+                  <div className={cn('py-6 text-center text-xs font-mono-data animate-pulse', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                    ⏳ Đang kiểm tra lịch chiếu...
+                  </div>
+                ) : isErrorShowtimes ? (
+                  <div className={cn('py-4 px-3 text-center text-xs rounded-xl border space-y-2', isDark ? 'bg-red-950/20 border-red-800/40 text-red-400' : 'bg-red-50 border-red-200 text-red-700')}>
+                    <p>⚠ Không thể tải suất chiếu từ máy chủ.</p>
+                    <button
+                      type="button"
+                      onClick={() => refetchShowtimes()}
+                      className="px-3 py-1 bg-[#e8b84b] text-[#09090e] rounded-lg font-bold text-xs cursor-pointer hover:bg-[#f5c759]"
+                    >
+                      🔄 Thử lại
+                    </button>
+                  </div>
+                ) : displayShowtimes.length === 0 ? (
+                  <div className={cn('py-6 px-3 text-center text-xs font-mono-data rounded-xl border', isDark ? 'bg-[#0e0e15] border-white/5 text-[#a09e9a]' : 'bg-white border-slate-200 text-slate-500')}>
+                    🍿 Chưa có suất chiếu cho ngày này. Vui lòng chọn ngày khác.
+                  </div>
+                ) : (
+                  <div className="space-y-4 max-h-[260px] overflow-y-auto pr-2 scrollbar-thin">
+                    {groupedShowtimes.map(({ type, list }) => (
+                      <div key={type} className="space-y-2">
+                        <div className={cn('text-[11px] font-mono-data font-bold uppercase tracking-wide flex items-center justify-between', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                          <span>Phòng {type}</span>
+                          <span>{list.length} suất</span>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-2.5 p-0.5">
+                          {list.map((st) => {
+                            const isSelected = state.selectedShowtime?.id === st.id
+
+                            return (
+                              <button
+                                key={st.id}
+                                type="button"
+                                onClick={() => selectShowtime(st)}
+                                aria-pressed={isSelected}
+                                className={cn(
+                                  'flex flex-col items-center justify-center p-2.5 rounded-xl border text-center cursor-pointer transition-all duration-150',
+                                  isSelected
+                                    ? isDark
+                                      ? 'border-[#e8b84b] bg-[rgba(232,184,75,0.2)] text-[#e8b84b] font-bold shadow-[0_0_12px_rgba(232,184,75,0.3)] scale-[1.03]'
+                                      : 'border-amber-500 bg-amber-100 text-amber-900 font-bold shadow-md scale-[1.03]'
+                                    : isDark
+                                      ? 'border-white/10 bg-[#181824] text-[#f0ede8] hover:border-white/20 hover:bg-white/[0.08]'
+                                      : 'border-slate-200 bg-white text-slate-800 hover:border-amber-400 hover:bg-amber-50/60'
+                                )}
+                              >
+                                <span className={cn(
+                                  'text-[10px] font-mono-data font-bold px-2 py-0.5 rounded uppercase tracking-wider mb-1',
+                                  isSelected
+                                    ? isDark
+                                      ? 'bg-[#e8b84b]/25 text-[#e8b84b] border border-[#e8b84b]/40'
+                                      : 'bg-amber-200 text-amber-950 font-extrabold'
+                                    : isDark
+                                      ? 'bg-white/10 text-[#a09e9a] border border-white/5'
+                                      : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                )}>
+                                  {st.hall || `Phòng ${st.type}`}
+                                </span>
+
+                                <span className="font-mono-data text-sm sm:text-base font-extrabold">{st.time}</span>
+
+                                <span className={cn('text-[10px] opacity-80 font-mono-data mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                                  {fmt(st.price)}
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* 3. Selected Tickets List */}
+              <section aria-label="Danh sách vé đã chọn" className={cn(
+                'p-5 rounded-2xl border space-y-3',
+                isDark ? 'bg-[#12121c] border-white/10' : 'bg-slate-50 border-slate-200'
+              )}>
+                <div className="flex items-center justify-between">
+                  <h2 className={cn('font-display text-xs font-bold uppercase tracking-wider flex items-center gap-2', isDark ? 'text-[#e8b84b]' : 'text-amber-700')}>
+                    <span>🎟️ Vé đã chọn</span>
+                  </h2>
+                  <span className={cn('font-mono-data text-xs font-bold px-2 py-0.5 rounded', isDark ? 'bg-white/10 text-[#e8b84b]' : 'bg-amber-100 text-amber-900')}>
+                    {selectedTicketsList.length} ghế
+                  </span>
+                </div>
+
+                {selectedTicketsList.length === 0 ? (
+                  <div className={cn('py-4 text-center text-xs font-mono-data', isDark ? 'text-[#6e6c68]' : 'text-slate-500')}>
+                    Vui lòng chọn ghế trên sơ đồ bên phải
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                    {selectedTicketsList.map((t) => (
+                      <div
+                        key={t.key}
+                        className={cn(
+                          'flex items-center justify-between p-3 rounded-xl border transition-all text-xs',
+                          isDark ? 'bg-[#181826] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono-data font-extrabold text-sm text-[#e8b84b]">
+                            {t.rowLabel}
+                          </span>
+                          <span className="font-mono-data font-bold">
+                            ghế {t.colNumber}
+                          </span>
+                          <span className={cn('text-[10px] px-1.5 py-0.5 rounded uppercase font-bold',
+                            t.seatType === 'couple'
+                              ? 'bg-pink-500/20 text-pink-400'
+                              : t.seatType === 'vip'
+                              ? 'bg-amber-500/20 text-amber-400'
+                              : 'bg-white/10 text-[#a09e9a]'
+                          )}>
+                            {t.seatType === 'couple' ? 'Đôi 💑' : t.seatType === 'vip' ? 'VIP' : 'Thường'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono-data font-bold text-xs text-[#e8b84b]">
+                            {fmt(t.price)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleSeat(t.key)}
+                            className="text-[#a09e9a] hover:text-red-400 text-sm font-bold cursor-pointer p-0.5 leading-none transition-colors"
+                            title={`Bỏ chọn ghế ${t.key}`}
+                            aria-label={`Bỏ chọn ghế ${t.key}`}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* 4. Total Price & Buy CTA */}
+              <div className={cn(
+                'pt-4 border-t flex items-center justify-between gap-4',
+                isDark ? 'border-white/10' : 'border-slate-200'
+              )}>
+                <div>
+                  <span className={cn('text-[11px] font-mono-data uppercase tracking-wider block', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                    Tổng tiền
+                  </span>
+                  <span className="font-display font-black text-2xl sm:text-3xl text-[#e8b84b]">
+                    {fmt(currentTotalPrice)}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  id="buy-tickets-btn"
+                  onClick={handleContinueToCheckout}
+                  disabled={!state.selectedShowtime || state.selectedSeats.size === 0}
+                  className={cn(
+                    'px-8 py-3.5 rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-lg',
+                    state.selectedShowtime && state.selectedSeats.size > 0
+                      ? 'bg-[#e8b84b] text-[#09090e] hover:bg-[#f5c759] hover:shadow-[0_6px_24px_rgba(232,184,75,0.4)] hover:-translate-y-0.5 active:translate-y-0'
+                      : isDark
+                        ? 'bg-white/10 text-[#6e6c68] cursor-not-allowed opacity-50'
+                        : 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-60'
+                  )}
+                >
+                  Mua vé →
+                </button>
+              </div>
+
+            </div>
+
+            {/* RIGHT COLUMN: Interactive Seat Map & Legend */}
+            <div className="lg:col-span-7 flex flex-col space-y-4">
+
+              {/* Seat Legend (Moved to Top for Easy Visibility) */}
+              <div className={cn(
+                'p-3.5 rounded-2xl border flex items-center justify-between shadow-xs',
+                isDark ? 'bg-[#0f0f18] border-white/10' : 'bg-slate-50 border-slate-200'
+              )}>
+                <SeatLegend />
+              </div>
+
+              {/* Seat Map Container */}
+              <section aria-label="Sơ đồ chọn ghế" className={cn(
+                'p-4 sm:p-6 rounded-2xl border min-h-[380px] flex flex-col justify-center',
+                isDark ? 'bg-[#0f0f18] border-white/10' : 'bg-slate-50 border-slate-200'
+              )}>
+                {!state.selectedShowtime ? (
+                  <div className={cn('py-20 text-center font-mono-data text-xs space-y-2', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                    <span className="text-3xl block mb-2">👈</span>
+                    <p>Vui lòng chọn một suất chiếu ở cột bên trái để hiển thị sơ đồ ghế.</p>
+                  </div>
+                ) : isErrorSeatMap ? (
+                  <div className={cn('py-12 text-center text-xs space-y-3 rounded-xl border p-4', isDark ? 'bg-red-950/20 border-red-800/40 text-red-400' : 'bg-red-50 border-red-200 text-red-700')}>
+                    <p>⚠ Không thể tải sơ đồ ghế từ hệ thống.</p>
+                    <button
+                      type="button"
+                      onClick={() => refetchSeatMap()}
+                      className="px-4 py-2 bg-[#e8b84b] text-[#09090e] rounded-lg font-bold text-xs cursor-pointer hover:bg-[#f5c759]"
+                    >
+                      🔄 Thử lại
+                    </button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-white/10 pb-2">
+                    <SeatMap
+                      selectedSeats={state.selectedSeats}
+                      onToggle={toggleSeat}
+                      seats={seatMap?.seats}
+                      isLoading={isLoadingSeatMap}
+                    />
+                  </div>
+                )}
+              </section>
+
+            </div>
 
           </div>
-
-        </div>
+        )}
 
       </div>
+      {/* Trailer Modal */}
+      {isTrailerOpen && movie?.trailerUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in"
+          onClick={() => setIsTrailerOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-4xl bg-[#111118] border border-white/20 rounded-3xl overflow-hidden shadow-2xl space-y-3 p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-2">
+              <h3 className="text-sm font-bold text-[#f0ede8] flex items-center gap-2">
+                <span className="text-amber-400">🎬</span> Trailer: {movie.title}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsTrailerOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-colors text-xs font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black border border-white/10">
+              <iframe
+                src={buildTrailerEmbedUrl(movie.trailerUrl)}
+                title={`Trailer ${movie.title}`}
+                className="w-full h-full border-0"
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                allowFullScreen
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

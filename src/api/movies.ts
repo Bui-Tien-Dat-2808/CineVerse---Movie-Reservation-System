@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { Movie } from '../types'
+import type { Movie, CastMember } from '../types'
 
 // ── Response shape từ backend (/api/v1/movies/now-showing) ──
 export interface MovieListItem {
@@ -13,6 +13,8 @@ export interface MovieListItem {
   rating: string | null
   director?: string | null
   status: string
+  trailer_url?: string | null
+  cast?: CastMember[] | null
   genres: { id: number; name: string; description: string | null; created_at: string }[]
   created_at: string
 }
@@ -60,6 +62,9 @@ export function mapMovieItem(m: MovieListItem): Movie {
     synopsis: m.description || 'Nội dung bộ phim đang được cập nhật. Vui lòng theo dõi thêm thông tin chi tiết.',
     img: m.poster_url
       ?? `https://placehold.co/480x680/111118/f0ede8?text=${encodeURIComponent(m.title)}`,
+    trailerUrl: m.trailer_url || undefined,
+    cast: m.cast || undefined,
+    status: m.status,
   }
 }
 

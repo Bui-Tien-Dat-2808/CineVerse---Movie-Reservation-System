@@ -151,7 +151,7 @@ export default function PaymentResultView() {
               className="w-full py-3.5 rounded-xl text-xs font-black transition-all cursor-pointer bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-500 shadow-md flex items-center justify-center gap-1.5"
             >
               <span>🏠</span>
-              <span>Trở về trang chủ</span>
+              <span>Quay lại</span>
             </button>
           </div>
         </div>
@@ -204,7 +204,7 @@ export default function PaymentResultView() {
               )}
             >
               <span>🏠</span>
-              <span>Quay lại trang chủ</span>
+              <span>Quay lại</span>
             </button>
 
             <button

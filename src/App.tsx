@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { BookingProvider } from './context/BookingContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -6,18 +6,29 @@ import Navbar from './components/layout/Navbar'
 import Footer from './components/layout/Footer'
 import AuthModal from './components/features/auth/AuthModal'
 import HomeView from './views/HomeView'
-import DetailView from './views/DetailView'
-import CheckoutView from './views/CheckoutView'
-import ConfirmedView from './views/ConfirmedView'
-import ProfileView from './views/ProfileView'
-import ComingSoonView from './views/ComingSoonView'
-import TheatersView from './views/TheatersView'
-import PromotionsView from './views/PromotionsView'
-import PaymentResultView from './views/PaymentResultView'
-
-import AdminView from './views/AdminView'
-
 import { ThemeProvider } from './context/ThemeContext'
+
+// Lazy-loaded routes for code splitting
+const DetailView = lazy(() => import('./views/DetailView'))
+const CheckoutView = lazy(() => import('./views/CheckoutView'))
+const ConfirmedView = lazy(() => import('./views/ConfirmedView'))
+const ProfileView = lazy(() => import('./views/ProfileView'))
+const ComingSoonView = lazy(() => import('./views/ComingSoonView'))
+const TheatersView = lazy(() => import('./views/TheatersView'))
+const PromotionsView = lazy(() => import('./views/PromotionsView'))
+const PaymentResultView = lazy(() => import('./views/PaymentResultView'))
+const AdminView = lazy(() => import('./views/AdminView'))
+
+function PageFallback() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-2 border-[#e8b84b] border-t-transparent rounded-full animate-spin" />
+        <span className="font-mono-data text-xs text-[#a09e9a] tracking-wider uppercase">Đang tải...</span>
+      </div>
+    </div>
+  )
+}
 
 export default function App() {
   return (
@@ -65,20 +76,22 @@ function AppShell() {
       <Navbar />
 
       <main className="relative z-10 pt-16">
-        <Routes>
-          <Route path="/" element={isAdmin ? <Navigate to="/admin" replace /> : <HomeView />} />
-          <Route path="/admin" element={<AdminView />} />
-          <Route path="/profile" element={<ProfileView />} />
-          <Route path="/sap-ra-mat" element={isAdmin ? <Navigate to="/admin" replace /> : <ComingSoonView />} />
-          <Route path="/rap-chieu" element={isAdmin ? <Navigate to="/admin" replace /> : <TheatersView />} />
-          <Route path="/khuyen-mai" element={isAdmin ? <Navigate to="/admin" replace /> : <PromotionsView />} />
-          <Route path="/movie/:id" element={isAdmin ? <Navigate to="/admin" replace /> : <DetailView />} />
-          <Route path="/movie/:id/checkout" element={isAdmin ? <Navigate to="/admin" replace /> : <CheckoutView />} />
-          <Route path="/confirmed" element={isAdmin ? <Navigate to="/admin" replace /> : <ConfirmedView />} />
-          <Route path="/payment-result" element={<PaymentResultView />} />
-          {/* Catch-all: redirect về admin nếu là Admin, hoặc home nếu là User */}
-          <Route path="*" element={<Navigate to={isAdmin ? "/admin" : "/"} replace />} />
-        </Routes>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            <Route path="/" element={isAdmin ? <Navigate to="/admin" replace /> : <HomeView />} />
+            <Route path="/admin" element={<AdminView />} />
+            <Route path="/profile" element={<ProfileView />} />
+            <Route path="/sap-ra-mat" element={isAdmin ? <Navigate to="/admin" replace /> : <ComingSoonView />} />
+            <Route path="/rap-chieu" element={isAdmin ? <Navigate to="/admin" replace /> : <TheatersView />} />
+            <Route path="/khuyen-mai" element={isAdmin ? <Navigate to="/admin" replace /> : <PromotionsView />} />
+            <Route path="/movie/:id" element={isAdmin ? <Navigate to="/admin" replace /> : <DetailView />} />
+            <Route path="/movie/:id/checkout" element={isAdmin ? <Navigate to="/admin" replace /> : <CheckoutView />} />
+            <Route path="/confirmed" element={isAdmin ? <Navigate to="/admin" replace /> : <ConfirmedView />} />
+            <Route path="/payment-result" element={<PaymentResultView />} />
+            {/* Catch-all: redirect về admin nếu là Admin, hoặc home nếu là User */}
+            <Route path="*" element={<Navigate to={isAdmin ? "/admin" : "/"} replace />} />
+          </Routes>
+        </Suspense>
       </main>
 
       {/* Auth Modal popup */}
