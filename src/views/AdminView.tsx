@@ -1676,9 +1676,9 @@ export default function AdminView() {
   const [rooms, setRooms] = useState<RoomItem[]>([])
   const [vouchers, setVouchers] = useState<VoucherAdminItem[]>([])
   const [loading, setLoading] = useState(false)
-  const [actionMsg, setActionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [actionMsg, setActionMsg] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null)
 
-  const notify = (type: 'success' | 'error', text: string) => {
+  const notify = (type: 'success' | 'error' | 'warning', text: string) => {
     setActionMsg({ type, text })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -2297,9 +2297,23 @@ export default function AdminView() {
         movieStr = `${uniqueMovieTitles.length} bộ phim (${uniqueMovieTitles.join(', ')})`
       }
 
-      const count = res.data.count || autoPreviewList.length
+      const count = res.data.count ?? 0
+      const skipped = res.data.skipped || []
 
-      notify('success', `Đã xếp thành công ${count} suất chiếu cho phim ${movieStr}`)
+      if (skipped.length > 0) {
+        const skippedSummary = skipped
+          .map((s: any) => `${s.room_name || `Phòng ${s.room_id}`}: ${s.reason}`)
+          .slice(0, 3)
+          .join('; ')
+        const extraMsg = skipped.length > 3 ? ` (và ${skipped.length - 3} suất khác)` : ''
+
+        notify(
+          'warning',
+          `Đã tạo ${count} suất chiếu. ⚠️ Bỏ qua ${skipped.length} suất do phòng không có ghế active nào: ${skippedSummary}${extraMsg}`
+        )
+      } else {
+        notify('success', `Đã xếp thành công ${count} suất chiếu cho phim ${movieStr}`)
+      }
       setAutoModalOpen(false)
       setAutoPreviewList(null)
       loadAllData()
@@ -2626,11 +2640,13 @@ export default function AdminView() {
           className={`p-4 rounded-xl mb-6 text-xs flex items-center justify-between ${
             actionMsg.type === 'success'
               ? 'bg-[rgba(46,204,113,0.15)] border border-[rgba(46,204,113,0.3)] text-[#2ecc71]'
+              : actionMsg.type === 'warning'
+              ? 'bg-[rgba(232,184,75,0.15)] border border-[rgba(232,184,75,0.3)] text-[#e8b84b]'
               : 'bg-[rgba(192,57,43,0.15)] border border-[rgba(192,57,43,0.3)] text-[#e07060]'
           }`}
         >
-          <div className="flex items-center gap-2">
-            <span>{actionMsg.type === 'success' ? '✓' : '⚠'}</span>
+          <div className="flex items-center gap-2 whitespace-pre-line">
+            <span>{actionMsg.type === 'success' ? '✓' : '⚠️'}</span>
             <span>{actionMsg.text}</span>
           </div>
           <button
