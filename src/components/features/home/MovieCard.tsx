@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import type { Movie } from '../../../types'
-import { RatingBadge } from '../../ui/Badge'
 
 interface MovieCardProps {
   movie: Movie
@@ -32,7 +31,14 @@ export default function MovieCard({ movie, onSelect }: MovieCardProps) {
           loading="lazy"
         />
 
-        {/* Hover overlay — CTA only, không có badge */}
+        {/* Age Rating Badge */}
+        {movie.rating && movie.rating !== 'N/A' && (
+          <div className="absolute top-2.5 right-2.5 bg-[#e8b84b] text-[#09090e] font-black text-[11px] rounded px-2 py-0.5 shadow-md z-10">
+            {movie.rating}
+          </div>
+        )}
+
+        {/* Hover overlay — CTA only */}
         {hovered && (
           <div
             className="absolute inset-0 flex items-end p-3.5"
@@ -67,7 +73,6 @@ export default function MovieCard({ movie, onSelect }: MovieCardProps) {
 
         <div className="flex justify-between items-center text-xs text-[#6e6c68]">
           <span>{movie.duration}</span>
-          {movie.rating && movie.rating !== 'N/A' && <RatingBadge rating={movie.rating} />}
         </div>
       </div>
     </div>

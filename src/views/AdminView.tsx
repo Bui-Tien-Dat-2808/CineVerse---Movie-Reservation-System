@@ -15,7 +15,24 @@ interface MovieItem {
   release_date?: string
   status: 'now_showing' | 'coming_soon' | 'ended' | string
   rating?: string
+  director?: string
+  trailer_url?: string
+  cast?: Array<{ name: string; character?: string; profile_url?: string }>
   genres?: Array<{ id?: number; name: string }>
+  tmdb_id?: number
+}
+
+function buildTrailerEmbedUrl(url: string): string {
+  if (!url) return ''
+  try {
+    const parsed = new URL(url)
+    parsed.searchParams.set('autoplay', '1')
+    parsed.searchParams.set('rel', '0')
+    return parsed.toString()
+  } catch {
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}autoplay=1&rel=0`
+  }
 }
 
 interface SeatItemAdmin {
@@ -1635,15 +1652,27 @@ export default function AdminView() {
     }
   }, [isAuthenticated, isAuthLoading, user, navigate])
 
-  useEffect(() => {
-    setMoviePage(1)
-  }, [movieSubTab])
-
   // ─────────────────────────────────────────
   // Data States
   // ─────────────────────────────────────────
   const [movies, setMovies] = useState<MovieItem[]>([])
+  const [detailMovieModal, setDetailMovieModal] = useState<MovieItem | null>(null)
   const [showtimes, setShowtimes] = useState<ShowtimeItem[]>([])
+
+  useEffect(() => {
+    setMoviePage(1)
+  }, [movieSubTab])
+
+  useEffect(() => {
+    if (detailMovieModal) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [detailMovieModal])
   const [rooms, setRooms] = useState<RoomItem[]>([])
   const [vouchers, setVouchers] = useState<VoucherAdminItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -2022,6 +2051,16 @@ export default function AdminView() {
     }
   }
 
+  async function handleViewMovieDetail(movie: MovieItem) {
+    setDetailMovieModal(movie)
+    try {
+      const { data } = await apiClient.get<MovieItem>(`/api/v1/movies/${movie.id}`)
+      setDetailMovieModal(data)
+    } catch (err) {
+      console.error('Không thể tải chi tiết phim:', err)
+    }
+  }
+
   async function handleToggleVoucherActive(voucher: VoucherAdminItem) {
     try {
       await apiClient.put(`/api/v1/vouchers/${voucher.id}`, {
@@ -2170,6 +2209,28 @@ export default function AdminView() {
       notify('error', typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setAutoSyncLoading(false)
+    }
+  }
+
+  // Handle TMDB Trailer / Credits / Rating Backfill
+  const [backfillLoading, setBackfillLoading] = useState(false)
+
+  async function handleBackfillTrailers() {
+    setBackfillLoading(true)
+    try {
+      const res = await apiClient.post<any>('/api/v1/movies/admin/backfill-trailers')
+      const { updated, total_checked, errors, message } = res.data
+      if (errors && errors.length > 0) {
+        notify('error', `${message} (Có ${errors.length} lỗi)`)
+      } else {
+        notify('success', message || `Đã cập nhật ${updated}/${total_checked} phim thành công!`)
+      }
+      await loadAllData()
+    } catch (err: any) {
+      const msg = err.response?.data?.detail ?? 'Thực hiện backfill trailer thất bại.'
+      notify('error', typeof msg === 'string' ? msg : JSON.stringify(msg))
+    } finally {
+      setBackfillLoading(false)
     }
   }
 
@@ -2615,6 +2676,17 @@ export default function AdminView() {
                 <span>🚀</span>
                 <span>{autoSyncLoading ? 'Đang quét TMDB...' : 'Tự Động Lấy Phim Từ TMDB'}</span>
               </button>
+
+              <button
+                type="button"
+                disabled={backfillLoading}
+                onClick={handleBackfillTrailers}
+                className="bg-[#3498db]/20 text-[#3498db] border border-[#3498db]/40 hover:bg-[#3498db]/30 rounded-xl px-4 py-2.5 text-xs font-bold cursor-pointer transition-all flex items-center gap-2 disabled:opacity-50"
+                title="Bổ sung trailer HD, thông tin đạo diễn, diễn viên và độ tuổi cho các phim còn thiếu từ TMDB"
+              >
+                <span>🔄</span>
+                <span>{backfillLoading ? 'Đang bổ sung...' : 'Backfill Trailer/Đạo diễn/Diễn viên'}</span>
+              </button>
             </div>
           </div>
 
@@ -2745,13 +2817,23 @@ export default function AdminView() {
                             </td>
 
                             <td className="p-4 text-right">
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteMovie(m.id, m.title)}
-                                className="bg-white/5 hover:bg-[rgba(192,57,43,0.2)] text-[#a09e9a] hover:text-[#e07060] border border-white/10 hover:border-[rgba(192,57,43,0.4)] rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all cursor-pointer"
-                              >
-                                Xóa phim
-                              </button>
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleViewMovieDetail(m)}
+                                  className="bg-amber-500/15 hover:bg-amber-500/25 text-[#e8b84b] border border-amber-500/30 rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                                >
+                                  <span>👁️</span>
+                                  <span>Xem chi tiết</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteMovie(m.id, m.title)}
+                                  className="bg-white/5 hover:bg-[rgba(192,57,43,0.2)] text-[#a09e9a] hover:text-[#e07060] border border-white/10 hover:border-[rgba(192,57,43,0.4)] rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all cursor-pointer"
+                                >
+                                  Xóa phim
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -5303,6 +5385,171 @@ export default function AdminView() {
               >
                 <span>{autoGenerating ? '⏳ Đang tính toán...' : '🔍 Tạo Bản Xem Trước (Preview)'}</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Movie Detail Modal for Admin */}
+      {detailMovieModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-xl flex items-center justify-center z-[99999] p-3 sm:p-6">
+          <div className="bg-[#11111a] border border-white/15 rounded-3xl max-w-5xl w-full p-5 sm:p-7 space-y-5 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] relative text-left max-h-[88vh] flex flex-col overflow-hidden">
+            {/* Header: Title + Status + Close Button */}
+            <div className="flex items-start justify-between gap-4 pb-4 border-b border-white/10 shrink-0 pr-10 relative">
+              <div className="space-y-2 min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono-data uppercase border ${
+                    detailMovieModal.status === 'now_showing'
+                      ? 'bg-[#2ecc71]/15 text-[#2ecc71] border-[#2ecc71]/30'
+                      : detailMovieModal.status === 'coming_soon'
+                      ? 'bg-[#e8b84b]/15 text-[#e8b84b] border-[#e8b84b]/30'
+                      : 'bg-white/5 text-[#a09e9a] border-white/10'
+                  }`}>
+                    {detailMovieModal.status === 'now_showing' ? '▶ Đang chiếu' : detailMovieModal.status === 'coming_soon' ? '📅 Sắp ra mắt' : '⏹ Ngừng chiếu'}
+                  </span>
+
+                  {detailMovieModal.rating && detailMovieModal.rating !== 'N/A' && (
+                    <span className="bg-[#e8b84b] text-[#09090e] font-black text-[10px] rounded px-2 py-0.5 shadow-sm">
+                      {detailMovieModal.rating}
+                    </span>
+                  )}
+
+                  {detailMovieModal.genres?.map((g) => (
+                    <span key={g.name} className="px-2 py-0.5 rounded-lg bg-white/5 border border-white/10 text-[10px] text-[#a09e9a]">
+                      {g.name}
+                    </span>
+                  ))}
+                </div>
+
+                <h2 className="font-display text-xl sm:text-2xl font-bold text-[#f0ede8] leading-tight truncate">
+                  {detailMovieModal.title}
+                </h2>
+              </div>
+
+              {/* Only X Close Button */}
+              <button
+                type="button"
+                onClick={() => setDetailMovieModal(null)}
+                className="absolute top-0 right-0 w-9 h-9 rounded-full bg-white/10 hover:bg-rose-500/25 text-[#a09e9a] hover:text-white flex items-center justify-center text-base font-bold transition-all cursor-pointer border border-white/15 shrink-0 shadow-md"
+                title="Đóng"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* SINGLE Scrollable Content Container */}
+            <div className="overflow-y-auto pr-2 space-y-6 flex-1 scrollbar-thin scrollbar-thumb-amber-500/40">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                {/* Left Column: Poster + Meta + Synopsis + Cast (5 cols) */}
+                <div className="lg:col-span-5 space-y-5">
+                  <div className="flex gap-4 items-start bg-white/[0.02] border border-white/10 p-3.5 rounded-2xl">
+                    <div className="w-24 sm:w-28 aspect-[2/3] rounded-xl overflow-hidden shadow-lg border border-white/10 bg-[#181824] shrink-0">
+                      <img
+                        src={detailMovieModal.poster_url || 'https://images.unsplash.com/photo-1534996858221-380b92700493?w=300'}
+                        alt={detailMovieModal.title}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 space-y-2 text-xs text-[#a09e9a] min-w-0">
+                      {detailMovieModal.director && (
+                        <div>
+                          <span className="text-[#e8b84b] font-bold block">🎬 Đạo diễn:</span>
+                          <span className="text-[#f0ede8] font-medium">{detailMovieModal.director}</span>
+                        </div>
+                      )}
+                      {detailMovieModal.duration_minutes ? (
+                        <div>
+                          <span className="text-[#e8b84b] font-bold block">⏱️ Thời lượng:</span>
+                          <span className="text-[#f0ede8] font-mono-data">{detailMovieModal.duration_minutes} phút</span>
+                        </div>
+                      ) : null}
+                      {detailMovieModal.release_date ? (
+                        <div>
+                          <span className="text-[#e8b84b] font-bold block">📅 Khởi chiếu:</span>
+                          <span className="text-[#f0ede8] font-mono-data">{detailMovieModal.release_date}</span>
+                        </div>
+                      ) : null}
+                      {detailMovieModal.tmdb_id ? (
+                        <div>
+                          <span className="text-[#e8b84b] font-bold block">🎬 TMDB ID:</span>
+                          <span className="text-[#f0ede8] font-mono-data">#{detailMovieModal.tmdb_id}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Synopsis Box - Single scroll flow */}
+                  {detailMovieModal.description && (
+                    <div className="space-y-2 bg-white/[0.02] border border-white/10 p-4 rounded-2xl">
+                      <span className="font-bold block text-xs text-[#e8b84b] uppercase tracking-wider flex items-center gap-1.5">
+                        <span>📖</span> Nội dung / Tóm tắt:
+                      </span>
+                      <p className="text-xs leading-relaxed text-[#f0ede8]/90">
+                        {detailMovieModal.description}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Cast Box */}
+                  {detailMovieModal.cast && detailMovieModal.cast.length > 0 && (
+                    <div className="space-y-2 bg-white/[0.02] border border-white/10 p-4 rounded-2xl">
+                      <span className="font-bold block text-xs text-[#e8b84b] uppercase tracking-wider flex items-center gap-1.5">
+                        <span>🎭</span> Diễn viên chính:
+                      </span>
+                      <div className="flex gap-2.5 overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-amber-500/30">
+                        {detailMovieModal.cast.map((actor, idx) => (
+                          <div
+                            key={actor.name + idx}
+                            className="flex-shrink-0 flex items-center gap-2 p-1.5 pr-3 rounded-xl border border-white/10 bg-[#161622] text-xs shadow-xs"
+                          >
+                            {actor.profile_url ? (
+                              <img src={actor.profile_url} alt={actor.name} className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-white/10" />
+                            ) : (
+                              <div className="w-8 h-8 rounded-lg bg-[#e8b84b]/20 text-[#e8b84b] font-bold text-xs flex items-center justify-center flex-shrink-0">
+                                {actor.name.charAt(0)}
+                              </div>
+                            )}
+                            <div className="text-left leading-tight">
+                              <div className="font-bold text-[11px] whitespace-nowrap text-[#f0ede8]">{actor.name}</div>
+                              {actor.character && (
+                                <div className="text-[9px] whitespace-nowrap text-[#a09e9a] font-mono-data opacity-75">{actor.character}</div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Column: Trailer Player (7 cols) */}
+                <div className="lg:col-span-7 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold block text-xs text-[#e8b84b] uppercase tracking-wider flex items-center gap-1.5">
+                      <span>▶</span> Trailer Phim (YouTube HD):
+                    </span>
+                  </div>
+
+                  {detailMovieModal.trailer_url ? (
+                    <div className="aspect-video w-full rounded-2xl overflow-hidden border border-white/15 bg-black shadow-2xl relative">
+                      <iframe
+                        src={buildTrailerEmbedUrl(detailMovieModal.trailer_url)}
+                        title={`Trailer ${detailMovieModal.title}`}
+                        className="w-full h-full border-0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </div>
+                  ) : (
+                    <div className="aspect-video w-full rounded-2xl border border-white/10 bg-white/5 flex flex-col items-center justify-center text-center p-6 text-[#a09e9a] space-y-2">
+                      <span className="text-3xl">🎬</span>
+                      <span className="text-xs italic">Chưa có link trailer HD cho phim này.</span>
+                    </div>
+                  )}
+                </div>
+
+              </div>
             </div>
           </div>
         </div>

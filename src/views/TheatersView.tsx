@@ -128,6 +128,7 @@ interface RawShowtimeItem {
     title: string
     poster_url?: string
     duration_minutes?: number
+    rating?: string
     age_rating?: string
     status?: string
     movie_genres?: Array<{ genre: { name: string } }>
@@ -606,9 +607,9 @@ export default function TheatersView() {
                   <div className="flex-1 space-y-4 w-full">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        {movie.age_rating && (
-                          <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-mono-data font-black px-2 py-0.5 rounded">
-                            {movie.age_rating}
+                        {(movie.rating || movie.age_rating) && (
+                          <span className="bg-[#e8b84b] text-[#09090e] font-black text-[11px] rounded px-2 py-0.5 shadow-md">
+                            {movie.rating || movie.age_rating}
                           </span>
                         )}
                         {movie.duration_minutes && (
