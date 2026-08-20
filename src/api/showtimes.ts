@@ -160,6 +160,7 @@ export interface ReservationItem {
   ticket_code?: string
   total_price: string | number
   status: 'confirmed' | 'cancelled' | string
+  payment_method?: string
   refund_status?: string
   notes?: string
   is_used?: boolean
@@ -181,9 +182,9 @@ export async function fetchMyReservationsAPI(): Promise<ReservationItem[]> {
   return data.items
 }
 
-/** DELETE /api/v1/reservations/{id} */
-export async function cancelReservationAPI(reservationId: number): Promise<any> {
-  const { data } = await apiClient.delete(`/api/v1/reservations/${reservationId}`)
+/** POST /api/v1/reservations/{id}/cancel */
+export async function cancelReservationAPI(reservationId: number, reason?: string): Promise<any> {
+  const { data } = await apiClient.post(`/api/v1/reservations/${reservationId}/cancel`, { reason })
   return data
 }
 

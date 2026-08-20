@@ -85,6 +85,8 @@ interface RefundItem {
   user_email?: string
   user_full_name?: string
   movie_title?: string
+  payment_method?: string
+  cancellation_reason?: string
 }
 
 interface ShowtimeItem {
@@ -247,9 +249,11 @@ interface CleanDatePickerProps {
   onChange: (dateStr: string) => void
   minDate?: string
   label?: string
+  placeholder?: string
+  className?: string
 }
 
-function CleanDatePicker({ value, onChange, minDate, label }: CleanDatePickerProps) {
+function CleanDatePicker({ value, onChange, minDate, label, placeholder = 'Chọn ngày...', className }: CleanDatePickerProps) {
   const [open, setOpen] = useState(false)
   const [viewDate, setViewDate] = useState(() => {
     if (value) {
@@ -303,9 +307,9 @@ function CleanDatePicker({ value, onChange, minDate, label }: CleanDatePickerPro
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full px-3 py-2 bg-[#111118] border border-white/10 hover:border-[#e8b84b]/50 rounded-lg text-[#f0ede8] font-mono-data text-xs flex justify-between items-center cursor-pointer transition-colors"
+        className={className || "w-full px-3 py-2 bg-[#111118] border border-white/10 hover:border-[#e8b84b]/50 rounded-lg text-[#f0ede8] font-mono-data text-xs flex justify-between items-center cursor-pointer transition-colors"}
       >
-        <span>{value ? formatVNFullDate(value) : 'Chọn ngày...'}</span>
+        <span>{value ? formatVNFullDate(value) : placeholder}</span>
         <span className="text-[#a09e9a] text-sm">📅</span>
       </button>
 
@@ -2470,6 +2474,9 @@ export default function AdminView() {
   const [refunds, setRefunds] = useState<RefundItem[]>([])
   const [refundLoading, setRefundLoading] = useState(false)
   const [refundStatusFilter, setRefundStatusFilter] = useState<string>('all')
+  const [refundPmFilter, setRefundPmFilter] = useState<string>('all')
+  const [refundStartDate, setRefundStartDate] = useState<string>('')
+  const [refundEndDate, setRefundEndDate] = useState<string>('')
   const [refundPage, setRefundPage] = useState(1)
   const [refundTotal, setRefundTotal] = useState(0)
 
@@ -2486,11 +2493,36 @@ export default function AdminView() {
   const [changePwdLoading, setChangePwdLoading] = useState(false)
   const [changePwdErr, setChangePwdErr] = useState('')
 
+  function setRefundDatePreset(preset: 'today' | '7days' | '30days' | 'all') {
+    const today = new Date()
+    const formatDate = (d: Date) => d.toISOString().split('T')[0]
+
+    if (preset === 'all') {
+      setRefundStartDate('')
+      setRefundEndDate('')
+    } else if (preset === 'today') {
+      const dateStr = formatDate(today)
+      setRefundStartDate(dateStr)
+      setRefundEndDate(dateStr)
+    } else if (preset === '7days') {
+      const past = new Date()
+      past.setDate(today.getDate() - 7)
+      setRefundStartDate(formatDate(past))
+      setRefundEndDate(formatDate(today))
+    } else if (preset === '30days') {
+      const past = new Date()
+      past.setDate(today.getDate() - 30)
+      setRefundStartDate(formatDate(past))
+      setRefundEndDate(formatDate(today))
+    }
+    setRefundPage(1)
+  }
+
   async function fetchRefunds() {
     setRefundLoading(true)
     try {
       const res = await apiClient.get<{ items: RefundItem[]; total: number }>(
-        `/api/v1/admin/refunds?status=${refundStatusFilter}&page=${refundPage}&page_size=15`
+        `/api/v1/admin/refunds?status=${refundStatusFilter}&payment_method=${refundPmFilter}&start_date=${refundStartDate}&end_date=${refundEndDate}&page=${refundPage}&page_size=15`
       )
       setRefunds(res.data.items || [])
       setRefundTotal(res.data.total || 0)
@@ -2506,7 +2538,7 @@ export default function AdminView() {
     if (activeTab === 'refunds') {
       fetchRefunds()
     }
-  }, [activeTab, refundStatusFilter, refundPage])
+  }, [activeTab, refundStatusFilter, refundPmFilter, refundStartDate, refundEndDate, refundPage])
 
   async function handleResolveRefundManually() {
     if (!selectedRefund) return
@@ -4333,52 +4365,147 @@ export default function AdminView() {
             <div>
               <h3 className={`font-display font-bold text-xl flex items-center gap-2 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
                 <span>💸</span>
-                <span>Quản Lý Hoàn Tiền Vé Đã Hủy (VNPay Refund)</span>
+                <span>Quản Lý Hoàn Tiền Vé Đã Hủy</span>
               </h3>
               <p className={`text-xs mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                Theo dõi trạng thái hoàn tiền tự động qua VNPay và chuyển khoản thủ công cho khách khi VNPay Sandbox bị hạn chế.
+                Theo dõi trạng thái hoàn tiền cho các khách có nhu cầu huỷ vé
               </p>
             </div>
           </div>
 
-          {/* Status Filters Bar */}
-          <div className={`flex flex-wrap items-center justify-between p-3 rounded-xl border gap-2 transition-colors ${
-            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+          {/* Status, Payment Method & Date Filters Bar */}
+          <div className={`p-4 rounded-2xl border space-y-3.5 transition-colors ${
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-sm'
           }`}>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { key: 'all', label: 'Tất cả trạng thái' },
-                { key: 'manual_required', label: '⚠️ Cần xử lý thủ công' },
-                { key: 'success', label: '✓ Đã hoàn tiền' },
-                { key: 'processing', label: '⏳ Đang xử lý' },
-                { key: 'failed', label: '❌ Thất bại' },
-              ].map((filter) => (
-                <button
-                  key={filter.key}
-                  type="button"
-                  onClick={() => { setRefundStatusFilter(filter.key); setRefundPage(1); }}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                    refundStatusFilter === filter.key
-                      ? 'bg-[#e8b84b]/15 text-[#e8b84b] border-[#e8b84b]/40 shadow-sm'
-                      : isDark
-                      ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
-                      : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {filter.label}
-                </button>
-              ))}
+            {/* Row 1: Status Filters + Payment Method + Reload button */}
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-4">
+                {/* Status Filters */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className={`text-xs font-bold mr-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Trạng thái:</span>
+                  {[
+                    { key: 'all', label: 'Tất cả' },
+                    { key: 'manual_required', label: '⚠️ Cần xử lý thủ công' },
+                    { key: 'success', label: '✓ Thành công' },
+                    { key: 'processing', label: '⏳ Đang xử lý' },
+                    { key: 'failed', label: '❌ Thất bại' },
+                  ].map((filter) => (
+                    <button
+                      key={filter.key}
+                      type="button"
+                      onClick={() => { setRefundStatusFilter(filter.key); setRefundPage(1); }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                        refundStatusFilter === filter.key
+                          ? 'bg-[#e8b84b]/20 text-[#e8b84b] border-[#e8b84b]/50 shadow-sm'
+                          : isDark
+                          ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
+                          : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className={`h-6 w-px hidden md:block ${isDark ? 'bg-white/10' : 'bg-slate-200'}`} />
+
+                {/* Payment Method Filters */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className={`text-xs font-bold mr-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Phương thức:</span>
+                  {[
+                    { key: 'all', label: 'Tất cả P.Thức' },
+                    { key: 'cash', label: '💵 Tiền mặt' },
+                    { key: 'vnpay', label: '💳 VNPay' },
+                  ].map((pm) => (
+                    <button
+                      key={pm.key}
+                      type="button"
+                      onClick={() => { setRefundPmFilter(pm.key); setRefundPage(1); }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                        refundPmFilter === pm.key
+                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-sm'
+                          : isDark
+                          ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
+                          : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {pm.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Reload button */}
+              <button
+                type="button"
+                onClick={fetchRefunds}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 cursor-pointer transition-all ${
+                  isDark ? 'bg-white/5 border-white/10 text-[#f0ede8] hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
+                }`}
+              >
+                🔄 Tải lại
+              </button>
             </div>
 
-            <button
-              type="button"
-              onClick={fetchRefunds}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 cursor-pointer ${
-                isDark ? 'bg-white/5 border-white/10 text-[#f0ede8] hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
-              }`}
-            >
-              🔄 Tải lại
-            </button>
+            <div className={`h-px w-full ${isDark ? 'bg-white/10' : 'bg-slate-100'}`} />
+
+            {/* Row 2: Date Picker Filter using CleanDatePicker */}
+            <div className="flex flex-wrap items-center gap-3">
+              <span className={`text-xs font-bold flex items-center gap-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                <span>📅</span> Lịch lọc theo ngày:
+              </span>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="w-[180px]">
+                  <CleanDatePicker
+                    value={refundStartDate}
+                    onChange={(d) => { setRefundStartDate(d); setRefundPage(1); }}
+                    placeholder="Từ ngày..."
+                  />
+                </div>
+
+                <span className={`text-xs font-bold ${isDark ? 'text-[#a09e9a]' : 'text-slate-400'}`}>→</span>
+
+                <div className="w-[180px]">
+                  <CleanDatePicker
+                    value={refundEndDate}
+                    minDate={refundStartDate}
+                    onChange={(d) => { setRefundEndDate(d); setRefundPage(1); }}
+                    placeholder="Đến ngày..."
+                  />
+                </div>
+              </div>
+
+              {/* Date Presets */}
+              <div className="flex flex-wrap items-center gap-1.5 ml-auto sm:ml-2">
+                {[
+                  { key: 'today', label: 'Hôm nay' },
+                  { key: '7days', label: '7 ngày qua' },
+                  { key: '30days', label: '30 ngày qua' },
+                  { key: 'all', label: 'Tất cả ngày' },
+                ].map((preset) => {
+                  const isActive =
+                    (preset.key === 'all' && !refundStartDate && !refundEndDate) ||
+                    (preset.key === 'today' && refundStartDate === new Date().toISOString().split('T')[0] && refundEndDate === new Date().toISOString().split('T')[0])
+                  return (
+                    <button
+                      key={preset.key}
+                      type="button"
+                      onClick={() => setRefundDatePreset(preset.key as any)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                        isActive
+                          ? 'bg-[#e8b84b]/20 text-[#e8b84b] border-[#e8b84b]/50 shadow-sm'
+                          : isDark
+                          ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
+                          : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           </div>
 
           {/* Refund Transactions Table */}
@@ -4386,72 +4513,99 @@ export default function AdminView() {
             isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
           }`}>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-center text-xs border-collapse">
                 <thead className={`font-mono-data uppercase border-b ${
                   isDark ? 'bg-[#161622] text-[#f0ede8] border-white/10' : 'bg-slate-100 text-slate-700 border-slate-200'
                 }`}>
                   <tr>
-                    <th className="p-4">Mã Vé / Khách Hàng</th>
-                    <th className="p-4">Phim Xem</th>
-                    <th className="p-4">Số Tiền</th>
-                    <th className="p-4">Mã Giao Dịch VNPay</th>
-                    <th className="p-4">Trạng Thái</th>
-                    <th className="p-4">Ngày Tạo</th>
-                    <th className="p-4 text-right">Thao Tác</th>
+                    <th className="p-3.5 text-center min-w-[170px]">Mã Vé & Khách Hàng</th>
+                    <th className="p-3.5 text-center min-w-[180px] max-w-[240px]">Bộ Phim</th>
+                    <th className="p-3.5 text-center min-w-[120px]">Phương Thức</th>
+                    <th className="p-3.5 text-center min-w-[180px] max-w-[240px]">Lý Do Hủy Vé</th>
+                    <th className="p-3.5 text-center min-w-[110px]">Số Tiền</th>
+                    <th className="p-3.5 text-center min-w-[160px]">Mã Hoàn Tiền</th>
+                    <th className="p-3.5 text-center min-w-[130px]">Trạng Thái</th>
+                    <th className="p-3.5 text-center min-w-[140px]">Thời Điểm</th>
+                    <th className="p-3.5 text-center min-w-[120px]">Ghi Chú</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {refundLoading ? (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-[#a09e9a]">
-                        <div className="text-xl animate-spin inline-block mb-2">⏳</div>
-                        <p>Đang tải dữ liệu hoàn tiền...</p>
+                      <td colSpan={9} className="p-10 text-center text-[#a09e9a]">
+                        <div className="text-2xl animate-spin inline-block mb-2">⏳</div>
+                        <p className="font-semibold">Đang tải danh sách hoàn tiền & hủy vé...</p>
                       </td>
                     </tr>
                   ) : refunds.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-[#a09e9a]">
-                        <p className="italic">Không có yêu cầu hoàn tiền nào phù hợp với bộ lọc.</p>
+                      <td colSpan={9} className="p-10 text-center text-[#a09e9a]">
+                        <p className="italic">Không có bản ghi hoàn tiền hoặc hủy vé nào phù hợp với bộ lọc.</p>
                       </td>
                     </tr>
                   ) : (
                     refunds.map((r) => (
-                      <tr key={r.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="p-4">
-                          <div className="font-mono-data font-bold text-[#e8b84b]">
+                      <tr key={r.id} className={`hover:bg-white/[0.02] transition-colors ${
+                        isDark ? '' : 'hover:bg-slate-50'
+                      }`}>
+                        {/* Mã Vé & Khách Hàng */}
+                        <td className="p-3.5 align-middle text-left">
+                          <div className="font-mono-data font-bold text-[#e8b84b] text-xs">
                             {r.ticket_code || `R#${r.reservation_id}`}
                           </div>
-                          <div className={`text-xs ${isDark ? 'text-[#f0ede8]' : 'text-slate-800'}`}>
+                          <div className={`font-semibold text-xs mt-0.5 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
                             {r.user_full_name || 'Khách xem phim'}
                           </div>
-                          <div className={`text-[10px] font-mono-data ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>
+                          <div className={`text-[10px] font-mono-data mt-0.5 ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>
                             {r.user_email}
                           </div>
                         </td>
 
-                        <td className="p-4 font-semibold">
-                          <p className={isDark ? 'text-[#f0ede8]' : 'text-slate-900'}>{r.movie_title || 'N/A'}</p>
-                          <span className={`text-[10px] font-mono-data ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                            Hủy vé
-                          </span>
+                        {/* Bộ Phim */}
+                        <td className="p-3.5 align-middle text-center max-w-[240px]">
+                          <p className={`font-bold text-xs truncate mx-auto ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`} title={r.movie_title || 'N/A'}>
+                            {r.movie_title || 'N/A'}
+                          </p>
                         </td>
 
-                        <td className="p-4 font-mono-data font-bold text-[#e8b84b] text-sm">
-                          {fmt(r.amount)}
-                        </td>
-
-                        <td className="p-4 font-mono-data">
-                          <div className={`text-xs ${isDark ? 'text-[#f0ede8]' : 'text-slate-700'}`}>
-                            {r.vnp_request_id}
-                          </div>
-                          {r.vnpay_response_message && (
-                            <p className="text-[10px] text-rose-400 truncate max-w-[180px]" title={r.vnpay_response_message}>
-                              {r.vnpay_response_message}
-                            </p>
+                        {/* Phương Thức Thanh Toán */}
+                        <td className="p-3.5 align-middle text-center whitespace-nowrap">
+                          {r.payment_method === 'cash' ? (
+                            <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30 inline-flex items-center gap-1 shadow-sm">
+                              <span>💵</span>
+                              <span>Tiền mặt</span>
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30 inline-flex items-center gap-1 shadow-sm">
+                              <span>💳</span>
+                              <span>VNPay</span>
+                            </span>
                           )}
                         </td>
 
-                        <td className="p-4">
+                        {/* Lý Do Hủy Vé */}
+                        <td className="p-3.5 align-middle text-center max-w-[240px]">
+                          <div className={`p-2 rounded-lg border text-xs leading-snug mx-auto inline-block ${
+                            isDark ? 'bg-[#161622]/80 border-white/5 text-[#f0ede8]' : 'bg-slate-100/80 border-slate-200 text-slate-800'
+                          }`} title={r.cancellation_reason || 'Tôi không còn nhu cầu xem phim nữa'}>
+                            <span className="font-semibold">{r.cancellation_reason || 'Tôi không còn nhu cầu xem phim nữa'}</span>
+                          </div>
+                        </td>
+
+                        {/* Số Tiền */}
+                        <td className="p-3.5 align-middle text-center font-mono-data font-bold text-[#e8b84b] text-sm whitespace-nowrap">
+                          {fmt(r.amount)}
+                        </td>
+
+                        {/* Mã Hoàn Tiền */}
+                        <td className="p-3.5 align-middle text-center font-mono-data">
+                          <div className={`text-xs font-semibold tracking-wide ${isDark ? 'text-[#f0ede8]' : 'text-slate-700'}`}>
+                            {r.vnp_request_id}
+                          </div>
+                        </td>
+
+                        {/* Trạng Thái */}
+                        <td className="p-3.5 align-middle text-center whitespace-nowrap">
                           {r.status === 'manual_required' && (
                             <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 inline-flex items-center gap-1">
                               <span>⚠️</span> Cần xử lý thủ công
@@ -4474,12 +4628,15 @@ export default function AdminView() {
                           )}
                         </td>
 
-                        <td className="p-4 font-mono-data text-[#a09e9a]">
-                          {new Date(r.created_at).toLocaleString('vi-VN')}
+                        {/* Thời Điểm */}
+                        <td className="p-3.5 align-middle text-center font-mono-data text-xs text-[#a09e9a] whitespace-nowrap">
+                          {new Date(r.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}{' '}
+                          {new Date(r.created_at).toLocaleDateString('vi-VN')}
                         </td>
 
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
+                        {/* Ghi Chú & Thao Tác */}
+                        <td className="p-3.5 align-middle text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-2">
                             {r.status === 'manual_required' && (
                               <>
                                 <button
@@ -4502,8 +4659,18 @@ export default function AdminView() {
                               </>
                             )}
                             {r.status === 'success' && (
-                              <span className="text-[10px] text-emerald-400 italic">
-                                Ghi chú: {r.admin_note || 'Đã xử lý'}
+                              <span className="text-xs font-semibold text-emerald-400 italic">
+                                Đã xử lý
+                              </span>
+                            )}
+                            {(r.status === 'manual_required' || r.status === 'failed') && (
+                              <span className="text-xs font-semibold text-amber-400 italic">
+                                Chưa xử lý
+                              </span>
+                            )}
+                            {r.status === 'processing' && (
+                              <span className="text-xs font-semibold text-blue-400 italic">
+                                Đang xử lý
                               </span>
                             )}
                           </div>

@@ -44,10 +44,14 @@ export const apiClient = axios.create({
   timeout: 10000,
 })
 
-// Automatically attach JWT access_token to every request
+// Automatically attach JWT access_token & Virtual Queue Pass Token to every request
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
+
+  const passToken = sessionStorage.getItem('vq_pass_token')
+  if (passToken) config.headers['X-Queue-Pass-Token'] = passToken
+
   return config
 })
 

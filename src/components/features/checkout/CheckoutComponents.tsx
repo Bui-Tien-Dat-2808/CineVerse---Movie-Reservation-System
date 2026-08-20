@@ -285,9 +285,9 @@ export function PaymentMethods({ selected, onSelect }: PaymentMethodsProps) {
     {
       id: 'cash',
       title: 'Tiền mặt',
-      subtitle: 'Tại rạp chiếu',
+      subtitle: 'Thanh toán tại rạp chiếu',
       logo: null,
-      enabled: false,
+      enabled: true,
     },
   ]
 

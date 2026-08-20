@@ -92,8 +92,18 @@ export default function ProfileView() {
     setTimeout(() => setCopiedCode(null), 2500)
   }
 
+const CANCELLATION_REASONS = [
+  'Tôi không còn nhu cầu xem phim nữa',
+  'Tôi muốn chọn lại ghế / phòng chiếu / phim',
+  'Trùng lịch đột xuất / Bận việc cá nhân',
+  'Thay đổi số lượng người xem',
+  'Khác (Nhập lý do cụ thể)',
+]
+
   // Cancel Confirmation Modal State
   const [cancelTarget, setCancelTarget] = useState<ReservationItem | null>(null)
+  const [cancelReason, setCancelReason] = useState<string>(CANCELLATION_REASONS[0])
+  const [customCancelReason, setCustomCancelReason] = useState<string>('')
   const [cancelLoading, setCancelLoading] = useState(false)
   const [cancelPendingTarget, setCancelPendingTarget] = useState<ReservationItem | null>(null)
   const [cancelPendingLoading, setCancelPendingLoading] = useState(false)
@@ -157,14 +167,19 @@ export default function ProfileView() {
     setExchangeLoading(true)
     setExchangeError(null)
     try {
-      await exchangeReservationAPI(
+      const newReservation = await exchangeReservationAPI(
         exchangeTarget.id,
         exchangeSelectedShowtime.id,
         Array.from(exchangeSelectedSeats)
       )
-      setExchangeTarget(null)
-      loadReservations()
-      setUpdateMsg({ type: 'success', text: 'Đổi suất chiếu thành công! Thông tin vé mới đã được cập nhật.' })
+
+      // Vé mới đang ở trạng thái PENDING — BẮT BUỘC chuyển ngay sang thanh toán
+      const paymentRes = await createPaymentUrlAPI(newReservation.id)
+      if (paymentRes?.payment_url) {
+        window.location.href = paymentRes.payment_url
+        return
+      }
+      throw new Error('Không thể khởi tạo thanh toán cho vé mới.')
     } catch (err: any) {
       setExchangeError(err.response?.data?.detail || 'Đổi suất chiếu thất bại. Vui lòng thử lại.')
     } finally {
@@ -246,10 +261,16 @@ export default function ProfileView() {
   // Handle Cancel Reservation Confirm
   async function handleConfirmCancel() {
     if (!cancelTarget) return
+    const finalReason = cancelReason.startsWith('Khác')
+      ? (customCancelReason.trim() || 'Khác')
+      : cancelReason
+
     setCancelLoading(true)
     try {
-      await cancelReservationAPI(cancelTarget.id)
+      await cancelReservationAPI(cancelTarget.id, finalReason)
       setCancelTarget(null)
+      setCancelReason(CANCELLATION_REASONS[0])
+      setCustomCancelReason('')
       await loadReservations()
     } catch (err: any) {
       alert(err.response?.data?.detail ?? 'Hủy vé thất bại. Vui lòng thử lại.')
@@ -808,35 +829,120 @@ export default function ProfileView() {
         </div>
       )}
 
-      {/* CANCEL RESERVATION CONFIRM MODAL */}
+      {/* CANCEL RESERVATION CONFIRM MODAL WITH REASON SELECTION */}
       {cancelTarget && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className={`rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4 border ${
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+          <div className={`rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4 border ${
             isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
           }`}>
-            <h3 className={`font-display text-xl font-bold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Xác nhận hủy vé xem phim</h3>
-            <p className={`text-xs leading-relaxed ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-              Bạn có chắc chắn muốn hủy đơn đặt vé <strong className={isDark ? 'text-[#f0ede8]' : 'text-slate-900'}>#{cancelTarget.id}</strong> cho phim{' '}
-              <strong className={isDark ? 'text-[#e8b84b]' : 'text-amber-600'}>{cancelTarget.showtime?.movie_title}</strong>? Ghế ngồi sẽ được giải phóng ngay sau khi hủy.
-            </p>
-
-            <div className="flex gap-3 justify-end pt-2">
+            <div className={`flex justify-between items-center border-b pb-3 ${
+              isDark ? 'border-white/10' : 'border-slate-200'
+            }`}>
+              <h3 className="font-display text-lg font-bold flex items-center gap-2 text-rose-500">
+                <span>🛑</span>
+                <span>Xác Nhận Hủy Vé Xem Phim</span>
+              </h3>
               <button
                 type="button"
                 onClick={() => setCancelTarget(null)}
-                className={`px-4 py-2 rounded-lg text-xs font-bold border-0 cursor-pointer ${
+                className={`text-sm cursor-pointer border-0 bg-transparent transition-colors ${
+                  isDark ? 'text-slate-400 hover:text-white' : 'text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className={`p-3.5 rounded-xl border text-xs leading-relaxed space-y-2 ${
+              isDark ? 'bg-[#161622] border-white/5' : 'bg-slate-50 border-slate-200/80 text-slate-800'
+            }`}>
+              <div className="flex justify-between items-center">
+                <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-500 font-medium'}>Mã vé:</span>
+                <span className={`font-mono-data font-bold ${isDark ? 'text-[#e8b84b]' : 'text-amber-600'}`}>
+                  {cancelTarget.ticket_code || `#${cancelTarget.id}`}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-500 font-medium'}>Bộ phim:</span>
+                <span className={`font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{cancelTarget.showtime?.movie_title}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-500 font-medium'}>Phương thức thanh toán:</span>
+                <span className={`font-semibold ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
+                  {cancelTarget.payment_method === 'cash' ? '💵 Tiền mặt tại rạp' : '💳 VNPay / Thẻ ngân hàng'}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className={`block text-xs font-bold ${isDark ? 'text-[#e8b84b]' : 'text-amber-700'}`}>
+                📝 Vui lòng chọn lý do hủy vé:
+              </label>
+              <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                {CANCELLATION_REASONS.map((r, idx) => {
+                  const isSelected = cancelReason === r
+                  return (
+                    <label
+                      key={idx}
+                      onClick={() => setCancelReason(r)}
+                      className={`flex items-center gap-3 p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                        isSelected
+                          ? isDark
+                            ? 'border-[#e8b84b] bg-[#e8b84b]/15 text-[#f0ede8] font-bold shadow-sm'
+                            : 'border-amber-500 bg-amber-500/10 text-slate-900 font-bold shadow-sm ring-1 ring-amber-500/30'
+                          : isDark
+                          ? 'border-white/10 bg-[#161622]/60 hover:bg-white/5 text-[#a09e9a]'
+                          : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="cancelReason"
+                        checked={isSelected}
+                        onChange={() => setCancelReason(r)}
+                        className="accent-[#e8b84b] cursor-pointer w-4 h-4"
+                      />
+                      <span>{r}</span>
+                    </label>
+                  )
+                })}
+              </div>
+
+              {cancelReason.startsWith('Khác') && (
+                <div className="pt-1">
+                  <textarea
+                    value={customCancelReason}
+                    onChange={(e) => setCustomCancelReason(e.target.value)}
+                    placeholder="Vui lòng nhập chi tiết lý do hủy vé của bạn..."
+                    rows={2}
+                    className={`w-full p-3 rounded-xl text-xs border outline-none transition-all ${
+                      isDark
+                        ? 'bg-[#161622] border-white/10 text-white focus:border-[#e8b84b]'
+                        : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-sm'
+                    }`}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className={`flex gap-3 justify-end pt-3 border-t ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
+              <button
+                type="button"
+                onClick={() => setCancelTarget(null)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold border-0 cursor-pointer transition-colors ${
                   isDark ? 'bg-white/10 hover:bg-white/20 text-[#f0ede8]' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                 }`}
               >
-                Giữ vé
+                Giữ lại vé
               </button>
               <button
                 type="button"
                 onClick={handleConfirmCancel}
                 disabled={cancelLoading}
-                className="bg-[#c0392b] hover:bg-[#e74c3c] text-white px-5 py-2 rounded-lg text-xs font-bold border-0 cursor-pointer disabled:opacity-50"
+                className="bg-[#c0392b] hover:bg-[#e74c3c] text-white px-5 py-2 rounded-xl text-xs font-bold border-0 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-md"
               >
-                {cancelLoading ? 'Đang hủy...' : 'Xác nhận hủy vé'}
+                <span>❌</span>
+                <span>{cancelLoading ? 'Đang hủy...' : 'Xác nhận hủy vé'}</span>
               </button>
             </div>
           </div>
@@ -971,6 +1077,15 @@ export default function ProfileView() {
                     </div>
                   </div>
                 )}
+
+                <div className={`p-3 rounded-lg text-xs flex items-start gap-2.5 ${
+                  isDark ? 'bg-amber-500/10 border border-amber-500/30 text-amber-300' : 'bg-amber-50 border border-amber-300 text-amber-900'
+                }`}>
+                  <span className="text-base leading-none">⚠️</span>
+                  <span>
+                    Sau khi xác nhận, bạn sẽ được chuyển sang trang thanh toán cho vé mới. <strong>Vé cũ chỉ được hủy/đổi sau khi thanh toán vé mới thành công.</strong>
+                  </span>
+                </div>
 
                 <div className="flex justify-between items-center pt-3 border-t border-white/10">
                   <span className="text-xs font-mono-data">

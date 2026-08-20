@@ -198,8 +198,8 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
             </div>
           </div>
 
-          {/* Right Column: Complete Full Vertical Poster Card */}
-          <div className="hidden lg:flex lg:col-span-5 justify-center items-center z-10">
+          {/* Right Column: Complete Full Vertical Poster Card & Centered Navigation Controls */}
+          <div className="hidden lg:flex lg:col-span-5 flex-col justify-center items-center z-10 space-y-4">
             <div onClick={() => onBookNow(movie)} className="relative group cursor-pointer">
               {/* Outer Card Glow */}
               <div
@@ -227,57 +227,116 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
                 />
               </div>
             </div>
+
+            {/* Desktop Slide Navigation Controls (Centered under Poster Card) */}
+            {movies.length > 1 && (
+              <div className="flex gap-2 items-center justify-center w-[280px] xl:w-[310px] pt-1">
+                <button
+                  type="button"
+                  aria-label="Previous"
+                  onClick={() => handleDotClick((current - 1 + movies.length) % movies.length)}
+                  className={cn(
+                    'w-7 h-7 shrink-0 rounded-full flex items-center justify-center border cursor-pointer text-xs font-bold transition-all',
+                    isLight
+                      ? 'bg-white/80 hover:bg-white text-slate-800 border-slate-300 shadow-sm'
+                      : 'bg-white/10 hover:bg-white/25 text-white/80 border-white/10',
+                  )}
+                >
+                  ‹
+                </button>
+
+                <div className="flex items-center justify-center gap-1.5 flex-1 overflow-hidden px-1">
+                  {movies.map((_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      aria-label={`Phim ${i + 1}`}
+                      onClick={() => handleDotClick(i)}
+                      className="border-0 cursor-pointer p-0 rounded-full transition-all duration-300 shrink-0"
+                      style={{
+                        width: i === current ? '22px' : '6px',
+                        height: '6px',
+                        background:
+                          i === current
+                            ? isLight
+                              ? '#d97706'
+                              : '#e8b84b'
+                            : isLight
+                            ? 'rgba(15,23,42,0.25)'
+                            : 'rgba(240,237,232,0.3)',
+                      }}
+                    />
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  aria-label="Next"
+                  onClick={() => handleDotClick((current + 1) % movies.length)}
+                  className={cn(
+                    'w-7 h-7 shrink-0 rounded-full flex items-center justify-center border cursor-pointer text-xs font-bold transition-all',
+                    isLight
+                      ? 'bg-white/80 hover:bg-white text-slate-800 border-slate-300 shadow-sm'
+                      : 'bg-white/10 hover:bg-white/25 text-white/80 border-white/10',
+                  )}
+                >
+                  ›
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Slide Navigation Controls */}
+      {/* Mobile/Tablet Slide Navigation Controls (Centered at bottom) */}
       {movies.length > 1 && (
-        <div className="absolute bottom-6 right-6 z-20 flex gap-2 items-center">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex lg:hidden gap-2 items-center justify-center max-w-[90vw] px-4">
           <button
             type="button"
             aria-label="Previous"
             onClick={() => handleDotClick((current - 1 + movies.length) % movies.length)}
             className={cn(
-              'w-8 h-8 rounded-full flex items-center justify-center border cursor-pointer text-sm transition-all',
+              'w-7 h-7 shrink-0 rounded-full flex items-center justify-center border cursor-pointer text-xs font-bold transition-all',
               isLight
-                ? 'bg-white/80 hover:bg-white text-slate-800 border-slate-300 shadow-sm font-bold'
+                ? 'bg-white/80 hover:bg-white text-slate-800 border-slate-300 shadow-sm'
                 : 'bg-white/10 hover:bg-white/25 text-white/80 border-white/10',
             )}
           >
             ‹
           </button>
 
-          {movies.map((_, i) => (
-            <button
-              key={i}
-              type="button"
-              aria-label={`Phim ${i + 1}`}
-              onClick={() => handleDotClick(i)}
-              className="border-0 cursor-pointer p-0 rounded-full transition-all duration-300"
-              style={{
-                width: i === current ? '24px' : '8px',
-                height: '8px',
-                background:
-                  i === current
-                    ? isLight
-                      ? '#d97706'
-                      : '#e8b84b'
-                    : isLight
-                    ? 'rgba(15,23,42,0.2)'
-                    : 'rgba(240,237,232,0.3)',
-              }}
-            />
-          ))}
+          <div className="flex items-center justify-center gap-1.5 overflow-x-auto max-w-[200px] scrollbar-none py-1">
+            {movies.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                aria-label={`Phim ${i + 1}`}
+                onClick={() => handleDotClick(i)}
+                className="border-0 cursor-pointer p-0 rounded-full transition-all duration-300 shrink-0"
+                style={{
+                  width: i === current ? '20px' : '6px',
+                  height: '6px',
+                  background:
+                    i === current
+                      ? isLight
+                        ? '#d97706'
+                        : '#e8b84b'
+                      : isLight
+                      ? 'rgba(15,23,42,0.25)'
+                      : 'rgba(240,237,232,0.3)',
+                }}
+              />
+            ))}
+          </div>
 
           <button
             type="button"
             aria-label="Next"
             onClick={() => handleDotClick((current + 1) % movies.length)}
             className={cn(
-              'w-8 h-8 rounded-full flex items-center justify-center border cursor-pointer text-sm transition-all',
+              'w-7 h-7 shrink-0 rounded-full flex items-center justify-center border cursor-pointer text-xs font-bold transition-all',
               isLight
-                ? 'bg-white/80 hover:bg-white text-slate-800 border-slate-300 shadow-sm font-bold'
+                ? 'bg-white/80 hover:bg-white text-slate-800 border-slate-300 shadow-sm'
                 : 'bg-white/10 hover:bg-white/25 text-white/80 border-white/10',
             )}
           >

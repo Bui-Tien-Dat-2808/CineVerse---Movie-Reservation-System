@@ -179,6 +179,13 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
               <span className="font-semibold text-[#f0ede8]">{userName || 'Khách Hàng CineVerse'}</span>
             </div>
 
+            <div className="text-center">
+              <span className="text-[#a09e9a] block text-[10px]">Thanh toán</span>
+              <span className="font-semibold text-amber-400">
+                {(reservation as any)?.payment_method === 'cash' ? 'Tiền mặt' : 'VNPay / ATM'}
+              </span>
+            </div>
+
             <div className="text-right">
               <span className="text-[#a09e9a] block text-[10px]">Tổng tiền</span>
               <span className="font-bold text-base text-[#e8b84b]">{fmt(totalPriceNum)}</span>

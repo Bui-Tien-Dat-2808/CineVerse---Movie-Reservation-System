@@ -52,12 +52,16 @@ export default function ConfirmedView() {
     created_at: new Date().toISOString(),
   }
 
+  const pmCode = createdReservation?.payment_method || 'cash'
+  const paymentMethodLabel = pmCode === 'cash' ? 'Tiền mặt (Thanh toán tại rạp)' : 'VNPay / ATM / Ví điện tử'
+
   const ticketInfo = [
     ['Ngày chiếu', DATES[selectedDate].toLocaleDateString('vi-VN')],
     ['Suất chiếu', showtime.time],
     ['Rạp / Phòng', showtime.hall],
     ['Loại phòng', showtime.type],
     ['Ghế', [...selectedSeats].sort().join(', ')],
+    ['Thanh toán', paymentMethodLabel],
     ['Mã đặt vé', bookingCode],
   ]
 

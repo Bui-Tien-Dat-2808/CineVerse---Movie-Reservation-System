@@ -10,6 +10,8 @@ import { fmt, getDateList, cn } from '../lib/utils'
 import SeatMap from '../components/features/seats/SeatMap'
 import SeatLegend from '../components/features/seats/SeatLegend'
 import { GenreBadge } from '../components/ui/Badge'
+import { useVirtualQueue } from '../hooks/useVirtualQueue'
+import { WaitingRoomModal } from '../components/features/queue/WaitingRoomModal'
 
 function formatYYYYMMDD(d: Date): string {
   const year = d.getFullYear()
@@ -45,6 +47,15 @@ export default function CineVerseMovieView() {
   const synopsisRef = useRef<HTMLParagraphElement>(null)
   const [needsExpandButton, setNeedsExpandButton] = useState(false)
   const [holdError, setHoldError] = useState<string | null>(null)
+
+  const {
+    inQueue,
+    rank,
+    totalWaiting,
+    estimatedWaitSeconds,
+    enterQueue,
+    leaveQueue,
+  } = useVirtualQueue()
 
   const {
     state,
@@ -264,9 +275,15 @@ export default function CineVerseMovieView() {
           try {
             await holdSeatsMutation.mutateAsync({ showtimeId, seatIds })
           } catch (e: unknown) {
-            const msg =
-              (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-              'Ghế bạn chọn đã được người khác đặt. Vui lòng chọn ghế khác!'
+            const rawDetail = (e as { response?: { data?: { detail?: any } } })?.response?.data?.detail
+            let msg = 'Ghế bạn chọn đã được người khác giữ hoặc đặt. Vui lòng chọn ghế khác!'
+            if (typeof rawDetail === 'string') {
+              msg = rawDetail
+            } else if (Array.isArray(rawDetail)) {
+              msg = rawDetail.map((d: any) => d.msg || JSON.stringify(d)).join('; ')
+            } else if (rawDetail && typeof rawDetail === 'object') {
+              msg = rawDetail.message || JSON.stringify(rawDetail)
+            }
             setHoldError(msg)
             return // Block navigation — do NOT proceed to checkout
           }
@@ -710,7 +727,12 @@ export default function CineVerseMovieView() {
                                 <button
                                   key={st.id}
                                   type="button"
-                                  onClick={() => selectShowtime(st)}
+                                  onClick={async () => {
+                                    selectShowtime(st)
+                                    if (st.id) {
+                                      await enterQueue(st.id)
+                                    }
+                                  }}
                                   aria-pressed={isSelected}
                                   className={cn(
                                     'flex flex-col items-center justify-center p-2.5 rounded-xl border text-center cursor-pointer transition-all duration-150',
@@ -946,6 +968,20 @@ export default function CineVerseMovieView() {
           </div>
         </div>
       )}
+      {/* Virtual Queue Waiting Room Modal */}
+      <WaitingRoomModal
+        isOpen={inQueue}
+        rank={rank}
+        totalWaiting={totalWaiting}
+        estimatedWaitSeconds={estimatedWaitSeconds}
+        movieTitle={movie?.title}
+        showtimeStr={state.selectedShowtime ? `${state.selectedShowtime.hall || ''} (${state.selectedShowtime.time})` : undefined}
+        onLeaveQueue={() => {
+          if (state.selectedShowtime?.id) {
+            leaveQueue(state.selectedShowtime.id)
+          }
+        }}
+      />
     </div>
   )
 }

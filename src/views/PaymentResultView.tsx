@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
+import { useBooking } from '../context/BookingContext'
 import { fetchReservationDetailAPI, ReservationItem } from '../api/showtimes'
 import { cn } from '../lib/utils'
 import { BarcodeWidget } from '../components/common/BarcodeWidget'
@@ -10,6 +11,7 @@ export default function PaymentResultView() {
   const navigate = useNavigate()
   const { theme } = useTheme()
   const isDark = theme === 'dark'
+  const { reset } = useBooking()
 
   const statusParam = searchParams.get('status') || 'failed'
   const resIdParam = searchParams.get('reservation_id')
@@ -19,6 +21,11 @@ export default function PaymentResultView() {
 
   const [reservation, setReservation] = useState<ReservationItem | null>(null)
   const [loading, setLoading] = useState<boolean>(isSuccess && !!resIdParam)
+
+  useEffect(() => {
+    // Clear transient booking context state once payment result is rendered
+    reset()
+  }, [reset])
 
   useEffect(() => {
     if (isSuccess && resIdParam) {
@@ -112,6 +119,13 @@ export default function PaymentResultView() {
                   <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-600'}>Danh sách ghế:</span>
                   <strong className="text-amber-500 font-mono-data font-bold">
                     {reservation.reservation_seats.map((s) => s.seat_label || `Ghế #${s.id}`).join(', ')}
+                  </strong>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-600'}>Thanh toán:</span>
+                  <strong className="text-[#e8b84b] font-bold">
+                    {(reservation as any).payment_method === 'cash' ? '💵 Tiền mặt (Tại rạp)' : '💳 VNPay / ATM / Ví điện tử'}
                   </strong>
                 </div>
 
