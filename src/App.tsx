@@ -54,13 +54,16 @@ function AppShell() {
   const { user, isAuthenticated, isAuthLoading } = useAuth()
 
   const isHome = location.pathname === '/'
-  const isAdmin = isAuthenticated && user?.role === 'admin'
+  const isAdmin = isAuthenticated && (user?.role === 'admin' || user?.role === 'ADMIN')
 
   // Admin Guard: Admins live strictly in /admin interface.
-  // Any attempt to open public client routes redirects to /admin.
   useEffect(() => {
-    if (!isAuthLoading && isAdmin && !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/profile')) {
-      navigate('/admin', { replace: true })
+    if (!isAuthLoading) {
+      if (isAdmin && !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/profile')) {
+        navigate('/admin', { replace: true })
+      } else if (!isAdmin && location.pathname.startsWith('/admin')) {
+        navigate('/', { replace: true })
+      }
     }
   }, [isAdmin, isAuthLoading, location.pathname, navigate])
 
@@ -79,7 +82,7 @@ function AppShell() {
         <Suspense fallback={<PageFallback />}>
           <Routes>
             <Route path="/" element={isAdmin ? <Navigate to="/admin" replace /> : <HomeView />} />
-            <Route path="/admin" element={<AdminView />} />
+            <Route path="/admin" element={isAdmin ? <AdminView /> : <Navigate to="/" replace />} />
             <Route path="/profile" element={<ProfileView />} />
             <Route path="/sap-ra-mat" element={isAdmin ? <Navigate to="/admin" replace /> : <ComingSoonView />} />
             <Route path="/rap-chieu" element={isAdmin ? <Navigate to="/admin" replace /> : <TheatersView />} />
@@ -88,7 +91,7 @@ function AppShell() {
             <Route path="/movie/:id/checkout" element={isAdmin ? <Navigate to="/admin" replace /> : <CheckoutView />} />
             <Route path="/confirmed" element={isAdmin ? <Navigate to="/admin" replace /> : <ConfirmedView />} />
             <Route path="/payment-result" element={<PaymentResultView />} />
-            {/* Catch-all: redirect về admin nếu là Admin, hoặc home nếu là User */}
+            {/* Catch-all */}
             <Route path="*" element={<Navigate to={isAdmin ? "/admin" : "/"} replace />} />
           </Routes>
         </Suspense>

@@ -25,7 +25,6 @@ const MORE_ADMIN_NAV_ITEMS = [
   { label: 'Voucher', icon: '🎟️', tab: 'vouchers', desc: 'Quản lý mã giảm giá' },
   { label: 'Tích điểm', icon: '🏆', tab: 'loyalty', desc: 'Điểm thưởng thành viên' },
   { label: 'Hoàn tiền', icon: '💸', tab: 'refunds', desc: 'Yêu cầu hoàn tiền vé' },
-  { label: 'Soát vé', icon: '🔍', tab: 'scanner', desc: 'Quét QR & check-in' },
   { label: 'Báo cáo', icon: '📊', tab: 'analytics', desc: 'Thống kê & báo cáo' },
 ]
 

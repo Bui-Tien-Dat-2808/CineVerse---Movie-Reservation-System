@@ -6,7 +6,7 @@ import { useTheme } from '../context/ThemeContext'
 import { useCreateReservation, useHoldSeats, useSeatMap } from '../hooks/useShowtimes'
 import { useMovie } from '../hooks/useMovies'
 import { apiClient } from '../api/client'
-import { createPaymentUrlAPI } from '../api/showtimes'
+import { createPaymentUrlAPI, releaseSeatsAPI } from '../api/showtimes'
 import { cn } from '../lib/utils'
 import {
   BookingSummary,
@@ -38,9 +38,15 @@ export default function CheckoutView() {
   const showtime = state.selectedShowtime
   const { data: seatMap } = useSeatMap(showtime)
 
-  function handleCancelBooking() {
+  async function handleCancelBooking() {
     if (window.confirm('Bạn có chắc chắn muốn huỷ giữ chỗ không? Ghế đã giữ sẽ được giải phóng ngay lập tức.')) {
-      if (showtime) {
+      if (showtime && showtime.id && state.selectedSeats.size > 0) {
+        try {
+          const numericSeatIds = Array.from(state.selectedSeats).map((s) => Number(s)).filter((n) => !isNaN(n))
+          await releaseSeatsAPI(showtime.id, numericSeatIds)
+        } catch (err) {
+          console.error('Failed to release seats on backend:', err)
+        }
         sessionStorage.removeItem(`cineverse_hold_start_${showtime.id}`)
       }
       clearSeats()

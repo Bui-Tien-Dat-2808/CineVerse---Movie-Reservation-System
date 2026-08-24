@@ -12,6 +12,7 @@ import SeatLegend from '../components/features/seats/SeatLegend'
 import { GenreBadge } from '../components/ui/Badge'
 import { useVirtualQueue } from '../hooks/useVirtualQueue'
 import { WaitingRoomModal } from '../components/features/queue/WaitingRoomModal'
+import { useRealtimeSeatMap, RealtimeSeatEvent } from '../hooks/useRealtimeSeatMap'
 
 function formatYYYYMMDD(d: Date): string {
   const year = d.getFullYear()
@@ -86,6 +87,8 @@ export default function CineVerseMovieView() {
     refetch: refetchShowtimes,
   } = useShowtimes(movieId)
 
+  const { user } = useAuth()
+
   // Fetch real seat map from backend when showtime is selected
   const {
     data: seatMap,
@@ -93,6 +96,12 @@ export default function CineVerseMovieView() {
     isError: isErrorSeatMap,
     refetch: refetchSeatMap,
   } = useSeatMap(state.selectedShowtime)
+
+  // Real-time seat map synchronization via WebSockets
+  useRealtimeSeatMap(state.selectedShowtime?.id, (event: RealtimeSeatEvent) => {
+    console.log('⚡ [CineVerseMovieView] Realtime seat event received:', event)
+    refetchSeatMap()
+  })
 
   // Calculate realtime total price
   const currentTotalPrice = calculateTotalPrice(seatMap?.seats)

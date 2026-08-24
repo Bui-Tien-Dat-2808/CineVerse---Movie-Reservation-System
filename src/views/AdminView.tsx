@@ -1962,6 +1962,10 @@ export default function AdminView() {
     total_users_count: number
     total_rooms_count: number
     total_showtimes_count: number
+    monthly_revenue?: Array<{ month: string; revenue: number; tickets: number }>
+    movie_revenue_breakdown?: Array<{ movie_id: number; movie_title: string; revenue: number; tickets: number; percentage: number }>
+    room_occupancy?: Array<{ room_id: number; room_name: string; occupancy_rate: number; total_seats: number; booked_seats: number }>
+    recent_transactions?: Array<{ id: number; ticket_code: string; customer_name: string; movie_title: string; total_price: number; payment_method: string; created_at: string }>
   } | null>(null)
 
   const [capacityReport, setCapacityReport] = useState<Array<{
@@ -3182,26 +3186,25 @@ export default function AdminView() {
                           )}
                         </div>
 
-                        <div className="space-y-2">
-                          {selectedMovieStIds.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => handleCancelByMovie(cancelMovieId, selectedMovieStIds)}
-                              className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs cursor-pointer transition-all shadow-md"
-                            >
-                              🗑️ Hủy {selectedMovieStIds.length} Suất Chiếu Đã Chọn Của Phim Này
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            disabled={upcomingMovieSts.length === 0}
-                            onClick={() => handleCancelByMovie(cancelMovieId)}
-                            className="w-full bg-rose-700/80 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 border border-rose-500/30"
-                          >
-                            💥 Hủy Tất Cả {upcomingMovieSts.length} Suất Sắp Chiếu Của Phim Này
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          disabled={upcomingMovieSts.length === 0}
+                          onClick={() => {
+                            if (selectedMovieStIds.length > 0) {
+                              handleCancelByMovie(cancelMovieId, selectedMovieStIds)
+                            } else {
+                              handleCancelByMovie(cancelMovieId)
+                            }
+                          }}
+                          className="w-full bg-rose-600 hover:bg-rose-700 text-white font-extrabold py-3 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 shadow-md uppercase tracking-wider flex items-center justify-center gap-2"
+                        >
+                          <span>🗑️</span>
+                          <span>
+                            {selectedMovieStIds.length > 0
+                              ? `HỦY ${selectedMovieStIds.length} SUẤT CHIẾU ĐÃ CHỌN CỦA PHIM NÀY`
+                              : `HỦY TẤT CẢ ${upcomingMovieSts.length} SUẤT SẮP CHIẾU CỦA PHIM NÀY`}
+                          </span>
+                        </button>
                       </div>
                     )
                   })()}
@@ -4118,10 +4121,10 @@ export default function AdminView() {
               <div className="absolute top-0 right-0 p-4 opacity-15 text-3xl">🎟️</div>
               <span className="text-xs text-[#a09e9a] font-mono-data block mb-1 uppercase tracking-wider">Vé Đã Bán Ra</span>
               <h3 className="font-display font-black text-2xl text-[#f0ede8]">
-                {liveAnalytics ? `${liveAnalytics.total_reservations} Vé` : '384 Vé'}
+                {liveAnalytics ? `${liveAnalytics.total_reservations} Vé` : '0 Vé'}
               </h3>
               <p className="text-[10px] text-[#2ecc71] font-mono-data mt-2 font-bold">
-                Suất chiếu: {liveAnalytics?.total_showtimes_count ?? 70} suất
+                Suất chiếu: {liveAnalytics?.total_showtimes_count ?? 0} suất
               </p>
             </div>
 
@@ -4138,7 +4141,7 @@ export default function AdminView() {
               <div className="absolute top-0 right-0 p-4 opacity-15 text-3xl">👥</div>
               <span className="text-xs text-[#a09e9a] font-mono-data block mb-1 uppercase tracking-wider">Tài Khoản Đăng Ký</span>
               <h3 className="font-display font-black text-2xl text-[#f0ede8]">
-                {liveAnalytics ? `${liveAnalytics.total_users_count} Thành Viên` : '156 Thành Viên'}
+                {liveAnalytics ? `${liveAnalytics.total_users_count} Thành Viên` : '0 Thành Viên'}
               </h3>
               <p className="text-[10px] text-[#2ecc71] font-mono-data mt-2 font-bold">100% trong PostgreSQL</p>
             </div>
@@ -4167,48 +4170,67 @@ export default function AdminView() {
             </div>
 
             {/* Monthly Bar Visualizer */}
-            <div className="h-64 flex items-end justify-between gap-3 sm:gap-6 pt-8 pb-4 border-b border-white/10 px-4">
-              {[
-                { month: 'T1', rev: 18.5, tickets: 160, heightPct: 38 },
-                { month: 'T2', rev: 24.0, tickets: 205, heightPct: 49 },
-                { month: 'T3', rev: 29.2, tickets: 245, heightPct: 60 },
-                { month: 'T4', rev: 31.0, tickets: 260, heightPct: 63 },
-                { month: 'T5', rev: 35.8, tickets: 290, heightPct: 73 },
-                { month: 'T6', rev: 42.1, tickets: 330, heightPct: 86 },
-                { month: 'T7', rev: 45.0, tickets: 355, heightPct: 92 },
-                { month: 'T8', rev: 48.75, tickets: 384, heightPct: 100 },
-              ].map((item) => (
-                <div key={item.month} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
-                  {/* Tooltip on hover */}
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-[#09090e] border border-[#e8b84b]/40 rounded px-2 py-1 text-[10px] font-mono-data text-center pointer-events-none shadow-xl mb-1">
-                    <p className="text-[#e8b84b] font-bold">{item.rev} triệu VNĐ</p>
-                    <p className="text-[#a09e9a]">{item.tickets} vé bán</p>
+            {(() => {
+              const monthlyData = (liveAnalytics?.monthly_revenue && liveAnalytics.monthly_revenue.length > 0)
+                ? liveAnalytics.monthly_revenue.map((r) => {
+                    const parts = r.month.split('-')
+                    const mStr = parts.length > 1 ? `Tháng ${parseInt(parts[1], 10)}` : r.month
+                    return { month: mStr, rev: Math.round(r.revenue / 100000) / 10, rawRev: r.revenue, tickets: r.tickets }
+                  })
+                : []
+
+              if (monthlyData.length === 0) {
+                return (
+                  <div className="h-64 flex flex-col items-center justify-center text-[#a09e9a] text-sm gap-2 border-b border-white/10">
+                    <span className="text-2xl">📊</span>
+                    <span>Chưa có đủ dữ liệu doanh thu để hiển thị biểu đồ.</span>
+                  </div>
+                )
+              }
+
+              const maxRev = Math.max(...monthlyData.map((d) => d.rev), 1)
+
+              return (
+                <>
+                  <div className="h-64 flex items-end justify-between gap-3 sm:gap-6 pt-8 pb-4 border-b border-white/10 px-4">
+                    {monthlyData.map((item) => {
+                      const heightPct = Math.min(100, Math.max(15, Math.round((item.rev / maxRev) * 100)))
+                      return (
+                        <div key={item.month} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
+                          {/* Tooltip on hover */}
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-[#09090e] border border-[#e8b84b]/40 rounded px-2 py-1 text-[10px] font-mono-data text-center pointer-events-none shadow-xl mb-1">
+                            <p className="text-[#e8b84b] font-bold">{item.rawRev.toLocaleString('vi-VN')} VNĐ</p>
+                            <p className="text-[#a09e9a]">{item.tickets} vé đã bán</p>
+                          </div>
+
+                          <div className="w-full max-w-[40px] flex items-end justify-center gap-1 h-full">
+                            {/* Revenue Bar */}
+                            <div
+                              className="w-1/2 bg-gradient-to-t from-[#d4a338] to-[#e8b84b] rounded-t transition-all duration-500 group-hover:brightness-125"
+                              style={{ height: `${heightPct}%` }}
+                            />
+                            {/* Tickets Bar */}
+                            <div
+                              className="w-1/2 bg-gradient-to-t from-[#2980b9] to-[#3498db] rounded-t transition-all duration-500 group-hover:brightness-125"
+                              style={{ height: `${Math.max(10, heightPct * 0.8)}%` }}
+                            />
+                          </div>
+
+                          <span className="text-xs font-mono-data text-[#a09e9a] font-bold mt-1 group-hover:text-[#e8b84b]">
+                            {item.month}
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
 
-                  <div className="w-full max-w-[40px] flex items-end justify-center gap-1 h-full">
-                    {/* Revenue Bar */}
-                    <div
-                      className="w-1/2 bg-gradient-to-t from-[#d4a338] to-[#e8b84b] rounded-t transition-all duration-500 group-hover:brightness-125"
-                      style={{ height: `${item.heightPct}%` }}
-                    />
-                    {/* Tickets Bar */}
-                    <div
-                      className="w-1/2 bg-gradient-to-t from-[#2980b9] to-[#3498db] rounded-t transition-all duration-500 group-hover:brightness-125"
-                      style={{ height: `${item.heightPct * 0.8}%` }}
-                    />
+                  <div className="flex justify-between items-center pt-4 text-xs text-[#a09e9a] font-mono-data">
+                    <span>Thống kê từ PostgreSQL DB (Thời gian thực)</span>
+                    <span className="text-[#2ecc71] font-bold">Tổng doanh thu: {fmt(liveAnalytics?.total_revenue || 0)}</span>
                   </div>
-
-                  <span className="text-xs font-mono-data text-[#a09e9a] font-bold mt-1 group-hover:text-[#e8b84b]">
-                    {item.month}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-between items-center pt-4 text-xs text-[#a09e9a] font-mono-data">
-              <span>Đơn vị tính: triệu VNĐ / Tổng 8 tháng</span>
-              <span className="text-[#2ecc71] font-bold">Tỷ lệ tăng trưởng bình quân: +14.2%/tháng</span>
-            </div>
+                </>
+              )
+            })()}
           </div>
 
           {/* Chart Section 2: Movie Revenue Distribution & Room Occupancy */}
@@ -4218,29 +4240,52 @@ export default function AdminView() {
               <h3 className="font-display font-bold text-xl text-[#f0ede8] mb-1 flex items-center gap-2">
                 <span>🎬</span> Top Phim Chiếm Tỷ Trọng Doanh Thu Cao Nhất
               </h3>
-              <p className="text-xs text-[#a09e9a] mb-6">Thống kê doanh thu đóng góp thực tế theo từng tựa phim.</p>
+              <p className="text-xs text-[#a09e9a] mb-6">Thống kê doanh thu đóng góp thực tế theo từng tựa phim trong cơ sở dữ liệu.</p>
 
               <div className="space-y-4">
-                {[
-                  { title: 'Spider-Man: Brand New Day', rev: '14.800.000 VNĐ', pct: 30.3, color: 'bg-gradient-to-r from-red-600 to-amber-500' },
-                  { title: 'The Odyssey', rev: '11.200.000 VNĐ', pct: 23.0, color: 'bg-gradient-to-r from-amber-500 to-yellow-400' },
-                  { title: 'Supergirl', rev: '8.500.000 VNĐ', pct: 17.4, color: 'bg-gradient-to-r from-blue-600 to-indigo-400' },
-                  { title: 'Avatar 3: Fire and Ash', rev: '7.600.000 VNĐ', pct: 15.6, color: 'bg-gradient-to-r from-purple-600 to-pink-500' },
-                  { title: 'Toy Story 5 & Phim Khác', rev: '6.650.000 VNĐ', pct: 13.7, color: 'bg-gradient-to-r from-emerald-600 to-teal-400' },
-                ].map((m) => (
-                  <div key={m.title} className="space-y-1.5">
-                    <div className="flex justify-between text-xs">
-                      <span className="font-bold text-[#f0ede8]">{m.title}</span>
-                      <span className="font-mono-data text-[#e8b84b] font-bold">{m.rev} ({m.pct}%)</span>
+                {(() => {
+                  const movieData = (liveAnalytics?.movie_revenue_breakdown && liveAnalytics.movie_revenue_breakdown.length > 0)
+                    ? liveAnalytics.movie_revenue_breakdown.map((m, idx) => {
+                        const colors = [
+                          'bg-gradient-to-r from-amber-500 to-yellow-400',
+                          'bg-gradient-to-r from-red-600 to-amber-500',
+                          'bg-gradient-to-r from-blue-600 to-indigo-400',
+                          'bg-gradient-to-r from-purple-600 to-pink-500',
+                          'bg-gradient-to-r from-emerald-600 to-teal-400',
+                        ]
+                        return {
+                          title: m.movie_title,
+                          rev: `${m.revenue.toLocaleString('vi-VN')} VNĐ`,
+                          pct: m.percentage,
+                          color: colors[idx % colors.length]
+                        }
+                      })
+                    : []
+
+                  if (movieData.length === 0) {
+                    return (
+                      <div className="py-8 flex flex-col items-center justify-center text-[#a09e9a] text-xs gap-2">
+                        <span>🎬</span>
+                        <span>Chưa có dữ liệu phân rã doanh thu phim.</span>
+                      </div>
+                    )
+                  }
+
+                  return movieData.map((m) => (
+                    <div key={m.title} className="space-y-1.5">
+                      <div className="flex justify-between text-xs">
+                        <span className="font-bold text-[#f0ede8]">{m.title}</span>
+                        <span className="font-mono-data text-[#e8b84b] font-bold">{m.rev} ({m.pct}%)</span>
+                      </div>
+                      <div className="w-full bg-[#09090e] h-3 rounded-full overflow-hidden border border-white/5">
+                        <div
+                          className={`h-full ${m.color} rounded-full transition-all duration-700`}
+                          style={{ width: `${Math.min(100, Math.max(5, m.pct))}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-full bg-[#09090e] h-3 rounded-full overflow-hidden border border-white/5">
-                      <div
-                        className={`h-full ${m.color} rounded-full transition-all duration-700`}
-                        style={{ width: `${m.pct}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  ))
+                })()}
               </div>
             </div>
 
@@ -4253,39 +4298,47 @@ export default function AdminView() {
                 <p className="text-xs text-[#a09e9a] mb-6">Hiệu suất khai thác ghế ngồi theo công nghệ phòng chiếu.</p>
 
                 <div className="space-y-5">
-                  {(capacityReport.length > 0
-                    ? capacityReport.slice(0, 5).map((c) => ({
-                        room: `${c.room_name} - ${c.movie_title}`,
-                        occ: Math.round(c.occupancy_rate * 10) / 10,
-                        color:
-                          c.occupancy_rate >= 80
-                            ? 'text-[#e8b84b]'
-                            : c.occupancy_rate >= 50
-                            ? 'text-[#2ecc71]'
-                            : 'text-[#3498db]',
-                      }))
-                    : [
-                        { room: 'Phòng 1 (IMAX 3D Laser)', occ: 94.2, color: 'text-[#e8b84b]' },
-                        { room: 'Phòng 2 (VIP Gold Lounge)', occ: 88.5, color: 'text-[#2ecc71]' },
-                        { room: 'Phòng 4 (4DX Motion)', occ: 76.0, color: 'text-[#3498db]' },
-                        { room: 'Phòng 3 (Standard)', occ: 68.4, color: 'text-[#9b59b6]' },
-                      ]
-                  ).map((r) => (
-                    <div key={r.room} className="bg-[#09090e] p-3.5 rounded-xl border border-white/5 space-y-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-[#f0ede8] truncate max-w-[240px]" title={r.room}>
-                          {r.room}
-                        </span>
-                        <span className={`font-mono-data font-bold ${r.color}`}>{r.occ}% Lấp Đầy</span>
+                  {(() => {
+                    const roomData = (liveAnalytics?.room_occupancy && liveAnalytics.room_occupancy.length > 0)
+                      ? liveAnalytics.room_occupancy.map((r) => ({
+                          room: `${r.room_name} (${r.booked_seats}/${r.total_seats} ghế)`,
+                          occ: r.occupancy_rate,
+                          color: r.occupancy_rate >= 80 ? 'text-[#e8b84b]' : r.occupancy_rate >= 50 ? 'text-[#2ecc71]' : 'text-[#3498db]'
+                        }))
+                      : capacityReport.length > 0
+                        ? capacityReport.slice(0, 5).map((c) => ({
+                            room: `${c.room_name} - ${c.movie_title}`,
+                            occ: Math.round(c.occupancy_rate * 10) / 10,
+                            color: c.occupancy_rate >= 80 ? 'text-[#e8b84b]' : c.occupancy_rate >= 50 ? 'text-[#2ecc71]' : 'text-[#3498db]'
+                          }))
+                        : []
+
+                    if (roomData.length === 0) {
+                      return (
+                        <div className="py-8 flex flex-col items-center justify-center text-[#a09e9a] text-xs gap-2">
+                          <span>🏛️</span>
+                          <span>Chưa có dữ liệu tỷ lệ lấp đầy phòng chiếu.</span>
+                        </div>
+                      )
+                    }
+
+                    return roomData.map((r) => (
+                      <div key={r.room} className="bg-[#09090e] p-3.5 rounded-xl border border-white/5 space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-bold text-[#f0ede8] truncate max-w-[240px]" title={r.room}>
+                            {r.room}
+                          </span>
+                          <span className={`font-mono-data font-bold ${r.color}`}>{r.occ}% Lấp Đầy</span>
+                        </div>
+                        <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
+                          <div
+                            className="bg-[#e8b84b] h-full rounded-full transition-all duration-500"
+                            style={{ width: `${Math.min(100, Math.max(0, r.occ))}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
-                        <div
-                          className="bg-[#e8b84b] h-full rounded-full transition-all duration-500"
-                          style={{ width: `${Math.min(100, Math.max(0, r.occ))}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  })()}
                 </div>
               </div>
             </div>
@@ -4352,6 +4405,42 @@ export default function AdminView() {
               </div>
             </div>
           </div>
+
+          {/* Section 4: Live Recent Transactions List from PostgreSQL */}
+          {liveAnalytics?.recent_transactions && liveAnalytics.recent_transactions.length > 0 && (
+            <div className="bg-[#111118] border border-white/10 rounded-2xl p-6 shadow-xl space-y-4">
+              <h3 className="font-display font-bold text-lg text-[#f0ede8] flex items-center gap-2">
+                <span>🧾</span> Giao Dịch Vé Đã Xác Nhận Gần Đây (PostgreSQL Live)
+              </h3>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs font-mono-data">
+                  <thead>
+                    <tr className="border-b border-white/10 text-[#a09e9a]">
+                      <th className="pb-3">MÃ VÉ</th>
+                      <th className="pb-3">KHÁCH HÀNG</th>
+                      <th className="pb-3">PHIM CHIẾU</th>
+                      <th className="pb-3">TỔNG TIỀN</th>
+                      <th className="pb-3">PHƯƠNG THỨC</th>
+                      <th className="pb-3">THỜI GIAN</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {liveAnalytics.recent_transactions.map((tx) => (
+                      <tr key={tx.id} className="hover:bg-white/5 transition-colors">
+                        <td className="py-3 font-bold text-[#e8b84b]">{tx.ticket_code}</td>
+                        <td className="py-3 text-[#f0ede8] font-sans font-bold">{tx.customer_name}</td>
+                        <td className="py-3 text-white font-sans">{tx.movie_title}</td>
+                        <td className="py-3 font-bold text-emerald-400">{tx.total_price.toLocaleString('vi-VN')} VNĐ</td>
+                        <td className="py-3 uppercase text-amber-300">{tx.payment_method}</td>
+                        <td className="py-3 text-[#a09e9a]">{tx.created_at}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

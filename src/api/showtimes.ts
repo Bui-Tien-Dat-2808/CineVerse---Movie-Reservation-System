@@ -127,6 +127,14 @@ export async function holdSeatsAPI(showtimeId: number, seatIds: number[]): Promi
   return data
 }
 
+/** POST /api/v1/showtimes/{id}/release-seats */
+export async function releaseSeatsAPI(showtimeId: number, seatIds: number[]): Promise<{ released_seat_ids: number[] }> {
+  const { data } = await apiClient.post(`/api/v1/showtimes/${showtimeId}/release-seats`, {
+    seat_ids: seatIds,
+  })
+  return data
+}
+
 /** POST /api/v1/reservations/ */
 export async function createReservationAPI(
   showtimeId: number,

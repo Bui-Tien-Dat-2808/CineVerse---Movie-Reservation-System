@@ -40,6 +40,7 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: true,
           secure: false,
+          ws: true,
         },
       },
       // Required for react-router-dom BrowserRouter — serves index.html for all routes
