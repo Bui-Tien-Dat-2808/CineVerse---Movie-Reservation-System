@@ -44,14 +44,17 @@ export default function ProfileView() {
   // Booking History States
   const [reservations, setReservations] = useState<ReservationItem[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
   const [historyFilter, setHistoryFilter] = useState<'all' | 'confirmed' | 'pending' | 'cancelled'>('all')
 
   // User Vouchers States
   const [userVouchers, setUserVouchers] = useState<any[]>([])
   const [voucherLoading, setVoucherLoading] = useState(false)
+  const [voucherError, setVoucherError] = useState<string | null>(null)
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [loyaltyData, setLoyaltyData] = useState<LoyaltyStatus | null>(null)
   const [loyaltyLoading, setLoyaltyLoading] = useState(false)
+  const [loyaltyError, setLoyaltyError] = useState<string | null>(null)
 
   useEffect(() => {
     if (activeTab === 'vouchers') {
@@ -64,11 +67,13 @@ export default function ProfileView() {
 
   async function loadLoyalty() {
     setLoyaltyLoading(true)
+    setLoyaltyError(null)
     try {
       const data = await fetchMyLoyalty()
       setLoyaltyData(data)
     } catch (err) {
       console.error('Failed to load loyalty data:', err)
+      setLoyaltyError('Không thể tải thông tin điểm thưởng thành viên từ máy chủ.')
     } finally {
       setLoyaltyLoading(false)
     }
@@ -76,11 +81,13 @@ export default function ProfileView() {
 
   async function loadUserVouchers() {
     setVoucherLoading(true)
+    setVoucherError(null)
     try {
       const { data } = await apiClient.get<any[]>('/api/v1/vouchers/')
       setUserVouchers(data)
     } catch (err) {
       console.error('Failed to load user vouchers:', err)
+      setVoucherError('Không thể tải danh sách voucher khuyến mãi của bạn.')
     } finally {
       setVoucherLoading(false)
     }
@@ -208,11 +215,13 @@ const CANCELLATION_REASONS = [
 
   async function loadReservations() {
     setHistoryLoading(true)
+    setHistoryError(null)
     try {
       const items = await fetchMyReservationsAPI()
       setReservations(items)
     } catch (err) {
       console.error('Failed to load reservations:', err)
+      setHistoryError('Không thể tải danh sách lịch sử đặt vé từ máy chủ. Vui lòng thử lại.')
     } finally {
       setHistoryLoading(false)
     }
@@ -619,6 +628,20 @@ const CANCELLATION_REASONS = [
           {historyLoading ? (
             <div className={`text-center py-16 text-xs font-mono-data animate-pulse ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
               Đang tải lịch sử đặt vé...
+            </div>
+          ) : historyError ? (
+            <div className={`rounded-xl p-12 text-center border space-y-3 transition-colors ${
+              isDark ? 'bg-red-500/10 border-red-500/30 text-red-300' : 'bg-red-50 border-red-200 text-red-800'
+            }`}>
+              <span className="text-4xl block">⚠️</span>
+              <p className="font-display font-bold text-base">{historyError}</p>
+              <button
+                type="button"
+                onClick={loadReservations}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md"
+              >
+                🔄 Thử lại
+              </button>
             </div>
           ) : filteredReservations.length === 0 ? (
             <div className={`rounded-xl p-12 text-center border transition-colors ${
@@ -1137,6 +1160,17 @@ const CANCELLATION_REASONS = [
               <div className={`py-10 text-center text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
                 ⏳ Đang tải thông tin điểm thưởng...
               </div>
+            ) : loyaltyError ? (
+              <div className={`py-10 text-center text-xs space-y-3 ${isDark ? 'text-red-300' : 'text-red-700'}`}>
+                <p>⚠️ {loyaltyError}</p>
+                <button
+                  type="button"
+                  onClick={loadLoyalty}
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg cursor-pointer"
+                >
+                  🔄 Thử lại
+                </button>
+              </div>
             ) : loyaltyData ? (
               <div className="space-y-6">
                 <div className={`rounded-2xl border p-5 ${isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-50 border-slate-200'}`}>
@@ -1234,6 +1268,19 @@ const CANCELLATION_REASONS = [
             {voucherLoading ? (
               <div className={`py-12 text-center text-xs font-mono-data animate-pulse ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
                 ⏳ Đang kiểm tra kho voucher...
+              </div>
+            ) : voucherError ? (
+              <div className={`py-12 text-center text-xs border rounded-xl space-y-3 ${
+                isDark ? 'bg-red-500/10 border-red-500/30 text-red-300' : 'bg-red-50 border-red-200 text-red-800'
+              }`}>
+                <p>⚠️ {voucherError}</p>
+                <button
+                  type="button"
+                  onClick={loadUserVouchers}
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg cursor-pointer"
+                >
+                  🔄 Thử lại
+                </button>
               </div>
             ) : userVouchers.length === 0 ? (
               <div className={`py-12 text-center text-xs italic border rounded-xl ${

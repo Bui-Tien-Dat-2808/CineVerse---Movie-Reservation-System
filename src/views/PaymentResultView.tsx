@@ -21,6 +21,7 @@ export default function PaymentResultView() {
 
   const [reservation, setReservation] = useState<ReservationItem | null>(null)
   const [loading, setLoading] = useState<boolean>(isSuccess && !!resIdParam)
+  const [receiptError, setReceiptError] = useState<string | null>(null)
 
   useEffect(() => {
     // Clear transient booking context state once payment result is rendered
@@ -29,9 +30,14 @@ export default function PaymentResultView() {
 
   useEffect(() => {
     if (isSuccess && resIdParam) {
+      setLoading(true)
+      setReceiptError(null)
       fetchReservationDetailAPI(Number(resIdParam))
         .then((data) => setReservation(data))
-        .catch((err) => console.error('Failed to load reservation receipt:', err))
+        .catch((err) => {
+          console.error('Failed to load reservation receipt:', err)
+          setReceiptError('Không thể tải chi tiết hóa đơn đặt vé vào lúc này. Đơn hàng của bạn đã được thanh toán thành công và có thể xem lại trong mục Lịch Sử Đặt Vé.')
+        })
         .finally(() => setLoading(false))
     }
   }, [isSuccess, resIdParam])
@@ -136,6 +142,17 @@ export default function PaymentResultView() {
                   </strong>
                 </div>
               </div>
+            </div>
+          ) : receiptError ? (
+            <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-center space-y-3">
+              <p className={cn('text-xs font-medium', isDark ? 'text-amber-300' : 'text-amber-900')}>{receiptError}</p>
+              <button
+                type="button"
+                onClick={() => navigate('/profile?tab=history')}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg transition-all cursor-pointer shadow-sm"
+              >
+                🎟️ Xem vé trong Lịch sử đặt vé
+              </button>
             </div>
           ) : (
             <div className="text-center py-4 text-xs text-amber-500">

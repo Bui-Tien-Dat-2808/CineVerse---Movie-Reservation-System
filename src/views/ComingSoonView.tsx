@@ -22,16 +22,25 @@ export default function ComingSoonView() {
 
   const [movies, setMovies] = useState<ComingSoonMovieItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [subscribedIds, setSubscribedIds] = useState<number[]>([])
 
-  useEffect(() => {
+  const fetchComingSoon = () => {
     setLoading(true)
+    setError(null)
     apiClient
       .get<{ items: ComingSoonMovieItem[] }>('/api/v1/movies/coming-soon')
       .then(({ data }) => setMovies(data.items ?? []))
-      .catch((err) => console.error('Failed to load coming soon movies:', err))
+      .catch((err) => {
+        console.error('Failed to load coming soon movies:', err)
+        setError('Không thể tải danh sách phim sắp ra mắt từ máy chủ. Vui lòng kiểm tra lại kết nối.')
+      })
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    fetchComingSoon()
   }, [])
 
   function toggleSubscribe(id: number) {
@@ -116,6 +125,22 @@ export default function ComingSoonView() {
       {loading ? (
         <div className={`text-center py-20 text-xs font-mono-data animate-pulse ${isLight ? 'text-slate-500' : 'text-[#a09e9a]'}`}>
           Đang tải danh sách phim sắp ra mắt...
+        </div>
+      ) : error ? (
+        <div
+          className={`border rounded-2xl p-12 text-center space-y-4 ${
+            isLight ? 'bg-red-50 border-red-200 text-red-800' : 'bg-red-500/10 border-red-500/30 text-red-300'
+          }`}
+        >
+          <span className="text-4xl block">⚠️</span>
+          <h3 className="font-display font-bold text-lg">{error}</h3>
+          <button
+            type="button"
+            onClick={fetchComingSoon}
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md"
+          >
+            🔄 Thử lại
+          </button>
         </div>
       ) : filteredMovies.length === 0 ? (
         <div

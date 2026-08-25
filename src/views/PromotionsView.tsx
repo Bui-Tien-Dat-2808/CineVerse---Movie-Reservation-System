@@ -21,15 +21,24 @@ export default function PromotionsView() {
 
   const [vouchers, setVouchers] = useState<VoucherItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
 
-  useEffect(() => {
+  const fetchVouchers = () => {
     setLoading(true)
+    setError(null)
     apiClient
       .get<VoucherItem[]>('/api/v1/vouchers/')
       .then(({ data }) => setVouchers(data))
-      .catch((err) => console.error('Failed to load vouchers:', err))
+      .catch((err) => {
+        console.error('Failed to load vouchers:', err)
+        setError('Không thể tải danh sách ưu đãi khuyến mãi từ máy chủ. Vui lòng thử lại sau.')
+      })
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    fetchVouchers()
   }, [])
 
   async function handleCopy(code: string) {
@@ -85,6 +94,22 @@ export default function PromotionsView() {
       {loading ? (
         <div className={`text-center py-20 text-xs font-mono-data animate-pulse ${isLight ? 'text-slate-500' : 'text-[#a09e9a]'}`}>
           Đang tải danh sách chương trình khuyến mãi...
+        </div>
+      ) : error ? (
+        <div
+          className={`border rounded-2xl p-12 text-center space-y-4 ${
+            isLight ? 'bg-red-50 border-red-200 text-red-800' : 'bg-red-500/10 border-red-500/30 text-red-300'
+          }`}
+        >
+          <span className="text-4xl block">⚠️</span>
+          <h3 className="font-display font-bold text-lg">{error}</h3>
+          <button
+            type="button"
+            onClick={fetchVouchers}
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md"
+          >
+            🔄 Thử lại
+          </button>
         </div>
       ) : vouchers.length === 0 ? (
         <div

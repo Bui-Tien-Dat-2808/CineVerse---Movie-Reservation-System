@@ -234,6 +234,13 @@ interface ProposedShowtimeItem {
   vip_price: number
 }
 
+function toLocalYYYYMMDD(d: Date = new Date()): string {
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function formatVNFullDate(dateStr: string): string {
   if (!dateStr) return ''
   const [y, m, d] = dateStr.split('-').map(Number)
@@ -382,7 +389,7 @@ function CleanDatePicker({ value, onChange, minDate, label, placeholder = 'Chọ
               <button
                 type="button"
                 onClick={() => {
-                  const todayStr = new Date().toISOString().split('T')[0]
+                  const todayStr = toLocalYYYYMMDD(new Date())
                   if (!minDate || todayStr >= minDate) {
                     onChange(todayStr)
                     setOpen(false)
@@ -699,7 +706,10 @@ function RoomSeatLayoutModal({
             setEditableSeats(res.data.seats || [])
           }
         })
-        .catch((err) => console.error('Failed to load room seats:', err))
+        .catch((err) => {
+          console.error('Failed to load room seats:', err)
+          setSaveMessage('❌ Không thể tải sơ đồ ghế từ máy chủ.')
+        })
         .finally(() => setLoading(false))
     } else {
       setDetailedRoom(room)
@@ -1715,7 +1725,7 @@ export default function AdminView() {
   // Dedicated Showtime Cancellation State
   const [cancelMode, setCancelMode] = useState<'single' | 'movie' | 'all'>('single')
   const [cancelSingleStId, setCancelSingleStId] = useState<number>(0)
-  const [cancelMovieId, setCancelMovieId] = useState<number>(0)
+  const [cancelMovieIds, setCancelMovieIds] = useState<number[]>([])
   const [selectedStIds, setSelectedStIds] = useState<number[]>([])
 
   // Ticket Scanner / Verification State
@@ -1891,12 +1901,12 @@ export default function AdminView() {
 
   // Auto-Schedule Modal State
   const [autoModalOpen, setAutoModalOpen] = useState(false)
-  const [autoStartDate, setAutoStartDate] = useState(
-    new Date().toISOString().split('T')[0]
-  )
-  const [autoEndDate, setAutoEndDate] = useState(
-    new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
-  )
+  const [autoStartDate, setAutoStartDate] = useState(() => toLocalYYYYMMDD(new Date()))
+  const [autoEndDate, setAutoEndDate] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() + 7)
+    return toLocalYYYYMMDD(d)
+  })
   const [autoStartTimeStr, setAutoStartTimeStr] = useState('08:00')
   const [autoEndTimeStr, setAutoEndTimeStr] = useState('23:30')
   const [autoBufferMins, setAutoBufferMins] = useState(15)
@@ -1999,6 +2009,7 @@ export default function AdminView() {
         }),
         apiClient.get<RoomItem[]>('/api/v1/rooms/').catch((err) => {
           console.error('Failed to load rooms:', err)
+          setActionMsg({ type: 'error', text: 'Không thể tải danh sách phòng chiếu từ máy chủ.' })
           return null
         }),
         apiClient.get<{ items: ShowtimeItem[] }>('/api/v1/showtimes/?page_size=5000').catch((err) => {
@@ -2066,6 +2077,7 @@ export default function AdminView() {
       setDetailMovieModal(data)
     } catch (err) {
       console.error('Không thể tải chi tiết phim:', err)
+      setActionMsg({ type: 'error', text: 'Không thể tải đầy đủ chi tiết phim (trailer/đạo diễn có thể chưa cập nhật).' })
     }
   }
 
@@ -2374,23 +2386,42 @@ export default function AdminView() {
     }
   }
 
-  async function handleCancelByMovie(movieId: number, idsToCancel?: number[]) {
-    const targetMovie = movies.find((m) => m.id === movieId)
+  async function handleCancelByMovies(movieIds: number[], idsToCancel?: number[]) {
+    if (!movieIds || movieIds.length === 0) {
+      notify('error', 'Vui lòng chọn ít nhất một bộ phim để hủy suất chiếu.')
+      return
+    }
 
     if (idsToCancel && idsToCancel.length > 0) {
       return handleBulkCancelSelectedShowtimes(idsToCancel)
     }
 
+    const selectedMovieObjs = movies.filter((m) => movieIds.includes(m.id))
+    const movieTitles = selectedMovieObjs.map((m) => m.title).join(', ')
+
     const upcomingMovieSts = showtimes.filter(
-      (st) => st.movie_id === movieId && new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed' && st.status !== 'cancelled'
+      (st) =>
+        movieIds.includes(st.movie_id) &&
+        new Date(st.end_time || st.start_time).getTime() >= Date.now() &&
+        st.status !== 'completed' &&
+        st.status !== 'cancelled'
     )
 
     if (upcomingMovieSts.length === 0) {
-      notify('error', 'Phim này hiện không có suất chiếu sắp chiếu (chưa diễn ra) nào.')
+      notify('error', 'Các phim đã chọn hiện không có suất chiếu sắp chiếu (chưa diễn ra) nào.')
       return
     }
 
-    if (!window.confirm(`Bạn có chắc muốn HỦY TOÀN BỘ ${upcomingMovieSts.length} suất sắp chiếu của phim "${targetMovie?.title}" không?\n\n(Lưu ý: Các suất đã chiếu và đang chiếu sẽ KHÔNG bị hủy).`)) {
+    const movieSummary =
+      selectedMovieObjs.length === 1
+        ? `phim "${selectedMovieObjs[0].title}"`
+        : `${selectedMovieObjs.length} bộ phim (${movieTitles})`
+
+    if (
+      !window.confirm(
+        `Bạn có chắc muốn HỦY TOÀN BỘ ${upcomingMovieSts.length} suất sắp chiếu của ${movieSummary} không?\n\n(Lưu ý: Các suất đã chiếu và đang chiếu sẽ KHÔNG bị hủy).`
+      )
+    ) {
       return
     }
 
@@ -2398,12 +2429,13 @@ export default function AdminView() {
       const { data } = await apiClient.post<{ message: string; count: number }>(
         '/api/v1/showtimes/admin/bulk-cancel',
         {
-          movie_id: movieId,
+          movie_ids: movieIds,
           only_upcoming: true,
         }
       )
       notify('success', data.message || `Đã hủy thành công ${data.count} suất chiếu sắp chiếu!`)
       setSelectedStIds([])
+      setCancelMovieIds([])
       await loadAllData()
     } catch (err: any) {
       notify('error', err.response?.data?.detail || 'Không thể hủy suất chiếu.')
@@ -2499,7 +2531,7 @@ export default function AdminView() {
 
   function setRefundDatePreset(preset: 'today' | '7days' | '30days' | 'all') {
     const today = new Date()
-    const formatDate = (d: Date) => d.toISOString().split('T')[0]
+    const formatDate = (d: Date) => toLocalYYYYMMDD(d)
 
     if (preset === 'all') {
       setRefundStartDate('')
@@ -3082,134 +3114,229 @@ export default function AdminView() {
               )}
 
               {/* Method 2: Cancel Showtimes By Movie */}
-              {cancelMode === 'movie' && (
-                <div className="space-y-3 pt-1">
-                  <div>
-                    <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>
-                      Chọn bộ phim cần hủy suất:
-                    </label>
-                    <select
-                      value={cancelMovieId}
-                      onChange={(e) => {
-                        setCancelMovieId(Number(e.target.value))
-                        setSelectedStIds([])
-                      }}
-                      className={`w-full p-2.5 rounded-xl border text-xs outline-none cursor-pointer ${
-                        isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900 font-semibold'
-                      }`}
-                    >
-                      <option value={0}>-- Chọn bộ phim --</option>
-                      {movies.map((m) => {
-                        const upcomingCount = showtimes.filter(
-                          (st) => st.movie_id === m.id && new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed' && st.status !== 'cancelled'
-                        ).length
-                        return (
-                          <option key={m.id} value={m.id}>
-                            {m.title} ({upcomingCount} suất sắp chiếu)
-                          </option>
-                        )
-                      })}
-                    </select>
-                  </div>
+              {cancelMode === 'movie' && (() => {
+                const moviesWithUpcomingShowtimes = movies
+                  .map((m) => {
+                    const upcomingCount = showtimes.filter(
+                      (st) =>
+                        st.movie_id === m.id &&
+                        new Date(st.end_time || st.start_time).getTime() >= Date.now() &&
+                        st.status !== 'completed' &&
+                        st.status !== 'cancelled'
+                    ).length
+                    return { ...m, upcomingCount }
+                  })
+                  .filter((m) => m.upcomingCount > 0)
 
-                  {cancelMovieId > 0 && (() => {
-                    const upcomingMovieSts = showtimes.filter(
-                      (st) => st.movie_id === cancelMovieId && new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed' && st.status !== 'cancelled'
-                    )
-                    const selectedMovieStIds = selectedStIds.filter((id) =>
-                      upcomingMovieSts.some((st) => st.id === id)
-                    )
+                const upcomingMovieSts = showtimes.filter(
+                  (st) =>
+                    cancelMovieIds.includes(st.movie_id) &&
+                    new Date(st.end_time || st.start_time).getTime() >= Date.now() &&
+                    st.status !== 'completed' &&
+                    st.status !== 'cancelled'
+                )
 
-                    return (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-[#a09e9a]">
-                            Suất sắp chiếu ({upcomingMovieSts.length}):
-                          </span>
-                          <div className="flex gap-2">
+                const selectedMovieStIds = selectedStIds.filter((id) =>
+                  upcomingMovieSts.some((st) => st.id === id)
+                )
+
+                return (
+                  <div className="space-y-3 pt-1">
+                    {moviesWithUpcomingShowtimes.length === 0 ? (
+                      <div className={`p-6 rounded-xl border border-dashed text-center text-xs space-y-1 ${
+                        isDark ? 'border-white/10 text-[#a09e9a]' : 'border-slate-300 text-slate-500'
+                      }`}>
+                        <div className="text-xl">🎬</div>
+                        <div className="font-semibold">Không có phim nào đang có suất chiếu sắp diễn ra</div>
+                        <div className="text-[11px] opacity-75">Tất cả các suất chiếu hiện tại đã hoàn thành hoặc chưa được xếp lịch.</div>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Header & Quick Action Buttons */}
+                        <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
+                          <label className={`font-bold flex items-center gap-1.5 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                            <span>🎬</span>
+                            <span>
+                              Chọn các bộ phim cần hủy suất{' '}
+                              <span className="text-[#e8b84b] font-mono-data font-bold">
+                                ({cancelMovieIds.length}/{moviesWithUpcomingShowtimes.length} phim)
+                              </span>:
+                            </span>
+                          </label>
+                          <div className="flex items-center gap-2 text-[11px]">
                             <button
                               type="button"
-                              onClick={() => setSelectedStIds(upcomingMovieSts.map((st) => st.id))}
-                              className="text-[11px] text-amber-400 hover:underline cursor-pointer"
+                              onClick={() => {
+                                const allIds = moviesWithUpcomingShowtimes.map((m) => m.id)
+                                setCancelMovieIds(allIds)
+                                setSelectedStIds([])
+                              }}
+                              className="text-amber-400 hover:underline font-semibold cursor-pointer"
                             >
-                              Tích tất cả
+                              ✓ Chọn tất cả ({moviesWithUpcomingShowtimes.length})
                             </button>
-                            {selectedMovieStIds.length > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => setSelectedStIds([])}
-                                className="text-[11px] text-[#a09e9a] hover:underline cursor-pointer"
-                              >
-                                Bỏ chọn
-                              </button>
+                            {cancelMovieIds.length > 0 && (
+                              <>
+                                <span className={isDark ? 'text-white/20' : 'text-slate-300'}>|</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCancelMovieIds([])
+                                    setSelectedStIds([])
+                                  }}
+                                  className={isDark ? 'text-[#a09e9a] hover:text-[#f0ede8] hover:underline cursor-pointer' : 'text-slate-500 hover:text-slate-800 hover:underline cursor-pointer'}
+                                >
+                                  ✕ Bỏ chọn
+                                </button>
+                              </>
                             )}
                           </div>
                         </div>
 
-                        <div className="max-h-48 overflow-y-auto space-y-1.5 p-2 bg-[#09090e] border border-white/10 rounded-xl">
-                          {upcomingMovieSts.length === 0 ? (
-                            <p className="text-xs text-[#a09e9a] p-3 text-center italic">
-                              Phim này không có suất chiếu sắp chiếu nào.
-                            </p>
-                          ) : (
-                            upcomingMovieSts.map((st) => {
-                              const isChecked = selectedStIds.includes(st.id)
-                              const rName = st.room?.name || `Phòng #${st.room_id}`
-                              const timeFmt = new Date(st.start_time).toLocaleString('vi-VN', {
-                                weekday: 'short',
-                                day: '2-digit',
-                                month: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                              return (
-                                <label
-                                  key={st.id}
-                                  className={`flex items-center gap-2.5 p-2 rounded-lg text-xs cursor-pointer border transition-colors ${
-                                    isChecked
-                                      ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
-                                      : 'bg-white/5 border-transparent text-[#a09e9a] hover:text-[#f0ede8] hover:bg-white/10'
-                                  }`}
-                                >
+                        {/* Selectable Movie Grid / Chips */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                          {moviesWithUpcomingShowtimes.map((m) => {
+                            const isSelected = cancelMovieIds.includes(m.id)
+                            return (
+                              <label
+                                key={m.id}
+                                className={`flex items-center justify-between gap-2 p-2.5 rounded-xl border transition-all cursor-pointer select-none text-xs ${
+                                  isSelected
+                                    ? isDark
+                                      ? 'bg-rose-500/15 border-rose-500/40 text-[#f0ede8] shadow-sm shadow-rose-500/5'
+                                      : 'bg-rose-50 border-rose-400 text-rose-900 font-semibold'
+                                    : isDark
+                                      ? 'bg-[#09090e] border-white/10 text-[#a09e9a] hover:border-white/20'
+                                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 shadow-sm'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
                                   <input
                                     type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => handleToggleSelectSt(st.id)}
-                                    className="accent-rose-500 w-4 h-4 rounded cursor-pointer"
+                                    checked={isSelected}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setCancelMovieIds([...cancelMovieIds, m.id])
+                                      } else {
+                                        setCancelMovieIds(cancelMovieIds.filter((id) => id !== m.id))
+                                      }
+                                      setSelectedStIds([])
+                                    }}
+                                    className="accent-rose-500 w-4 h-4 rounded cursor-pointer shrink-0"
                                   />
-                                  <span className="font-mono-data font-bold text-[#f0ede8]">
-                                    #{st.id} - {rName} | {timeFmt}
-                                  </span>
-                                </label>
-                              )
-                            })
-                          )}
+                                  <span className="truncate font-medium">{m.title}</span>
+                                </div>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono-data font-bold shrink-0 ${
+                                  isSelected
+                                    ? 'bg-rose-500/20 text-rose-400'
+                                    : isDark
+                                      ? 'bg-white/5 text-[#a09e9a]'
+                                      : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {m.upcomingCount} suất
+                                </span>
+                              </label>
+                            )
+                          })}
                         </div>
 
-                        <button
-                          type="button"
-                          disabled={upcomingMovieSts.length === 0}
-                          onClick={() => {
-                            if (selectedMovieStIds.length > 0) {
-                              handleCancelByMovie(cancelMovieId, selectedMovieStIds)
-                            } else {
-                              handleCancelByMovie(cancelMovieId)
-                            }
-                          }}
-                          className="w-full bg-rose-600 hover:bg-rose-700 text-white font-extrabold py-3 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 shadow-md uppercase tracking-wider flex items-center justify-center gap-2"
-                        >
-                          <span>🗑️</span>
-                          <span>
-                            {selectedMovieStIds.length > 0
-                              ? `HỦY ${selectedMovieStIds.length} SUẤT CHIẾU ĐÃ CHỌN CỦA PHIM NÀY`
-                              : `HỦY TẤT CẢ ${upcomingMovieSts.length} SUẤT SẮP CHIẾU CỦA PHIM NÀY`}
-                          </span>
-                        </button>
-                      </div>
-                    )
-                  })()}
-                </div>
-              )}
+                        {/* Detail Showtimes for Selected Movies */}
+                        {cancelMovieIds.length > 0 && (
+                          <div className={`space-y-3 pt-3 border-t ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className={`font-semibold ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>
+                                Danh sách suất sắp chiếu ({upcomingMovieSts.length}):
+                              </span>
+                              <div className="flex gap-2 text-[11px]">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedStIds(upcomingMovieSts.map((st) => st.id))}
+                                  className="text-amber-400 hover:underline cursor-pointer"
+                                >
+                                  Tích tất cả {upcomingMovieSts.length} suất
+                                </button>
+                                {selectedMovieStIds.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedStIds([])}
+                                    className={isDark ? 'text-[#a09e9a] hover:text-[#f0ede8] hover:underline cursor-pointer' : 'text-slate-500 hover:text-slate-800 hover:underline cursor-pointer'}
+                                  >
+                                    Bỏ chọn suất
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className={`max-h-48 overflow-y-auto space-y-1.5 p-2 rounded-xl border ${
+                              isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-50 border-slate-200'
+                            }`}>
+                              {upcomingMovieSts.map((st) => {
+                                const isChecked = selectedStIds.includes(st.id)
+                                const movieObj = movies.find((m) => m.id === st.movie_id)
+                                const rName = st.room?.name || `Phòng #${st.room_id}`
+                                const timeFmt = new Date(st.start_time).toLocaleString('vi-VN', {
+                                  weekday: 'short',
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                                return (
+                                  <label
+                                    key={st.id}
+                                    className={`flex items-center gap-2.5 p-2 rounded-lg text-xs cursor-pointer border transition-colors ${
+                                      isChecked
+                                        ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+                                        : isDark
+                                          ? 'bg-white/5 border-transparent text-[#a09e9a] hover:text-[#f0ede8] hover:bg-white/10'
+                                          : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => handleToggleSelectSt(st.id)}
+                                      className="accent-rose-500 w-4 h-4 rounded cursor-pointer shrink-0"
+                                    />
+                                    <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+                                      <span className={`truncate font-bold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                                        {movieObj?.title || `Phim #${st.movie_id}`}
+                                      </span>
+                                      <span className={`font-mono-data text-[11px] shrink-0 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                                        #{st.id} • {rName} • {timeFmt}
+                                      </span>
+                                    </div>
+                                  </label>
+                                )
+                              })}
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={upcomingMovieSts.length === 0}
+                              onClick={() => {
+                                if (selectedMovieStIds.length > 0) {
+                                  handleCancelByMovies(cancelMovieIds, selectedMovieStIds)
+                                } else {
+                                  handleCancelByMovies(cancelMovieIds)
+                                }
+                              }}
+                              className="w-full bg-rose-600 hover:bg-rose-700 text-white font-extrabold py-3 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 shadow-md uppercase tracking-wider flex items-center justify-center gap-2"
+                            >
+                              <span>🗑️</span>
+                              <span>
+                                {selectedMovieStIds.length > 0
+                                  ? `HỦY ${selectedMovieStIds.length} SUẤT CHIẾU ĐÃ CHỌN`
+                                  : `HỦY TẤT CẢ ${upcomingMovieSts.length} SUẤT SẮP CHIẾU CỦA ${cancelMovieIds.length} PHIM ĐÃ CHỌN`}
+                              </span>
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Method 3: Cancel All System Showtimes */}
               {cancelMode === 'all' && (
@@ -3780,7 +3907,7 @@ export default function AdminView() {
                 <input
                   type="date"
                   value={vExpiry}
-                  min={new Date().toISOString().split('T')[0]}
+                  min={toLocalYYYYMMDD(new Date())}
                   onChange={(e) => setVExpiry(e.target.value)}
                   onClick={(e) => e.currentTarget.showPicker?.()}
                   className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none font-mono-data cursor-pointer [color-scheme:dark]"
@@ -4575,7 +4702,7 @@ export default function AdminView() {
                 ].map((preset) => {
                   const isActive =
                     (preset.key === 'all' && !refundStartDate && !refundEndDate) ||
-                    (preset.key === 'today' && refundStartDate === new Date().toISOString().split('T')[0] && refundEndDate === new Date().toISOString().split('T')[0])
+                    (preset.key === 'today' && refundStartDate === toLocalYYYYMMDD(new Date()) && refundEndDate === toLocalYYYYMMDD(new Date()))
                   return (
                     <button
                       key={preset.key}
@@ -4845,11 +4972,10 @@ export default function AdminView() {
             <div className={`flex justify-between items-center border-b pb-4 shrink-0 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
               <div>
                 <h3 className={`font-display font-bold text-xl flex items-center gap-2 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                  <span>⚡</span>
-                  <span>Tự Động Xếp Lịch Chiếu (Auto-Schedule Engine)</span>
+                  <span>Xếp Lịch Chiếu Tự Động</span>
                 </h3>
                 <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                  Thuật toán tự động tìm khung giờ trống trong phòng chiếu và sắp xếp lịch chiếu tối ưu không bị trùng giờ.
+                  Tự động tìm khung giờ trống trong phòng chiếu và sắp xếp lịch chiếu tối ưu không bị trùng giờ.
                 </p>
               </div>
               <button
@@ -4870,14 +4996,14 @@ export default function AdminView() {
             <div className={`flex-1 overflow-y-auto pr-2 space-y-4 font-sans my-4 ${isDark ? '[color-scheme:dark]' : '[color-scheme:light]'}`}>
               {/* Date Preset Shortcuts */}
               <div className={`flex flex-wrap items-center gap-2 text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-                <span className="font-medium">Phím tắt chọn ngày nhanh:</span>
+                <span className="font-medium">Bộ lọc chọn ngày:</span>
                 <button
                   type="button"
                   onClick={() => {
                     const start = new Date()
-                    const end = new Date(Date.now() + 7 * 86400000)
-                    setAutoStartDate(start.toISOString().split('T')[0])
-                    setAutoEndDate(end.toISOString().split('T')[0])
+                    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7)
+                    setAutoStartDate(toLocalYYYYMMDD(start))
+                    setAutoEndDate(toLocalYYYYMMDD(end))
                   }}
                   className={`px-2.5 py-1 rounded-lg border cursor-pointer font-semibold text-xs transition-all ${
                     isDark
@@ -4885,15 +5011,15 @@ export default function AdminView() {
                       : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-sm'
                   }`}
                 >
-                  + 7 Ngày (Từ {new Date().getDate()}/{new Date().getMonth() + 1} Đến {new Date(Date.now() + 7 * 86400000).getDate()}/{new Date(Date.now() + 7 * 86400000).getMonth() + 1})
+                  + 7 Ngày
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     const start = new Date()
-                    const end = new Date(Date.now() + 14 * 86400000)
-                    setAutoStartDate(start.toISOString().split('T')[0])
-                    setAutoEndDate(end.toISOString().split('T')[0])
+                    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 14)
+                    setAutoStartDate(toLocalYYYYMMDD(start))
+                    setAutoEndDate(toLocalYYYYMMDD(end))
                   }}
                   className={`px-2.5 py-1 rounded-lg border cursor-pointer font-semibold text-xs transition-all ${
                     isDark
@@ -4908,8 +5034,8 @@ export default function AdminView() {
                   onClick={() => {
                     const start = new Date()
                     const end = new Date(start.getFullYear(), start.getMonth() + 1, 0)
-                    setAutoStartDate(start.toISOString().split('T')[0])
-                    setAutoEndDate(end.toISOString().split('T')[0])
+                    setAutoStartDate(toLocalYYYYMMDD(start))
+                    setAutoEndDate(toLocalYYYYMMDD(end))
                   }}
                   className={`px-2.5 py-1 rounded-lg border cursor-pointer font-semibold text-xs transition-all ${
                     isDark
@@ -4933,10 +5059,9 @@ export default function AdminView() {
                     className="w-4 h-4 rounded accent-[#e8b84b] cursor-pointer"
                   />
                   <span className={`font-semibold ${isDark ? 'text-[#e8b84b]' : 'text-amber-900'}`}>
-                    🧹 Tự động dọn dẹp & xóa suất chiếu cũ trùng khoảng ngày trước khi xếp mới (Khuyên dùng)
+                    🧹 Dọn dẹp suất chiếu cũ trong khoảng ngày trước khi xếp mới (Khuyên dùng)
                   </span>
                 </label>
-                <span className={`text-[10px] hidden sm:inline ${isDark ? 'text-[#6e6c68]' : 'text-amber-700 font-semibold'}`}>Chống trùng lặp tuyệt đối</span>
               </div>
 
               {/* Start > End Date Validation Warning */}
@@ -4955,7 +5080,7 @@ export default function AdminView() {
                   <CleanDatePicker
                     label="Từ Ngày (Start Date)"
                     value={autoStartDate}
-                    minDate={new Date().toISOString().split('T')[0]}
+                    minDate={toLocalYYYYMMDD(new Date())}
                     onChange={(d) => setAutoStartDate(d)}
                   />
                 </div>
@@ -5047,7 +5172,7 @@ export default function AdminView() {
                       onChange={(e) => setAutoSmartGenre(e.target.checked)}
                       className="accent-[#e8b84b] w-4 h-4 cursor-pointer"
                     />
-                    <span>🧠 Smart Genre Matching (Tự động ưu tiên xếp phim theo thể loại vào đúng loại phòng)</span>
+                    <span>🧠 Ưu tiên xếp phim theo thể loại vào đúng loại phòng</span>
                   </label>
 
                   <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium ${isDark ? 'text-[#f0ede8]' : 'text-slate-800 font-semibold'}`}>
@@ -5057,7 +5182,7 @@ export default function AdminView() {
                       onChange={(e) => setAutoPricingByRoom(e.target.checked)}
                       className="accent-[#e8b84b] w-4 h-4 cursor-pointer"
                     />
-                    <span>💰 Tự động tính giá vé theo loại phòng (Standard 1.0x, IMAX 1.7x, VIP 1.8x, 3D 1.3x...)</span>
+                    <span>💰 Tính giá vé theo loại phòng (Standard 1.0x, IMAX 1.7x, VIP 1.8x, 3D 1.3x...)</span>
                   </label>
                 </div>
               </div>
