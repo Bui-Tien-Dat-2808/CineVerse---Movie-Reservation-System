@@ -74,20 +74,22 @@ export default function CheckoutView() {
 
   const currentSubtotal = calculateTotalPrice(seatMap?.seats)
 
+  const HOLD_DURATION_SECONDS = 900 // 15 minutes hold window synchronized with backend
+
   // Countdown timer state persisted across page reloads
   const [timeLeft, setTimeLeft] = useState<number>(() => {
-    if (!showtime) return 600
+    if (!showtime) return HOLD_DURATION_SECONDS
     const key = `cineverse_hold_start_${showtime.id}`
     const savedStart = sessionStorage.getItem(key)
     if (savedStart) {
       const startTime = parseInt(savedStart, 10)
       const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000)
-      const remaining = 600 - elapsedSeconds
+      const remaining = HOLD_DURATION_SECONDS - elapsedSeconds
       return remaining > 0 ? remaining : 0
     }
     const now = Date.now()
     sessionStorage.setItem(key, now.toString())
-    return 600
+    return HOLD_DURATION_SECONDS
   })
 
   // Guard: redirect safely if unauthenticated or missing booking info
@@ -115,11 +117,11 @@ export default function CheckoutView() {
       if (savedStart) {
         const startTime = parseInt(savedStart, 10)
         const elapsed = Math.floor((Date.now() - startTime) / 1000)
-        const remaining = 600 - elapsed
+        const remaining = HOLD_DURATION_SECONDS - elapsed
         if (remaining <= 0) {
           setTimeLeft(0)
           sessionStorage.removeItem(key)
-          alert('Thời gian giữ ghế 10 phút đã hết hạn! Vui lòng chọn lại ghế.')
+          alert('Thời gian giữ ghế (15 phút) đã hết hạn! Vui lòng chọn lại ghế.')
           clearSeats()
           clearConcessions()
           navigate(`/movie/${movie?.id}`)
@@ -211,8 +213,13 @@ export default function CheckoutView() {
           showtimeId: showtime.id,
           seatIds,
           voucherCode: appliedVoucher?.code,
-          concessionOrders: Array.from(state.selectedConcessions.entries()).map(
-            ([concession_id, { quantity }]) => ({ concession_id, quantity })
+          concessionOrders: Array.from(state.selectedConcessions.values()).map(
+            ({ concession, quantity, customOptions, unitPrice }) => ({
+              concession_id: concession.id,
+              quantity,
+              custom_options: customOptions,
+              unit_price: unitPrice,
+            })
           ),
         })
 
@@ -384,14 +391,13 @@ export default function CheckoutView() {
 
       {/* Itemized concession detail for PriceBreakdown */}
       {(() => {
-        const concessionItems = Array.from(
-          (state.selectedConcessions as Map<number, { concession: any; quantity: number }>).values()
-        ).map(({ concession, quantity }) => ({
+        const concessionItems = Array.from(state.selectedConcessions.entries()).map(([key, { concession, quantity, customOptions, unitPrice }]) => ({
           id: concession.id,
-          name: concession.name,
-          price: concession.price,
+          name: customOptions ? `${concession.name} (${customOptions})` : concession.name,
+          price: unitPrice ?? concession.price,
           quantity,
           category: concession.category,
+          key,
         }))
 
         return (
@@ -402,9 +408,14 @@ export default function CheckoutView() {
             concessionTotal={concessionTotal}
             concessionItems={concessionItems}
             onRemoveConcession={(concessionId) => {
-              const item = state.selectedConcessions.get(concessionId)
-              if (item && setConcession) {
-                setConcession(item.concession, 0)
+              const foundEntry = Array.from(state.selectedConcessions.entries()).find(
+                ([, val]) => val.concession.id === concessionId
+              )
+              if (foundEntry) {
+                state.selectedConcessions.delete(foundEntry[0])
+                if (setConcession) {
+                  setConcession(foundEntry[1].concession, 0, undefined, undefined, foundEntry[0])
+                }
               }
             }}
           />

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useReducer, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useReducer, type ReactNode } from 'react'
 import type { Movie, ShowTime, SeatItem } from '../types'
 import type { Concession } from '../api/concessions'
 
@@ -32,13 +32,24 @@ export function calculateBookingTotalPrice(
   return total
 }
 
+export interface SelectedConcessionItem {
+  concession: Concession
+  quantity: number
+  customOptions?: string
+  unitPrice?: number
+}
+
+export interface SelectedConcessionItemWithKey extends SelectedConcessionItem {
+  itemKey: string
+}
+
 // ── State shape ───────────────────────────────────────────
 interface BookingState {
   selectedMovie: Movie | null
   selectedDate: number
   selectedShowtime: ShowTime | null
   selectedSeats: Set<string>
-  selectedConcessions: Map<number, { concession: Concession; quantity: number }>
+  selectedConcessions: Map<string, SelectedConcessionItem>
   createdReservation?: any
 }
 
@@ -61,7 +72,7 @@ function getInitialBookingState(): BookingState {
         selectedDate: parsed.selectedDate || 0,
         selectedShowtime: parsed.selectedShowtime || null,
         selectedSeats: new Set(parsed.selectedSeats || []),
-        selectedConcessions: new Map(),
+        selectedConcessions: new Map(parsed.selectedConcessions || []),
         createdReservation: parsed.createdReservation || null,
       }
     }
@@ -78,7 +89,17 @@ type BookingAction =
   | { type: 'SELECT_SHOWTIME'; payload: ShowTime }
   | { type: 'TOGGLE_SEAT'; payload: string }
   | { type: 'CLEAR_SEATS' }
-  | { type: 'SET_CONCESSION'; payload: { concession: Concession; quantity: number } }
+  | {
+      type: 'SET_CONCESSION'
+      payload: {
+        concession: Concession
+        quantity: number
+        customOptions?: string
+        unitPrice?: number
+        itemKey?: string
+      }
+    }
+  | { type: 'REMOVE_CONCESSION_KEY'; payload: string }
   | { type: 'CLEAR_CONCESSIONS' }
   | { type: 'SET_CREATED_RESERVATION'; payload: any }
   | { type: 'RESET' }
@@ -120,12 +141,25 @@ function bookingReducer(state: BookingState, action: BookingAction): BookingStat
       return { ...state, selectedSeats: new Set() }
     case 'SET_CONCESSION': {
       const next = new Map(state.selectedConcessions)
-      const { concession, quantity } = action.payload
+      const { concession, quantity, customOptions, unitPrice, itemKey } = action.payload
+      const key = itemKey || (customOptions ? `${concession.id}::${customOptions}` : String(concession.id))
       if (quantity <= 0) {
-        next.delete(concession.id)
+        next.delete(key)
       } else {
-        next.set(concession.id, { concession, quantity })
+        const existing = next.get(key)
+        const newQty = itemKey ? quantity : (existing ? existing.quantity + quantity : quantity)
+        next.set(key, {
+          concession,
+          quantity: newQty,
+          customOptions,
+          unitPrice: unitPrice ?? concession.price,
+        })
       }
+      return { ...state, selectedConcessions: next }
+    }
+    case 'REMOVE_CONCESSION_KEY': {
+      const next = new Map(state.selectedConcessions)
+      next.delete(action.payload)
       return { ...state, selectedConcessions: next }
     }
     case 'CLEAR_CONCESSIONS':
@@ -143,17 +177,34 @@ function bookingReducer(state: BookingState, action: BookingAction): BookingStat
 }
 
 // ── Context ───────────────────────────────────────────────
-interface BookingContextValue {
+export interface BookingContextValue {
   state: BookingState
   totalPrice: number
   concessionTotal: number
+  concessionsTotal: number
+  selectedConcessionsList: SelectedConcessionItemWithKey[]
   calculateTotalPrice: (seatMapSeats?: SeatItem[]) => number
   selectMovie: (movie: Movie) => void
   selectDate: (i: number) => void
   selectShowtime: (st: ShowTime) => void
   toggleSeat: (key: string) => void
   clearSeats: () => void
-  setConcession: (concession: Concession, quantity: number) => void
+  setConcession: (
+    concession: Concession,
+    quantity: number,
+    customOptions?: string,
+    unitPrice?: number,
+    itemKey?: string
+  ) => void
+  addConcession: (
+    concession: Concession,
+    quantity?: number,
+    customOptions?: string,
+    unitPrice?: number
+  ) => void
+  updateConcessionQuantity: (itemKey: string, quantity: number) => void
+  removeConcession: (itemKey: string) => void
+  removeConcessionKey: (key: string) => void
   clearConcessions: () => void
   setCreatedReservation: (reservation: any) => void
   reset: () => void
@@ -174,6 +225,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
           selectedDate: state.selectedDate,
           selectedShowtime: state.selectedShowtime,
           selectedSeats: Array.from(state.selectedSeats),
+          selectedConcessions: Array.from(state.selectedConcessions.entries()),
         }),
       )
     } catch (e) {
@@ -186,23 +238,59 @@ export function BookingProvider({ children }: { children: ReactNode }) {
 
   const totalPrice = calcTotalPrice()
 
-  const concessionTotal = Array.from(state.selectedConcessions.values()).reduce(
-    (sum, { concession, quantity }) => sum + concession.price * quantity,
-    0,
-  )
+  const concessionTotal = useMemo(() => {
+    return Array.from(state.selectedConcessions.values()).reduce(
+      (sum, { concession, quantity, unitPrice }) => sum + (unitPrice ?? concession.price) * quantity,
+      0,
+    )
+  }, [state.selectedConcessions])
+
+  const selectedConcessionsList = useMemo<SelectedConcessionItemWithKey[]>(() => {
+    return Array.from(state.selectedConcessions.entries()).map(([key, item]) => ({
+      ...item,
+      itemKey: key,
+    }))
+  }, [state.selectedConcessions])
 
   const value: BookingContextValue = {
     state,
     totalPrice,
     concessionTotal,
+    concessionsTotal: concessionTotal,
+    selectedConcessionsList,
     calculateTotalPrice: calcTotalPrice,
     selectMovie: (movie) => dispatch({ type: 'SELECT_MOVIE', payload: movie }),
     selectDate: (i) => dispatch({ type: 'SELECT_DATE', payload: i }),
     selectShowtime: (st) => dispatch({ type: 'SELECT_SHOWTIME', payload: st }),
     toggleSeat: (key) => dispatch({ type: 'TOGGLE_SEAT', payload: key }),
     clearSeats: () => dispatch({ type: 'CLEAR_SEATS' }),
-    setConcession: (concession, quantity) =>
-      dispatch({ type: 'SET_CONCESSION', payload: { concession, quantity } }),
+    setConcession: (concession, quantity, customOptions, unitPrice, itemKey) =>
+      dispatch({
+        type: 'SET_CONCESSION',
+        payload: { concession, quantity, customOptions, unitPrice, itemKey },
+      }),
+    addConcession: (concession, quantity = 1, customOptions, unitPrice) =>
+      dispatch({
+        type: 'SET_CONCESSION',
+        payload: { concession, quantity, customOptions, unitPrice },
+      }),
+    updateConcessionQuantity: (itemKey, quantity) => {
+      const item = state.selectedConcessions.get(itemKey)
+      if (item) {
+        dispatch({
+          type: 'SET_CONCESSION',
+          payload: {
+            concession: item.concession,
+            quantity,
+            customOptions: item.customOptions,
+            unitPrice: item.unitPrice,
+            itemKey,
+          },
+        })
+      }
+    },
+    removeConcession: (itemKey) => dispatch({ type: 'REMOVE_CONCESSION_KEY', payload: itemKey }),
+    removeConcessionKey: (key) => dispatch({ type: 'REMOVE_CONCESSION_KEY', payload: key }),
     clearConcessions: () => dispatch({ type: 'CLEAR_CONCESSIONS' }),
     setCreatedReservation: (reservation) =>
       dispatch({ type: 'SET_CREATED_RESERVATION', payload: reservation }),

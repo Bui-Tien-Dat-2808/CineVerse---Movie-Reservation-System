@@ -38,6 +38,12 @@ export default function MovieInfo({ movie }: MovieInfoProps) {
 
         {/* Meta row */}
         <div className="flex gap-5 mb-6 text-sm text-[#a09e9a] flex-wrap items-center">
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#e8b84b]/15 border border-[#e8b84b]/30 text-[#e8b84b] font-bold text-xs">
+            ★ {movie.avg_rating ? movie.avg_rating.toFixed(1) : (movie.score || '5.0')} / 5
+            {movie.total_reviews !== undefined && (
+              <span className="text-[#a09e9a] font-normal">({movie.total_reviews} đánh giá)</span>
+            )}
+          </span>
           {movie.year > 0 && <span>{movie.year}</span>}
           {movie.duration && movie.duration !== 'N/A' && <span>{movie.duration}</span>}
           <span>

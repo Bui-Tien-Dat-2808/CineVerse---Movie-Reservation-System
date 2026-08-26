@@ -73,6 +73,12 @@ export default function MovieCard({ movie, onSelect }: MovieCardProps) {
 
         <div className="flex justify-between items-center text-xs text-[#6e6c68]">
           <span>{movie.duration}</span>
+          <span className="flex items-center gap-1 font-mono-data text-[#e8b84b] font-bold">
+            ★ {movie.avg_rating ? movie.avg_rating.toFixed(1) : (movie.score || '5.0')}
+            {movie.total_reviews !== undefined && movie.total_reviews > 0 && (
+              <span className="text-[10px] text-[#a09e9a] font-normal">({movie.total_reviews})</span>
+            )}
+          </span>
         </div>
       </div>
     </div>

@@ -172,6 +172,32 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
             </div>
           </div>
 
+          {/* Concessions Section if any */}
+          {Array.isArray((reservation as any)?.reservation_concessions) &&
+            (reservation as any).reservation_concessions.length > 0 && (
+              <div className="p-3.5 rounded-2xl bg-[#09090e] border border-white/5 space-y-2 text-xs">
+                <div className="font-bold text-[#e8b84b] flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
+                  <span>🍿</span>
+                  <span>Bắp Nước & Combo Kèm Theo:</span>
+                </div>
+                <div className="space-y-1.5">
+                  {(reservation as any).reservation_concessions.map((rc: any, idx: number) => (
+                    <div key={idx} className="flex justify-between items-center text-[#f0ede8]">
+                      <div className="min-w-0 flex-1">
+                        <span className="font-semibold">{rc.concession_name || `Combo #${rc.concession_id}`}</span>
+                        {rc.custom_options && (
+                          <p className="text-[10px] text-[#a09e9a] truncate">✨ {rc.custom_options}</p>
+                        )}
+                      </div>
+                      <span className="font-mono-data font-bold text-amber-400 shrink-0 ml-2">
+                        ×{rc.quantity}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           {/* Customer & Price Footer */}
           <div className="flex justify-between items-center pt-2 border-t border-dashed border-white/15 text-xs font-mono-data">
             <div>

@@ -20,6 +20,8 @@ export interface Movie {
   trailerUrl?: string
   cast?: CastMember[]
   status?: string
+  avg_rating?: number | null
+  total_reviews?: number
 }
 
 export interface ShowTime {

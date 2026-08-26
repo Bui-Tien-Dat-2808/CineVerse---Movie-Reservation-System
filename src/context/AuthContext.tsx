@@ -2,17 +2,21 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import type { AuthUser } from '../types'
 import { fetchMeAPI, loginAPI, registerAPI, logoutAPI, type RegisterRequest } from '../api/auth'
 
+export type AuthModeType = 'login' | 'register' | 'forgot' | 'reset'
+
 interface AuthContextValue {
   user: AuthUser | null
   isAuthenticated: boolean
   isAuthLoading: boolean
   isAuthModalOpen: boolean
   authNotice: string | null
+  resetToken: string | null
+  setResetToken: (token: string | null) => void
   setAuthNotice: (msg: string | null) => void
-  openAuthModal: (mode?: 'login' | 'register', notice?: string) => void
+  openAuthModal: (mode?: AuthModeType, notice?: string, token?: string) => void
   closeAuthModal: () => void
-  authMode: 'login' | 'register'
-  setAuthMode: (mode: 'login' | 'register') => void
+  authMode: AuthModeType
+  setAuthMode: (mode: AuthModeType) => void
   login: (account: string, pass: string, captchaId?: string, captchaAnswer?: string) => Promise<void>
   register: (req: RegisterRequest) => Promise<void>
   logout: () => void
@@ -36,8 +40,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return Boolean(token && !cached)
   })
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
+  const [authMode, setAuthMode] = useState<AuthModeType>('login')
   const [authNotice, setAuthNotice] = useState<string | null>(null)
+  const [resetToken, setResetToken] = useState<string | null>(null)
+
+  // Check URL params for reset_token on mount (FEAT-06)
+  useEffect(() => {
+    try {
+      let token: string | null = null
+
+      // 1. Standard search query
+      const params = new URLSearchParams(window.location.search)
+      token = params.get('reset_token')
+
+      // 2. Hash query fallback
+      if (!token && window.location.hash.includes('reset_token')) {
+        const hashQuery = window.location.hash.split('?')[1]
+        if (hashQuery) {
+          const hashParams = new URLSearchParams(hashQuery)
+          token = hashParams.get('reset_token')
+        }
+      }
+
+      // 3. Fallback regex search on full href
+      if (!token) {
+        const match = window.location.href.match(/[?&]reset_token=([^&#]+)/)
+        if (match && match[1]) {
+          token = decodeURIComponent(match[1])
+        }
+      }
+
+      if (token) {
+        setResetToken(token)
+        setAuthMode('reset')
+        setIsAuthModalOpen(true)
+      }
+    } catch {
+      // Ignore URL parsing failure
+    }
+  }, [])
 
   // Check existing login on mount
   useEffect(() => {
@@ -48,11 +89,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(u)
           localStorage.setItem('cached_user', JSON.stringify(u))
         })
-        .catch(() => {
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
-          localStorage.removeItem('cached_user')
-          setUser(null)
+        .catch((err: any) => {
+          const statusCode = err?.response?.status
+          // UX-05: Chỉ xóa credentials khi server xác nhận token không hợp lệ (401/403)
+          if (statusCode === 401 || statusCode === 403) {
+            localStorage.removeItem('access_token')
+            localStorage.removeItem('refresh_token')
+            localStorage.removeItem('cached_user')
+            setUser(null)
+          } else {
+            // Lỗi mạng hoặc 500: giữ thông tin từ cached_user để không bị forced logout nhầm
+            const cached = localStorage.getItem('cached_user')
+            if (cached) {
+              try {
+                setUser(JSON.parse(cached))
+              } catch {
+                setUser(null)
+              }
+            }
+          }
         })
         .finally(() => setIsAuthLoading(false))
     } else {
@@ -81,14 +136,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function logout() {
-    await logoutAPI()
+    try {
+      await logoutAPI()
+    } catch {
+      // Vẫn clear local state dù API call có lỗi (network down, token đã hết hạn)
+    }
     setUser(null)
+    // BUG-13: Xóa tất cả token khỏi localStorage để tránh stale token sau logout
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
     localStorage.removeItem('cached_user')
   }
 
-  function openAuthModal(mode: 'login' | 'register' = 'login', notice?: string) {
+  function openAuthModal(mode: AuthModeType = 'login', notice?: string, token?: string) {
     setAuthMode(mode)
     setAuthNotice(notice || null)
+    if (token) setResetToken(token)
     setIsAuthModalOpen(true)
   }
 
@@ -105,6 +168,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthLoading,
         isAuthModalOpen,
         authNotice,
+        resetToken,
+        setResetToken,
         setAuthNotice,
         openAuthModal,
         closeAuthModal,

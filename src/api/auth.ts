@@ -72,3 +72,21 @@ export async function logoutAPI() {
   localStorage.removeItem('access_token')
   localStorage.removeItem('refresh_token')
 }
+
+/** POST /api/v1/auth/forgot-password */
+export async function forgotPasswordAPI(email: string): Promise<{ message: string }> {
+  const { data } = await apiClient.post<{ message: string }>('/api/v1/auth/forgot-password', { email })
+  return data
+}
+
+/** POST /api/v1/auth/reset-password */
+export async function resetPasswordAPI(token: string, new_password: string): Promise<{ message: string }> {
+  const { data } = await apiClient.post<{ message: string }>('/api/v1/auth/reset-password', { token, new_password })
+  return data
+}
+
+/** POST /api/v1/auth/change-password */
+export async function changePasswordAPI(old_password: string, new_password: string): Promise<{ message: string }> {
+  const { data } = await apiClient.post<{ message: string }>('/api/v1/auth/change-password', { old_password, new_password })
+  return data
+}

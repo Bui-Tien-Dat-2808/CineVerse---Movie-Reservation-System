@@ -13,6 +13,7 @@ interface VoucherItem {
   max_discount?: number
   expiry_date: string
   bg_gradient: string
+  min_loyalty_tier?: string
 }
 
 export default function PromotionsView() {
@@ -156,9 +157,16 @@ export default function PromotionsView() {
                     >
                       {discountLabel}
                     </span>
-                    <span className={`text-[11px] font-mono-data ${isLight ? 'text-slate-500 font-medium' : 'text-[#6e6c68]'}`}>
-                      Hạn dùng: {item.expiry_date}
-                    </span>
+                    <div className="text-right">
+                      <span className={`text-[11px] font-mono-data block ${isLight ? 'text-slate-500 font-medium' : 'text-[#6e6c68]'}`}>
+                        Hạn dùng: {item.expiry_date}
+                      </span>
+                      {item.min_loyalty_tier && (
+                        <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 capitalize">
+                          {item.min_loyalty_tier === 'diamond' ? '💎 Hạng Kim Cương' : item.min_loyalty_tier === 'gold' ? '🥇 Hạng Vàng+' : item.min_loyalty_tier === 'silver' ? '🥈 Hạng Bạc+' : '🥉 Hạng Đồng+'}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <h3

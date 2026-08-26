@@ -13,6 +13,7 @@ import { GenreBadge } from '../components/ui/Badge'
 import { useVirtualQueue } from '../hooks/useVirtualQueue'
 import { WaitingRoomModal } from '../components/features/queue/WaitingRoomModal'
 import { useRealtimeSeatMap, RealtimeSeatEvent } from '../hooks/useRealtimeSeatMap'
+import MovieReviewsSection from '../components/features/reviews/MovieReviewsSection'
 
 function formatYYYYMMDD(d: Date): string {
   const year = d.getFullYear()
@@ -943,6 +944,12 @@ export default function CineVerseMovieView() {
         )}
 
       </div>
+
+      {/* Movie Reviews & Community Ratings */}
+      {movieId && movie && (
+        <MovieReviewsSection movieId={movieId} movieTitle={movie.title} />
+      )}
+
       {/* Trailer Modal */}
       {isTrailerOpen && movie?.trailerUrl && (
         <div

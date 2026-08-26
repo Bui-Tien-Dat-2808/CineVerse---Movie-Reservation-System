@@ -16,6 +16,8 @@ export interface MovieListItem {
   trailer_url?: string | null
   cast?: CastMember[] | null
   genres: { id: number; name: string; description: string | null; created_at: string }[]
+  avg_rating?: number | null
+  total_reviews?: number
   created_at: string
 }
 
@@ -56,7 +58,9 @@ export function mapMovieItem(m: MovieListItem): Movie {
       ? `${Math.floor(m.duration_minutes / 60)}h ${m.duration_minutes % 60}m`
       : '1h 45m',
     rating: m.rating && m.rating !== 'N/A' ? m.rating : '',
-    score: '8.5',
+    score: m.avg_rating ? m.avg_rating.toFixed(1) : (m.total_reviews ? '5.0' : '8.5'),
+    avg_rating: m.avg_rating,
+    total_reviews: m.total_reviews ?? 0,
     year: m.release_date ? new Date(m.release_date).getFullYear() : 2026,
     director: m.director ?? '',
     synopsis: m.description || 'Nội dung bộ phim đang được cập nhật. Vui lòng theo dõi thêm thông tin chi tiết.',

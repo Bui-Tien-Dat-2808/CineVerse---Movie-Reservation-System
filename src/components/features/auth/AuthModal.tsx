@@ -1,14 +1,15 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../context/AuthContext'
 import { useBooking } from '../../../context/BookingContext'
 import { useTheme } from '../../../context/ThemeContext'
+import { forgotPasswordAPI, resetPasswordAPI } from '../../../api/auth'
 import ImageCaptcha from './ImageCaptcha'
 import PolicyModal from './PolicyModal'
 
 export default function AuthModal() {
   const navigate = useNavigate()
-  const { isAuthModalOpen, closeAuthModal, authMode, setAuthMode, login, register, authNotice } = useAuth()
+  const { isAuthModalOpen, closeAuthModal, authMode, setAuthMode, login, register, authNotice, resetToken, setResetToken } = useAuth()
   const { reset } = useBooking()
   const { theme } = useTheme()
   const isLight = theme === 'light'
@@ -20,6 +21,16 @@ export default function AuthModal() {
   const [loginCaptchaId, setLoginCaptchaId] = useState('')
   const [loginCaptchaAnswer, setLoginCaptchaAnswer] = useState('')
   const [loginCaptchaRefreshKey, setLoginCaptchaRefreshKey] = useState(0)
+
+  // Forgot Password States
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotSuccess, setForgotSuccess] = useState('')
+
+  // Reset Password States
+  const [resetNewPassword, setResetNewPassword] = useState('')
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('')
+  const [showResetPassword, setShowResetPassword] = useState(false)
+  const [resetSuccess, setResetSuccess] = useState('')
 
   // Register Form States
   const [firstName, setFirstName] = useState('')
@@ -45,6 +56,35 @@ export default function AuthModal() {
   // Status & Error States
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Reset all input fields whenever modal opens or switches mode to ensure clean state
+  useEffect(() => {
+    if (isAuthModalOpen) {
+      setAccount('')
+      setLoginPassword('')
+      setLoginCaptchaAnswer('')
+      setError('')
+      setForgotEmail('')
+      setForgotSuccess('')
+      setResetNewPassword('')
+      setResetConfirmPassword('')
+      setResetSuccess('')
+      setLoginCaptchaRefreshKey((prev) => prev + 1)
+      setRegCaptchaRefreshKey((prev) => prev + 1)
+    }
+  }, [isAuthModalOpen, authMode])
+
+  // Support pressing Escape to close modal easily
+  useEffect(() => {
+    if (!isAuthModalOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeAuthModal()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isAuthModalOpen, closeAuthModal])
 
   if (!isAuthModalOpen) return null
 
@@ -129,6 +169,58 @@ export default function AuthModal() {
     }
   }
 
+  async function handleForgotSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setForgotSuccess('')
+    if (!forgotEmail.trim()) {
+      setError('Vui lòng nhập địa chỉ email.')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await forgotPasswordAPI(forgotEmail.trim())
+      setForgotSuccess(res.message || 'Đã gửi liên kết khôi phục mật khẩu. Vui lòng kiểm tra email của bạn.')
+    } catch (err: any) {
+      const msg = err.response?.data?.detail ?? 'Gửi yêu cầu thất bại. Vui lòng thử lại.'
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleResetSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setResetSuccess('')
+    if (!resetToken) {
+      setError('Mã xác thực đặt lại mật khẩu không hợp lệ. Vui lòng yêu cầu lại.')
+      return
+    }
+    if (resetNewPassword.length < 8) {
+      setError('Mật khẩu mới phải có tối thiểu 8 ký tự.')
+      return
+    }
+    if (resetNewPassword !== resetConfirmPassword) {
+      setError('Mật khẩu xác nhận không khớp.')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await resetPasswordAPI(resetToken, resetNewPassword)
+      setResetSuccess(res.message || 'Mật khẩu đã được đặt lại thành công!')
+      setTimeout(() => {
+        setAuthMode('login')
+        setResetSuccess('')
+      }, 2500)
+    } catch (err: any) {
+      const msg = err.response?.data?.detail ?? 'Đặt lại mật khẩu thất bại. Vui lòng thử lại.'
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const inputStyle = isLight
     ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:bg-white'
     : 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
@@ -138,7 +230,12 @@ export default function AuthModal() {
 
   return (
     <>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+      <div
+        onClick={(e) => {
+          if (e.target === e.currentTarget) closeAuthModal()
+        }}
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto"
+      >
         <div
           className={`border rounded-2xl p-5 sm:p-7 w-full relative shadow-2xl my-4 transition-all duration-200 ${
             authMode === 'register' ? 'max-w-xl' : 'max-w-md'
@@ -150,11 +247,11 @@ export default function AuthModal() {
           <button
             type="button"
             onClick={closeAuthModal}
-            title="Đóng cửa sổ"
-            className={`absolute top-4 right-4 border rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 shadow-md group z-10 ${
+            title="Đóng cửa sổ (Esc)"
+            className={`absolute top-4 right-4 border rounded-xl px-3 py-1.5 text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 shadow-md group z-20 ${
               isLight
-                ? 'bg-slate-100 hover:bg-red-500 text-slate-600 hover:text-white border-slate-200'
-                : 'bg-[#1a1a26] hover:bg-[#c0392b] text-[#a09e9a] hover:text-white border-white/15'
+                ? 'bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border-slate-200 hover:border-rose-300'
+                : 'bg-[#1a1a26] hover:bg-rose-500/20 text-[#a09e9a] hover:text-rose-400 border-white/15 hover:border-rose-500/40'
             }`}
           >
             <span>Đóng</span>
@@ -191,45 +288,61 @@ export default function AuthModal() {
             </div>
           )}
 
-          {/* Toggle Tab Bar */}
-          <div
-            className={`grid grid-cols-2 p-1 rounded-xl border mb-4 ${
-              isLight ? 'bg-slate-100 border-slate-200' : 'bg-[#181824] border-white/10'
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => {
-                setError('')
-                setAuthMode('login')
-              }}
-              className={`py-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                authMode === 'login'
-                  ? 'bg-[#e8b84b] text-[#09090e] shadow-md font-extrabold'
-                  : isLight
-                  ? 'text-slate-600 hover:text-slate-900'
-                  : 'text-[#a09e9a] hover:text-[#f0ede8]'
+          {/* Toggle Tab Bar (Only show in login/register modes) */}
+          {(authMode === 'login' || authMode === 'register') && (
+            <div
+              className={`grid grid-cols-2 p-1 rounded-xl border mb-4 ${
+                isLight ? 'bg-slate-100 border-slate-200' : 'bg-[#181824] border-white/10'
               }`}
             >
-              Đăng nhập
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setError('')
-                setAuthMode('register')
-              }}
-              className={`py-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                authMode === 'register'
-                  ? 'bg-[#e8b84b] text-[#09090e] shadow-md font-extrabold'
-                  : isLight
-                  ? 'text-slate-600 hover:text-slate-900'
-                  : 'text-[#a09e9a] hover:text-[#f0ede8]'
-              }`}
-            >
-              Đăng ký
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setError('')
+                  setAuthMode('login')
+                }}
+                className={`py-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  authMode === 'login'
+                    ? 'bg-[#e8b84b] text-[#09090e] shadow-md font-extrabold'
+                    : isLight
+                    ? 'text-slate-600 hover:text-slate-900'
+                    : 'text-[#a09e9a] hover:text-[#f0ede8]'
+                }`}
+              >
+                Đăng nhập
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setError('')
+                  setAuthMode('register')
+                }}
+                className={`py-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  authMode === 'register'
+                    ? 'bg-[#e8b84b] text-[#09090e] shadow-md font-extrabold'
+                    : isLight
+                    ? 'text-slate-600 hover:text-slate-900'
+                    : 'text-[#a09e9a] hover:text-[#f0ede8]'
+                }`}
+              >
+                Đăng ký
+              </button>
+            </div>
+          )}
+
+          {/* Success Banner */}
+          {forgotSuccess && (
+            <div className="bg-emerald-500/15 border border-emerald-500/30 rounded-xl p-3.5 mb-5 text-xs text-emerald-400 flex items-start gap-2.5">
+              <span className="text-base">✓</span>
+              <span>{forgotSuccess}</span>
+            </div>
+          )}
+          {resetSuccess && (
+            <div className="bg-emerald-500/15 border border-emerald-500/30 rounded-xl p-3.5 mb-5 text-xs text-emerald-400 flex items-start gap-2.5">
+              <span className="text-base">✓</span>
+              <span>{resetSuccess}</span>
+            </div>
+          )}
 
           {/* Error Banner */}
           {error && (
@@ -239,9 +352,188 @@ export default function AuthModal() {
             </div>
           )}
 
-          {/* LOGIN FORM */}
-          {authMode === 'login' ? (
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
+          {/* ─────────────────────────────────────────────────────────────
+              MODE 1: FORGOT PASSWORD FORM
+              ───────────────────────────────────────────────────────────── */}
+          {authMode === 'forgot' && (
+            <form onSubmit={handleForgotSubmit} className="space-y-4" autoComplete="off">
+              <div className="text-center mb-4">
+                <div className="w-12 h-12 rounded-2xl mx-auto mb-2 flex items-center justify-center text-2xl bg-[#e8b84b]/15 border border-[#e8b84b]/30 text-[#e8b84b]">
+                  🔑
+                </div>
+                <h3 className="text-lg font-bold mb-1">Khôi phục mật khẩu</h3>
+                <p className={`text-xs max-w-xs mx-auto leading-relaxed ${isLight ? 'text-slate-600' : 'text-[#a09e9a]'}`}>
+                  Nhập địa chỉ email tài khoản đã đăng ký của bạn để nhận liên kết đặt lại mật khẩu an toàn.
+                </p>
+              </div>
+
+              <div>
+                <label className={`block text-xs mb-1.5 ${labelStyle}`}>Địa chỉ Email tài khoản</label>
+                <div className="relative">
+                  <span className={`absolute left-3 top-2.5 text-sm ${iconStyle}`}>✉</span>
+                  <input
+                    type="email"
+                    required
+                    autoComplete="off"
+                    name="forgot_email_input"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="example@gmail.com"
+                    className={`w-full pl-9 pr-3 py-2.5 border rounded-xl text-sm outline-none font-mono-data transition-colors ${inputStyle}`}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-1">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-[#e8b84b] hover:bg-[#d4a338] text-[#09090e] border-0 rounded-xl py-3 font-bold text-sm cursor-pointer hover:shadow-[0_4px_16px_rgba(232,184,75,0.35)] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <span>{loading ? 'Đang gửi email...' : 'Gửi liên kết khôi phục'}</span>
+                  <span>→</span>
+                </button>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError('')
+                      setForgotSuccess('')
+                      setAuthMode('login')
+                    }}
+                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      isLight
+                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                        : 'bg-[#181824] hover:bg-[#222234] text-[#f0ede8] border-white/10'
+                    }`}
+                  >
+                    <span>←</span>
+                    <span>Đăng nhập</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={closeAuthModal}
+                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      isLight
+                        ? 'bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border-slate-200'
+                        : 'bg-[#181824] hover:bg-rose-500/15 text-[#a09e9a] hover:text-rose-400 border-white/10'
+                    }`}
+                  >
+                    <span>✕</span>
+                    <span>Hủy & Thoát</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              MODE 2: RESET PASSWORD FORM
+              ───────────────────────────────────────────────────────────── */}
+          {authMode === 'reset' && (
+            <form onSubmit={handleResetSubmit} className="space-y-4" autoComplete="off">
+              <div className="text-center mb-4">
+                <div className="w-12 h-12 rounded-2xl mx-auto mb-2 flex items-center justify-center text-2xl bg-[#e8b84b]/15 border border-[#e8b84b]/30 text-[#e8b84b]">
+                  🔐
+                </div>
+                <h3 className="text-lg font-bold mb-1">Đặt lại mật khẩu mới</h3>
+                <p className={`text-xs max-w-xs mx-auto leading-relaxed ${isLight ? 'text-slate-600' : 'text-[#a09e9a]'}`}>
+                  Tạo mật khẩu mới có tối thiểu 8 ký tự để bảo vệ tài khoản của bạn.
+                </p>
+              </div>
+
+              <div>
+                <label className={`block text-xs mb-1.5 ${labelStyle}`}>Mật khẩu mới</label>
+                <div className="relative">
+                  <span className={`absolute left-3 top-2.5 text-sm ${iconStyle}`}>🔒</span>
+                  <input
+                    type={showResetPassword ? 'text' : 'password'}
+                    required
+                    autoComplete="new-password"
+                    name="reset_new_pwd"
+                    value={resetNewPassword}
+                    onChange={(e) => setResetNewPassword(e.target.value)}
+                    placeholder="Tối thiểu 8 ký tự"
+                    className={`w-full pl-9 pr-10 py-2.5 border rounded-xl text-sm outline-none transition-colors ${inputStyle}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPassword(!showResetPassword)}
+                    className={`absolute right-3 top-2.5 bg-transparent border-0 cursor-pointer text-xs ${iconStyle}`}
+                  >
+                    {showResetPassword ? '👁️' : '🙈'}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className={`block text-xs mb-1.5 ${labelStyle}`}>Xác nhận mật khẩu mới</label>
+                <div className="relative">
+                  <span className={`absolute left-3 top-2.5 text-sm ${iconStyle}`}>🔒</span>
+                  <input
+                    type={showResetPassword ? 'text' : 'password'}
+                    required
+                    autoComplete="new-password"
+                    name="reset_confirm_pwd"
+                    value={resetConfirmPassword}
+                    onChange={(e) => setResetConfirmPassword(e.target.value)}
+                    placeholder="Nhập lại mật khẩu mới"
+                    className={`w-full pl-9 pr-3 py-2.5 border rounded-xl text-sm outline-none transition-colors ${inputStyle}`}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-1">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-[#e8b84b] hover:bg-[#d4a338] text-[#09090e] border-0 rounded-xl py-3 font-bold text-sm cursor-pointer hover:shadow-[0_4px_16px_rgba(232,184,75,0.35)] transition-all disabled:opacity-50"
+                >
+                  {loading ? 'Đang cập nhật...' : 'Xác nhận đổi mật khẩu →'}
+                </button>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError('')
+                      setResetSuccess('')
+                      setAuthMode('login')
+                    }}
+                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      isLight
+                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                        : 'bg-[#181824] hover:bg-[#222234] text-[#f0ede8] border-white/10'
+                    }`}
+                  >
+                    <span>←</span>
+                    <span>Đăng nhập</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={closeAuthModal}
+                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      isLight
+                        ? 'bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border-slate-200'
+                        : 'bg-[#181824] hover:bg-rose-500/15 text-[#a09e9a] hover:text-rose-400 border-white/10'
+                    }`}
+                  >
+                    <span>✕</span>
+                    <span>Hủy & Thoát</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              MODE 3: LOGIN FORM
+              ───────────────────────────────────────────────────────────── */}
+          {authMode === 'login' && (
+            <form onSubmit={handleLoginSubmit} className="space-y-4" autoComplete="off">
               {/* Email / Phone input */}
               <div>
                 <label className={`block text-xs mb-1 ${labelStyle}`}>
@@ -252,6 +544,8 @@ export default function AuthModal() {
                   <input
                     type="text"
                     required
+                    autoComplete="off"
+                    name="login_account_id"
                     value={account}
                     onChange={(e) => setAccount(e.target.value)}
                     placeholder="Email hoặc số điện thoại"
@@ -266,7 +560,12 @@ export default function AuthModal() {
                   <label className={`block text-xs ${labelStyle}`}>Mật khẩu</label>
                   <button
                     type="button"
-                    onClick={() => alert('Vui lòng liên hệ bộ phận hỗ trợ hoặc Admin để khôi phục mật khẩu.')}
+                    onClick={() => {
+                      setError('')
+                      setForgotSuccess('')
+                      setForgotEmail(account.includes('@') ? account : '')
+                      setAuthMode('forgot')
+                    }}
                     className="text-[11px] text-[#e8b84b] hover:underline bg-transparent border-0 cursor-pointer font-bold"
                   >
                     Quên mật khẩu?
@@ -277,6 +576,8 @@ export default function AuthModal() {
                   <input
                     type={showLoginPassword ? 'text' : 'password'}
                     required
+                    autoComplete="new-password"
+                    name="login_secure_credential"
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     placeholder="Nhập mật khẩu"
@@ -292,12 +593,12 @@ export default function AuthModal() {
                 </div>
               </div>
 
-              {/* Image CAPTCHA */}
+              {/* Image CAPTCHA — Inline layout */}
               <div>
-                <label className={`block text-xs mb-1 ${labelStyle}`}>
-                  CAPTCHA xác thực
+                <label className={`block text-xs mb-1.5 ${labelStyle}`}>
+                  CAPTCHA xác thực (5 ký tự)
                 </label>
-                <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2 w-full">
                   <ImageCaptcha
                     onChallengeReady={(id) => setLoginCaptchaId(id)}
                     refreshKey={loginCaptchaRefreshKey}
@@ -305,10 +606,13 @@ export default function AuthModal() {
                   <input
                     type="text"
                     required
+                    maxLength={6}
+                    autoComplete="off"
+                    name="login_captcha_input"
                     value={loginCaptchaAnswer}
-                    onChange={(e) => setLoginCaptchaAnswer(e.target.value)}
-                    placeholder="Nhập mã chữ/số bên trên"
-                    className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition-colors ${inputStyle}`}
+                    onChange={(e) => setLoginCaptchaAnswer(e.target.value.toUpperCase())}
+                    placeholder="Nhập mã..."
+                    className={`flex-1 min-w-0 h-[40px] px-2.5 border rounded-xl text-xs font-mono font-bold tracking-widest text-center uppercase outline-none transition-colors ${inputStyle}`}
                   />
                 </div>
               </div>
@@ -357,9 +661,13 @@ export default function AuthModal() {
                 </button>
               </div>
             </form>
-          ) : (
-            /* REGISTER FORM — Optimized 2-Column Responsive Grid Layout */
-            <form onSubmit={handleRegisterSubmit} className="space-y-3">
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              MODE 4: REGISTER FORM
+              ───────────────────────────────────────────────────────────── */}
+          {authMode === 'register' && (
+            <form onSubmit={handleRegisterSubmit} className="space-y-3" autoComplete="off">
               {/* Row 1: Họ & Tên */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -367,6 +675,8 @@ export default function AuthModal() {
                   <input
                     type="text"
                     required
+                    autoComplete="off"
+                    name="reg_first_name"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     placeholder="Ex: Nguyễn"
@@ -378,6 +688,8 @@ export default function AuthModal() {
                   <input
                     type="text"
                     required
+                    autoComplete="off"
+                    name="reg_last_name"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     placeholder="Ex: Văn A"
@@ -395,6 +707,8 @@ export default function AuthModal() {
                     <input
                       type="email"
                       required
+                      autoComplete="off"
+                      name="reg_email_input"
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
                       placeholder="example@domain.com"
@@ -409,6 +723,8 @@ export default function AuthModal() {
                     <input
                       type="tel"
                       required
+                      autoComplete="off"
+                      name="reg_phone_input"
                       value={regPhone}
                       onChange={(e) => setRegPhone(e.target.value)}
                       placeholder="0987654321"
@@ -473,6 +789,8 @@ export default function AuthModal() {
                       type={showRegPassword ? 'text' : 'password'}
                       required
                       minLength={8}
+                      autoComplete="new-password"
+                      name="reg_pwd_field"
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
                       placeholder="Ít nhất 8 ký tự"
@@ -494,6 +812,8 @@ export default function AuthModal() {
                     <input
                       type={showConfirmPassword ? 'text' : 'password'}
                       required
+                      autoComplete="new-password"
+                      name="reg_confirm_pwd_field"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Nhập lại mật khẩu"
@@ -510,12 +830,12 @@ export default function AuthModal() {
                 </div>
               </div>
 
-              {/* Image CAPTCHA */}
+              {/* Image CAPTCHA — Inline layout */}
               <div className="py-0.5">
-                <label className={`block text-xs mb-1 ${labelStyle}`}>
-                  Mã xác thực
+                <label className={`block text-xs mb-1.5 ${labelStyle}`}>
+                  Mã xác thực CAPTCHA (5 ký tự)
                 </label>
-                <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2 w-full">
                   <ImageCaptcha
                     onChallengeReady={(id) => setRegCaptchaId(id)}
                     refreshKey={regCaptchaRefreshKey}
@@ -523,10 +843,13 @@ export default function AuthModal() {
                   <input
                     type="text"
                     required
+                    maxLength={6}
+                    autoComplete="off"
+                    name="reg_captcha_field"
                     value={regCaptchaAnswer}
-                    onChange={(e) => setRegCaptchaAnswer(e.target.value)}
-                    placeholder="Nhập mã chữ/số bên trên"
-                    className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition-colors ${inputStyle}`}
+                    onChange={(e) => setRegCaptchaAnswer(e.target.value.toUpperCase())}
+                    placeholder="Nhập mã..."
+                    className={`flex-1 min-w-0 h-[40px] px-2.5 border rounded-xl text-xs font-mono font-bold tracking-widest text-center uppercase outline-none transition-colors ${inputStyle}`}
                   />
                 </div>
               </div>

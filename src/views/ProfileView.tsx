@@ -2,29 +2,30 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
-import { updateProfileAPI } from '../api/auth'
-import { fetchMyReservationsAPI, cancelReservationAPI, exchangeReservationAPI, fetchShowtimesByMovie, fetchSeatMap, createPaymentUrlAPI, type ReservationItem } from '../api/showtimes'
+import { updateProfileAPI, changePasswordAPI } from '../api/auth'
+import { fetchMyReservationsAPI, cancelReservationAPI, exchangeReservationAPI, fetchShowtimesByMovie, fetchSeatMap, createPaymentUrlAPI, fetchMyTransactionsAPI, type ReservationItem, type PaymentTransactionItem } from '../api/showtimes'
 import { apiClient } from '../api/client'
 import { fmt, cn } from '../lib/utils'
 import type { ShowTime, SeatItem } from '../types'
 
 import { ETicketModal } from '../components/features/ticket/ETicketModal'
 import { fetchMyLoyalty, type LoyaltyStatus } from '../api/loyalty'
+import { CleanDatePicker } from '../components/common/CleanDatePicker'
 
 export default function ProfileView() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const tabParam = searchParams.get('tab') as 'profile' | 'history' | 'vouchers' | 'loyalty' | null
+  const tabParam = searchParams.get('tab') as 'profile' | 'history' | 'transactions' | 'vouchers' | 'loyalty' | null
 
   const { user, isAuthenticated, logout, updateUserProfile } = useAuth()
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'history' | 'vouchers' | 'loyalty'>(tabParam || 'profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'history' | 'transactions' | 'vouchers' | 'loyalty'>(tabParam || 'profile')
   const [ticketModalReservation, setTicketModalReservation] = useState<ReservationItem | null>(null)
 
   useEffect(() => {
-    if (tabParam && (tabParam === 'profile' || tabParam === 'history' || tabParam === 'vouchers' || tabParam === 'loyalty')) {
+    if (tabParam && (tabParam === 'profile' || tabParam === 'history' || tabParam === 'transactions' || tabParam === 'vouchers' || tabParam === 'loyalty')) {
       setActiveTab(tabParam)
     }
   }, [tabParam])
@@ -47,6 +48,11 @@ export default function ProfileView() {
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [historyFilter, setHistoryFilter] = useState<'all' | 'confirmed' | 'pending' | 'cancelled'>('all')
 
+  // Payment Transactions States (FEAT-02)
+  const [transactions, setTransactions] = useState<PaymentTransactionItem[]>([])
+  const [txLoading, setTxLoading] = useState(false)
+  const [txError, setTxError] = useState<string | null>(null)
+
   // User Vouchers States
   const [userVouchers, setUserVouchers] = useState<any[]>([])
   const [voucherLoading, setVoucherLoading] = useState(false)
@@ -56,7 +62,95 @@ export default function ProfileView() {
   const [loyaltyLoading, setLoyaltyLoading] = useState(false)
   const [loyaltyError, setLoyaltyError] = useState<string | null>(null)
 
+  // Change Password States & Modal
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
+  const [oldPassword, setOldPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [showOldPassword, setShowOldPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [pwdLoading, setPwdLoading] = useState(false)
+  const [pwdMsg, setPwdMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Payment Transactions Date Range & Pagination States
+  const [txStartDate, setTxStartDate] = useState('')
+  const [txEndDate, setTxEndDate] = useState('')
+  const [txQuickPreset, setTxQuickPreset] = useState<'all' | 'today' | '7days' | '30days'>('all')
+  const [txPage, setTxPage] = useState(1)
+  const txPageSize = 8
+
+  function handleTxPresetChange(preset: 'all' | 'today' | '7days' | '30days') {
+    setTxQuickPreset(preset)
+    const now = new Date()
+    const formatDate = (d: Date) => {
+      const year = d.getFullYear()
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
+
+    if (preset === 'all') {
+      setTxStartDate('')
+      setTxEndDate('')
+    } else if (preset === 'today') {
+      const todayStr = formatDate(now)
+      setTxStartDate(todayStr)
+      setTxEndDate(todayStr)
+    } else if (preset === '7days') {
+      const past7 = new Date(now)
+      past7.setDate(now.getDate() - 7)
+      setTxStartDate(formatDate(past7))
+      setTxEndDate(formatDate(now))
+    } else if (preset === '30days') {
+      const past30 = new Date(now)
+      past30.setDate(now.getDate() - 30)
+      setTxStartDate(formatDate(past30))
+      setTxEndDate(formatDate(now))
+    }
+  }
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault()
+    setPwdMsg(null)
+
+    if (newPassword.length < 8) {
+      setPwdMsg({ type: 'error', text: 'Mật khẩu mới phải có tối thiểu 8 ký tự.' })
+      return
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setPwdMsg({ type: 'error', text: 'Xác nhận mật khẩu mới không khớp.' })
+      return
+    }
+
+    if (oldPassword === newPassword) {
+      setPwdMsg({ type: 'error', text: 'Mật khẩu mới không được trùng với mật khẩu hiện tại. Vui lòng chọn một mật khẩu khác.' })
+      return
+    }
+
+    setPwdLoading(true)
+    try {
+      const res = await changePasswordAPI(oldPassword, newPassword)
+      setPwdMsg({ type: 'success', text: res.message || 'Đổi mật khẩu thành công!' })
+      setOldPassword('')
+      setNewPassword('')
+      setConfirmNewPassword('')
+      setTimeout(() => {
+        setIsChangePasswordOpen(false)
+        setPwdMsg(null)
+      }, 1500)
+    } catch (err: any) {
+      const msg = err.response?.data?.detail ?? 'Đổi mật khẩu thất bại. Vui lòng kiểm tra lại thông tin.'
+      setPwdMsg({ type: 'error', text: typeof msg === 'string' ? msg : JSON.stringify(msg) })
+    } finally {
+      setPwdLoading(false)
+    }
+  }
+
   useEffect(() => {
+    if (activeTab === 'transactions') {
+      loadTransactions()
+    }
     if (activeTab === 'vouchers') {
       loadUserVouchers()
     }
@@ -64,6 +158,20 @@ export default function ProfileView() {
       loadLoyalty()
     }
   }, [activeTab])
+
+  async function loadTransactions() {
+    setTxLoading(true)
+    setTxError(null)
+    try {
+      const data = await fetchMyTransactionsAPI()
+      setTransactions(data)
+    } catch (err) {
+      console.error('Failed to load transactions:', err)
+      setTxError('Không thể tải lịch sử thanh toán từ máy chủ.')
+    } finally {
+      setTxLoading(false)
+    }
+  }
 
   async function loadLoyalty() {
     setLoyaltyLoading(true)
@@ -309,6 +417,37 @@ const CANCELLATION_REASONS = [
     return true
   })
 
+  // Filter & Pagination for Transactions
+  const filteredTransactions = (transactions || []).filter((tx) => {
+    const rawDate = tx.pay_date || tx.created_at
+    if (!rawDate) return true
+    const txDate = new Date(rawDate)
+
+    if (txStartDate) {
+      const start = new Date(txStartDate)
+      start.setHours(0, 0, 0, 0)
+      if (txDate < start) return false
+    }
+
+    if (txEndDate) {
+      const end = new Date(txEndDate)
+      end.setHours(23, 59, 59, 999)
+      if (txDate > end) return false
+    }
+
+    return true
+  })
+
+  const totalTxPages = Math.max(1, Math.ceil(filteredTransactions.length / txPageSize))
+  const paginatedTransactions = filteredTransactions.slice(
+    (txPage - 1) * txPageSize,
+    txPage * txPageSize
+  )
+
+  useEffect(() => {
+    setTxPage(1)
+  }, [txStartDate, txEndDate, txQuickPreset])
+
   return (
     <div className="max-w-[1000px] mx-auto px-6 py-10 pb-20">
       {/* Back button */}
@@ -345,6 +484,62 @@ const CANCELLATION_REASONS = [
         </div>
       </div>
 
+      {/* Profile Tab Navigation Bar (FEAT-02) */}
+      <div className={`flex items-center gap-2 p-1.5 rounded-xl border mb-8 overflow-x-auto ${
+        isDark ? 'bg-[#111118] border-white/10' : 'bg-slate-100 border-slate-200'
+      }`}>
+        <button
+          onClick={() => { setActiveTab('profile'); setSearchParams({ tab: 'profile' }) }}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === 'profile'
+              ? 'bg-[#e8b84b] text-[#09090e] shadow-md font-extrabold'
+              : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          👤 Thông tin cá nhân
+        </button>
+        <button
+          onClick={() => { setActiveTab('history'); setSearchParams({ tab: 'history' }) }}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === 'history'
+              ? 'bg-[#e8b84b] text-[#09090e] shadow-md font-extrabold'
+              : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          🎟️ Lịch sử đặt vé
+        </button>
+        <button
+          onClick={() => { setActiveTab('transactions'); setSearchParams({ tab: 'transactions' }) }}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === 'transactions'
+              ? 'bg-[#e8b84b] text-[#09090e] shadow-md font-extrabold'
+              : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          💳 Lịch sử thanh toán
+        </button>
+        <button
+          onClick={() => { setActiveTab('vouchers'); setSearchParams({ tab: 'vouchers' }) }}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === 'vouchers'
+              ? 'bg-[#e8b84b] text-[#09090e] shadow-md font-extrabold'
+              : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          🎁 Kho Voucher
+        </button>
+        <button
+          onClick={() => { setActiveTab('loyalty'); setSearchParams({ tab: 'loyalty' }) }}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === 'loyalty'
+              ? 'bg-[#e8b84b] text-[#09090e] shadow-md font-extrabold'
+              : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          ⭐ Điểm thưởng & Hạng
+        </button>
+      </div>
+
       {/* TAB 1: PROFILE INFO & EDIT FORM */}
       {activeTab === 'profile' && (
         <div className={`rounded-xl p-6 sm:p-8 border transition-colors ${
@@ -362,23 +557,44 @@ const CANCELLATION_REASONS = [
               </p>
             </div>
 
-            {/* Edit toggle button when in View Mode */}
+            {/* Action buttons when in View Mode */}
             {!isEditing && (
-              <button
-                type="button"
-                onClick={() => {
-                  setUpdateMsg(null)
-                  setIsEditing(true)
-                }}
-                className={`px-4 py-2 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
-                  isDark
-                    ? 'bg-[#e8b84b]/15 hover:bg-[#e8b84b]/30 text-[#e8b84b] border-[#e8b84b]/30'
-                    : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 border-amber-500/30'
-                }`}
-              >
-                <span>✏️</span>
-                <span>Chỉnh sửa thông tin</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPwdMsg(null)
+                    setOldPassword('')
+                    setNewPassword('')
+                    setConfirmNewPassword('')
+                    setIsChangePasswordOpen(true)
+                  }}
+                  className={`px-3.5 py-2 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
+                    isDark
+                      ? 'bg-white/5 hover:bg-white/10 text-[#f0ede8] border-white/10'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                  }`}
+                >
+                  <span>🔒</span>
+                  <span>Đổi mật khẩu</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUpdateMsg(null)
+                    setIsEditing(true)
+                  }}
+                  className={`px-4 py-2 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
+                    isDark
+                      ? 'bg-[#e8b84b]/15 hover:bg-[#e8b84b]/30 text-[#e8b84b] border-[#e8b84b]/30'
+                      : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 border-amber-500/30'
+                  }`}
+                >
+                  <span>✏️</span>
+                  <span>Chỉnh sửa thông tin</span>
+                </button>
+              </div>
             )}
           </div>
 
@@ -403,12 +619,12 @@ const CANCELLATION_REASONS = [
             }`}>
               <div>
                 <span className={`text-xs block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Họ và tên</span>
-                <p className={`text-sm font-semibold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{user?.full_name || 'Chưa cập nhật'}</p>
+                <p className={`text-sm font-semibold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{user?.full_name ?? 'Chưa cập nhật'}</p>
               </div>
 
               <div>
                 <span className={`text-xs block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Email</span>
-                <p className={`text-sm font-semibold font-mono-data ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{user?.email || 'Chưa cập nhật'}</p>
+                <p className={`text-sm font-semibold font-mono-data ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{user?.email}</p>
               </div>
 
               <div>
@@ -1241,6 +1457,286 @@ const CANCELLATION_REASONS = [
         </div>
       )}
 
+      {/* TAB: PAYMENT TRANSACTIONS (FEAT-02) */}
+      {activeTab === 'transactions' && (
+        <div className="space-y-6">
+          <div className={`rounded-xl p-6 sm:p-8 border transition-colors ${
+            isDark ? 'bg-[#111118] border-white/10 shadow-xl' : 'bg-white border-slate-200 shadow-lg'
+          }`}>
+            <div className="mb-6">
+              <h3 className={`font-display text-xl font-bold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                Lịch Sử Giao Dịch
+              </h3>
+            </div>
+
+            {/* DATE RANGE FILTER BAR */}
+            <div className={`p-4 rounded-xl border mb-6 transition-colors ${
+              isDark ? 'bg-[#09090e]/80 border-white/10' : 'bg-slate-50 border-slate-200'
+            }`}>
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className={`text-xs font-medium mr-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                    Lọc nhanh:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleTxPresetChange('all')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer border transition-all ${
+                      txQuickPreset === 'all' && !txStartDate && !txEndDate
+                        ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm font-bold'
+                        : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    Tất cả
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTxPresetChange('today')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer border transition-all ${
+                      txQuickPreset === 'today'
+                        ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm font-bold'
+                        : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    Hôm nay
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTxPresetChange('7days')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer border transition-all ${
+                      txQuickPreset === '7days'
+                        ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm font-bold'
+                        : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    7 ngày qua
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTxPresetChange('30days')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer border transition-all ${
+                      txQuickPreset === '30days'
+                        ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm font-bold'
+                        : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    30 ngày qua
+                  </button>
+                </div>
+
+                {/* Custom Date Range CleanDatePickers */}
+                <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
+                  <div className="w-[175px] sm:w-[195px]">
+                    <CleanDatePicker
+                      value={txStartDate}
+                      onChange={(d) => {
+                        setTxQuickPreset('all')
+                        setTxStartDate(d)
+                      }}
+                      maxDate={txEndDate || undefined}
+                      placeholder="Từ ngày..."
+                      isDark={isDark}
+                    />
+                  </div>
+
+                  <span className={`text-xs font-bold ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>→</span>
+
+                  <div className="w-[175px] sm:w-[195px]">
+                    <CleanDatePicker
+                      value={txEndDate}
+                      onChange={(d) => {
+                        setTxQuickPreset('all')
+                        setTxEndDate(d)
+                      }}
+                      minDate={txStartDate || undefined}
+                      placeholder="Đến ngày..."
+                      isDark={isDark}
+                    />
+                  </div>
+
+                  {(txStartDate || txEndDate) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTxStartDate('')
+                        setTxEndDate('')
+                        setTxQuickPreset('all')
+                      }}
+                      title="Xóa bộ lọc ngày"
+                      className={`px-3 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer shrink-0 ${
+                        isDark ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/30' : 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
+                      }`}
+                    >
+                      ✕ Bỏ lọc
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Filter Statistics */}
+              <div className={`mt-3 pt-2.5 border-t flex items-center justify-between text-xs font-mono-data ${
+                isDark ? 'border-white/5 text-[#a09e9a]' : 'border-slate-200/80 text-slate-500'
+              }`}>
+                <span>
+                  Tìm thấy <strong className={isDark ? 'text-[#e8b84b]' : 'text-amber-600'}>{filteredTransactions.length}</strong> giao dịch
+                  {(txStartDate || txEndDate) && ` (từ ${txStartDate || 'trước đây'} đến ${txEndDate || 'nay'})`}
+                </span>
+                <span>
+                  Tổng chi: <strong className={isDark ? 'text-[#2ecc71]' : 'text-emerald-600'}>
+                    {fmt(filteredTransactions.reduce((acc, t) => acc + (typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount), 0))}
+                  </strong>
+                </span>
+              </div>
+            </div>
+
+            {txLoading ? (
+              <div className={`py-16 text-center text-xs font-mono-data animate-pulse ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                ⏳ Đang tải lịch sử giao dịch...
+              </div>
+            ) : txError ? (
+              <div className={`py-12 text-center text-xs border rounded-xl space-y-3 ${
+                isDark ? 'bg-red-500/10 border-red-500/30 text-red-300' : 'bg-red-50 border-red-200 text-red-800'
+              }`}>
+                <p>⚠️ {txError}</p>
+                <button
+                  type="button"
+                  onClick={loadTransactions}
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg cursor-pointer"
+                >
+                  🔄 Thử lại
+                </button>
+              </div>
+            ) : filteredTransactions.length === 0 ? (
+              <div className={`py-16 text-center text-xs italic border rounded-xl ${
+                isDark ? 'text-[#a09e9a] bg-[#09090e] border-white/5' : 'text-slate-500 bg-slate-50 border-slate-200'
+              }`}>
+                💳 Không tìm thấy giao dịch nào trong khoảng thời gian đã chọn.
+              </div>
+            ) : (
+              <div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className={`border-b font-semibold uppercase tracking-wider ${
+                        isDark ? 'border-white/10 text-[#a09e9a]' : 'border-slate-200 text-slate-500'
+                      }`}>
+                        <th className="py-3 px-3">Mã vé / Phim</th>
+                        <th className="py-3 px-3">Số tiền</th>
+                        <th className="py-3 px-3">Phương thức</th>
+                        <th className="py-3 px-3">Ngân hàng / GD</th>
+                        <th className="py-3 px-3">Trạng thái</th>
+                        <th className="py-3 px-3 text-right">Thời gian</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${isDark ? 'divide-white/5' : 'divide-slate-100'}`}>
+                      {paginatedTransactions.map((tx) => (
+                        <tr key={tx.id} className={`transition-colors ${isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50/70'}`}>
+                          <td className="py-3.5 px-3">
+                            <div className="font-mono-data font-bold text-amber-500">{tx.ticket_code}</div>
+                            <div className={`text-[11px] font-medium mt-0.5 max-w-[200px] truncate ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                              {tx.movie_title}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-3 font-mono-data font-bold text-sm">
+                            {fmt(tx.amount)}
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border ${
+                              tx.payment_method === 'cash'
+                                ? isDark ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-800'
+                                : isDark ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-blue-50 border-blue-200 text-blue-800'
+                            }`}>
+                              {tx.payment_method === 'cash' ? '💵 Tiền mặt' : '💳 VNPay'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <div className="font-mono-data font-medium">
+                              {tx.bank_code || 'VNPay'} {tx.card_type ? `(${tx.card_type})` : ''}
+                            </div>
+                            <div className={`text-[10px] font-mono-data mt-0.5 ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>
+                              {tx.transaction_no ? `Mã GD: ${tx.transaction_no}` : (tx.vnp_txn_ref ? `Ref: ${tx.vnp_txn_ref}` : '—')}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold border ${
+                              tx.status === 'success' || tx.status === 'completed'
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                : tx.status === 'pending'
+                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                                : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                            }`}>
+                              {tx.status === 'success' || tx.status === 'completed'
+                                ? '✓ Thành công'
+                                : tx.status === 'pending'
+                                ? '⏳ Đang chờ'
+                                : '✕ Thất bại'}
+                            </span>
+                          </td>
+                          <td className={`py-3.5 px-3 text-right font-mono-data text-[11px] ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                            {tx.pay_date ? new Date(tx.pay_date).toLocaleString('vi-VN') : (tx.created_at ? new Date(tx.created_at).toLocaleString('vi-VN') : '—')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* PAGINATION CONTROLS */}
+                {totalTxPages > 1 && (
+                  <div className={`mt-6 pt-4 border-t flex flex-col sm:flex-row items-center justify-between gap-3 text-xs ${
+                    isDark ? 'border-white/10' : 'border-slate-200'
+                  }`}>
+                    <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-500'}>
+                      Hiển thị {(txPage - 1) * txPageSize + 1} - {Math.min(txPage * txPageSize, filteredTransactions.length)} trên tổng {filteredTransactions.length} giao dịch
+                    </span>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={txPage === 1}
+                        onClick={() => setTxPage((p) => Math.max(1, p - 1))}
+                        className={`px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                          isDark ? 'bg-white/5 hover:bg-white/10 text-[#f0ede8] border-white/10' : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'
+                        }`}
+                      >
+                        ← Trang trước
+                      </button>
+
+                      {Array.from({ length: totalTxPages }, (_, i) => i + 1).map((pageNum) => (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          onClick={() => setTxPage(pageNum)}
+                          className={`w-8 h-8 rounded-lg border font-bold text-xs transition-all cursor-pointer ${
+                            txPage === pageNum
+                              ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-md'
+                              : isDark ? 'bg-white/5 hover:bg-white/10 text-[#a09e9a] border-white/10' : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      ))}
+
+                      <button
+                        type="button"
+                        disabled={txPage === totalTxPages}
+                        onClick={() => setTxPage((p) => Math.min(totalTxPages, p + 1))}
+                        className={`px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                          isDark ? 'bg-white/5 hover:bg-white/10 text-[#f0ede8] border-white/10' : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'
+                        }`}
+                      >
+                        Trang sau →
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* TAB 3: USER VOUCHERS */}
       {activeTab === 'vouchers' && (
         <div className="space-y-6">
@@ -1419,6 +1915,167 @@ const CANCELLATION_REASONS = [
                 {cancelPendingLoading ? 'Đang huỷ...' : 'Huỷ thanh toán'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* CHANGE PASSWORD MODAL */}
+      {isChangePasswordOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsChangePasswordOpen(false)
+              setPwdMsg(null)
+            }
+          }}
+        >
+          <div
+            className={`w-full max-w-md rounded-2xl p-6 sm:p-7 shadow-2xl border transition-all scale-100 ${
+              isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl">🔐</span>
+                <h3 className="font-display font-bold text-lg">Đổi mật khẩu tài khoản</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsChangePasswordOpen(false)
+                  setPwdMsg(null)
+                }}
+                className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-colors ${
+                  isDark ? 'hover:bg-white/10 text-[#a09e9a]' : 'hover:bg-slate-100 text-slate-500'
+                }`}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className={`text-xs mb-5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+              Mật khẩu mới phải có tối thiểu 8 ký tự và không được trùng với mật khẩu hiện tại.
+            </p>
+
+            {/* Notification Banner */}
+            {pwdMsg && (
+              <div
+                className={`p-3.5 rounded-xl mb-5 text-xs flex items-center gap-2 font-medium ${
+                  pwdMsg.type === 'success'
+                    ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400'
+                    : 'bg-rose-500/15 border border-rose-500/30 text-rose-400'
+                }`}
+              >
+                <span>{pwdMsg.type === 'success' ? '✓' : '⚠'}</span>
+                <span>{pwdMsg.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleChangePassword} className="space-y-4" autoComplete="off">
+              <div>
+                <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                  Mật khẩu hiện tại
+                </label>
+                <div className="relative">
+                  <span className={`absolute left-3 top-2.5 text-sm ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>🔒</span>
+                  <input
+                    type={showOldPassword ? 'text' : 'password'}
+                    required
+                    autoComplete="current-password"
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                    placeholder="Nhập mật khẩu đang sử dụng"
+                    className={`w-full pl-9 pr-10 py-2.5 rounded-xl text-xs outline-none transition-colors border ${
+                      isDark
+                        ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500 focus:bg-white'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowOldPassword(!showOldPassword)}
+                    className={`absolute right-3 top-2.5 bg-transparent border-0 cursor-pointer text-xs ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}
+                  >
+                    {showOldPassword ? '👁️' : '🙈'}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                  Mật khẩu mới (tối thiểu 8 ký tự)
+                </label>
+                <div className="relative">
+                  <span className={`absolute left-3 top-2.5 text-sm ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>🔒</span>
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Mật khẩu mới khác mật khẩu cũ"
+                    className={`w-full pl-9 pr-10 py-2.5 rounded-xl text-xs outline-none transition-colors border ${
+                      isDark
+                        ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500 focus:bg-white'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className={`absolute right-3 top-2.5 bg-transparent border-0 cursor-pointer text-xs ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}
+                  >
+                    {showNewPassword ? '👁️' : '🙈'}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                  Xác nhận mật khẩu mới
+                </label>
+                <div className="relative">
+                  <span className={`absolute left-3 top-2.5 text-sm ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>🔒</span>
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    required
+                    autoComplete="new-password"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    placeholder="Nhập lại mật khẩu mới"
+                    className={`w-full pl-9 pr-3 py-2.5 rounded-xl text-xs outline-none transition-colors border ${
+                      isDark
+                        ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500 focus:bg-white'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 flex gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsChangePasswordOpen(false)
+                    setPwdMsg(null)
+                  }}
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                    isDark ? 'bg-white/5 hover:bg-white/10 text-[#f0ede8] border-white/10' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={pwdLoading}
+                  className="flex-1 bg-[#e8b84b] hover:bg-[#d4a338] text-[#09090e] py-2.5 rounded-xl font-bold text-xs cursor-pointer hover:shadow-[0_4px_16px_rgba(232,184,75,0.35)] transition-all disabled:opacity-50"
+                >
+                  {pwdLoading ? 'Đang cập nhật...' : 'Cập nhật mật khẩu →'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

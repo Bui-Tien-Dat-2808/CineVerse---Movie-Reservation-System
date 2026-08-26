@@ -140,13 +140,13 @@ export async function createReservationAPI(
   showtimeId: number,
   seatIds: number[],
   voucherCode?: string,
-  concessionOrders?: Array<{ concession_id: number; quantity: number }>,
+  concessionOrders?: Array<{ concession_id: number; quantity: number; custom_options?: string; unit_price?: number }>,
 ): Promise<any> {
   const { data } = await apiClient.post('/api/v1/reservations/', {
     showtime_id: showtimeId,
     seat_ids: seatIds,
     voucher_code: voucherCode || undefined,
-    concession_orders: concessionOrders?.length ? concessionOrders : undefined,
+    concessions: concessionOrders?.length ? concessionOrders : undefined,
   })
   return data
 }
@@ -220,5 +220,27 @@ export async function createPaymentUrlAPI(reservationId: number): Promise<{ paym
 /** GET /api/v1/reservations/{id} */
 export async function fetchReservationDetailAPI(reservationId: number): Promise<ReservationItem> {
   const { data } = await apiClient.get<ReservationItem>(`/api/v1/reservations/${reservationId}`)
+  return data
+}
+
+export interface PaymentTransactionItem {
+  id: number
+  reservation_id: number
+  ticket_code: string
+  movie_title: string
+  amount: number
+  payment_method: string
+  bank_code?: string
+  card_type?: string
+  transaction_no?: string
+  vnp_txn_ref?: string
+  status: string
+  pay_date: string
+  created_at: string
+}
+
+/** GET /api/v1/payments/my-transactions */
+export async function fetchMyTransactionsAPI(): Promise<PaymentTransactionItem[]> {
+  const { data } = await apiClient.get<PaymentTransactionItem[]>('/api/v1/payments/my-transactions')
   return data
 }

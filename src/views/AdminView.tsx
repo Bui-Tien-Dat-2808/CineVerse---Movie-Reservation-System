@@ -5,6 +5,10 @@ import { useTheme } from '../context/ThemeContext'
 import { apiClient } from '../api/client'
 import { fmt } from '../lib/utils'
 import { adjustUserPoints, fetchLoyaltyUsers, type LoyaltyTransaction } from '../api/loyalty'
+import ReviewManageTab from '../components/admin/ReviewManageTab'
+import MovieDetailModal from '../components/admin/MovieDetailModal'
+import RefundResolveModal from '../components/admin/RefundResolveModal'
+import { groupConcessions, type GroupedConcession } from '../api/concessions'
 
 interface MovieItem {
   id: number
@@ -219,6 +223,7 @@ interface VoucherAdminItem {
   max_discount?: number
   expiry_date?: string
   max_uses_total?: number
+  min_loyalty_tier?: string
   is_active: boolean
   is_first_booking_only?: boolean
 }
@@ -1123,11 +1128,13 @@ function ConcessionAdminTab({ isDark }: { isDark: boolean }) {
   const [newForm, setNewForm] = useState({
     name: '', description: '', price: '', category: 'popcorn', size: '', image_url: '', is_active: true,
   })
+  const [addingSizeGroupKey, setAddingSizeGroupKey] = useState<string | null>(null)
+  const [newSizeForm, setNewSizeForm] = useState<{ size: string; price: string }>({ size: 'S', price: '' })
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
 
   // Categories that support size selection
-  const SIZE_CATEGORIES = ['popcorn', 'drink', 'combo']
+  const SIZE_CATEGORIES = ['popcorn', 'drink']
   const SIZE_OPTIONS = [
     { value: 'S', label: 'S — Nhỏ' },
     { value: 'M', label: 'M — Vừa' },
@@ -1197,6 +1204,31 @@ function ConcessionAdminTab({ isDark }: { isDark: boolean }) {
       setTimeout(() => setMsg(''), 3000)
     } catch { setMsg('Lỗi cập nhật') }
     finally { setSaving(false) }
+  }
+
+  async function handleAddSizeForGroup(group: GroupedConcession) {
+    if (!newSizeForm.price || !newSizeForm.size) return
+    setSaving(true)
+    try {
+      await apiClient.post('/api/v1/concessions/', {
+        name: group.baseName,
+        category: group.category,
+        size: newSizeForm.size,
+        price: parseFloat(newSizeForm.price),
+        description: group.description || undefined,
+        image_url: group.image_url || undefined,
+        is_active: true,
+      })
+      await fetchConcessions()
+      setAddingSizeGroupKey(null)
+      setNewSizeForm({ size: 'S', price: '' })
+      setMsg(`✓ Đã thêm Size ${newSizeForm.size} cho "${group.baseName}" thành công`)
+      setTimeout(() => setMsg(''), 3000)
+    } catch {
+      setMsg('Lỗi khi thêm kích cỡ mới')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleSaveEdit() {
@@ -1417,7 +1449,7 @@ function ConcessionAdminTab({ isDark }: { isDark: boolean }) {
         })}
       </div>
 
-      {/* ── CONCESSIONS GRID ── */}
+      {/* ── CONCESSIONS GRID (GROUPED SIZES) ── */}
       {loading ? (
         <div className={`p-10 text-center rounded-2xl border ${card}`}>
           <div className="text-2xl animate-spin inline-block">⏳</div>
@@ -1432,162 +1464,338 @@ function ConcessionAdminTab({ isDark }: { isDark: boolean }) {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredConcessions.map(item => (
-            <div key={item.id} className={`rounded-2xl border overflow-hidden flex flex-col ${card} ${
-              !item.is_active ? 'opacity-55 grayscale' : ''
-            }`}>
+          {groupConcessions(filteredConcessions).map(group => {
+            const isEditing = group.variants.some(v => v.id === editId)
+            const editingItem = group.variants.find(v => v.id === editId)
+            const hasMultiple = group.variants.length > 1
 
-              {/* ── EDIT MODE ── */}
-              {editId === item.id ? (
-                <div className="p-4 space-y-3">
-                  <p className={`text-[11px] font-bold uppercase tracking-wide ${isDark ? 'text-[#e8b84b]' : 'text-amber-700'}`}>
-                    ✏️ Đang chỉnh sửa
-                  </p>
+            return (
+              <div key={group.key} className={`rounded-2xl border overflow-hidden flex flex-col ${card} ${
+                !group.is_active ? 'opacity-55 grayscale' : ''
+              }`}>
 
-                  {/* Image upload */}
-                  <div>
-                    <label className={`text-xs font-medium block mb-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Ảnh</label>
-                    <ImageUploadField
-                      value={editForm.image_url}
-                      onChange={(url) => setEditForm((f: any) => ({ ...f, image_url: url }))}
-                      isDark={isDark}
-                      compact
-                    />
-                  </div>
+                {/* ── EDIT MODE ── */}
+                {isEditing && editingItem ? (
+                  <div className="p-4 space-y-3">
+                    <p className={`text-[11px] font-bold uppercase tracking-wide ${isDark ? 'text-[#e8b84b]' : 'text-amber-700'}`}>
+                      ✏️ Đang chỉnh sửa ({editingItem.size ? `Size ${editingItem.size}` : editingItem.name})
+                    </p>
 
-                  <div>
-                    <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Tên</label>
-                    <input value={editForm.name} onChange={e => setEditForm((f: any) => ({ ...f, name: e.target.value }))}
-                      className={`mt-0.5 w-full px-2.5 py-1.5 rounded-lg border text-sm outline-none ${input}`} />
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Giá</label>
-                      <input value={editForm.price} type="number" onChange={e => setEditForm((f: any) => ({ ...f, price: e.target.value }))}
+                    {/* Image upload */}
+                    <div>
+                      <label className={`text-xs font-medium block mb-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Ảnh</label>
+                      <ImageUploadField
+                        value={editForm.image_url}
+                        onChange={(url) => setEditForm((f: any) => ({ ...f, image_url: url }))}
+                        isDark={isDark}
+                        compact
+                      />
+                    </div>
+
+                    <div>
+                      <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Tên</label>
+                      <input value={editForm.name} onChange={e => setEditForm((f: any) => ({ ...f, name: e.target.value }))}
                         className={`mt-0.5 w-full px-2.5 py-1.5 rounded-lg border text-sm outline-none ${input}`} />
                     </div>
-                    <div className="flex-1">
-                      <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Danh mục</label>
-                      <select value={editForm.category} onChange={e => setEditForm((f: any) => ({ ...f, category: e.target.value, size: '' }))}
-                        className={`mt-0.5 w-full px-2.5 py-1.5 rounded-lg border text-sm outline-none ${input}`}>
-                        {categoryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Giá</label>
+                        <input value={editForm.price} type="number" onChange={e => setEditForm((f: any) => ({ ...f, price: e.target.value }))}
+                          className={`mt-0.5 w-full px-2.5 py-1.5 rounded-lg border text-sm outline-none ${input}`} />
+                      </div>
+                      <div className="flex-1">
+                        <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Danh mục</label>
+                        <select value={editForm.category} onChange={e => setEditForm((f: any) => ({ ...f, category: e.target.value, size: '' }))}
+                          className={`mt-0.5 w-full px-2.5 py-1.5 rounded-lg border text-sm outline-none ${input}`}>
+                          {categoryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Size picker — popcorn/drink/combo only */}
-                  {SIZE_CATEGORIES.includes(editForm.category) && (
-                    <div>
-                      <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Size</label>
-                      <div className="flex gap-1.5 flex-wrap">
-                        <button
-                          type="button"
-                          onClick={() => setEditForm((f: any) => ({ ...f, size: '' }))}
-                          className={`px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer transition-all border ${
-                            !editForm.size
-                              ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
-                              : isDark ? 'border-white/15 text-[#6e6c68] hover:border-white/30' : 'border-slate-200 text-slate-400'
-                          }`}
-                        >
-                          Không chọn
-                        </button>
-                        {SIZE_OPTIONS.map(s => (
+                    {/* Size picker — popcorn/drink/combo only */}
+                    {SIZE_CATEGORIES.includes(editForm.category) && (
+                      <div>
+                        <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Size</label>
+                        <div className="flex gap-1.5 flex-wrap">
                           <button
-                            key={s.value}
                             type="button"
-                            onClick={() => setEditForm((f: any) => ({ ...f, size: s.value }))}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-all border ${
-                              editForm.size === s.value
+                            onClick={() => setEditForm((f: any) => ({ ...f, size: '' }))}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer transition-all border ${
+                              !editForm.size
                                 ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
-                                : isDark ? 'border-white/15 text-[#a09e9a] hover:text-[#f0ede8] hover:border-white/30' : 'border-slate-200 text-slate-500 hover:border-slate-400'
+                                : isDark ? 'border-white/15 text-[#6e6c68] hover:border-white/30' : 'border-slate-200 text-slate-400'
                             }`}
                           >
-                            {s.value}
+                            Không chọn
                           </button>
-                        ))}
+                          {SIZE_OPTIONS.map(s => (
+                            <button
+                              key={s.value}
+                              type="button"
+                              onClick={() => setEditForm((f: any) => ({ ...f, size: s.value }))}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-all border ${
+                                editForm.size === s.value
+                                  ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
+                                  : isDark ? 'border-white/15 text-[#a09e9a] hover:text-[#f0ede8] hover:border-white/30' : 'border-slate-200 text-slate-500 hover:border-slate-400'
+                              }`}
+                            >
+                              {s.value}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Mô tả</label>
-                    <textarea value={editForm.description} rows={2}
-                      onChange={e => setEditForm((f: any) => ({ ...f, description: e.target.value }))}
-                      className={`mt-0.5 w-full px-2.5 py-1.5 rounded-lg border text-sm outline-none resize-none ${input}`} />
-                  </div>
-                  <div className="flex gap-2 pt-1">
-                    <button type="button" onClick={() => setEditId(null)}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>
-                      Huỷ
-                    </button>
-                    <button type="button" disabled={saving} onClick={handleSaveEdit}
-                      className="flex-1 py-1.5 rounded-lg text-xs font-bold cursor-pointer bg-[#e8b84b] text-[#09090e] hover:brightness-110 disabled:opacity-50 transition-all">
-                      {saving ? '...' : '✓ Lưu'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* ── VIEW MODE ── */
-                <>
-                  {/* Image */}
-                  <div className={`h-56 overflow-hidden flex items-center justify-center ${isDark ? 'bg-[#0d0d14]' : 'bg-slate-100'}`}>
-                    {item.image_url ? (
-                      <img src={item.image_url} alt={item.name} className="max-w-full max-h-full w-full h-full object-contain" />
-                    ) : (
-                      <span className="text-5xl opacity-20">🍿</span>
                     )}
-                  </div>
-                  <div className="p-4 flex flex-col gap-2 flex-1">
+
                     <div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${
-                          isDark ? 'bg-[#e8b84b]/15 text-[#e8b84b]' : 'bg-amber-50 text-amber-700'
-                        }`}>{item.category}</span>
-                        {item.size && (
-                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                            isDark ? 'bg-[#e8b84b] text-[#0c0c16] border-[#e8b84b]' : 'bg-amber-400 text-black border-amber-400'
-                          }`}>Size {item.size}</span>
-                        )}
-                      </div>
-                      <h4 className={`font-bold text-sm mt-1 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{item.name}</h4>
-                      {item.description && (
-                        <p className={`text-[11px] mt-0.5 line-clamp-2 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>{item.description}</p>
+                      <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Mô tả</label>
+                      <textarea value={editForm.description} rows={2}
+                        onChange={e => setEditForm((f: any) => ({ ...f, description: e.target.value }))}
+                        className={`mt-0.5 w-full px-2.5 py-1.5 rounded-lg border text-sm outline-none resize-none ${input}`} />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button type="button" onClick={() => setEditId(null)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>
+                        Huỷ
+                      </button>
+                      <button type="button" disabled={saving} onClick={handleSaveEdit}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-bold cursor-pointer bg-[#e8b84b] text-[#09090e] hover:brightness-110 disabled:opacity-50 transition-all">
+                        {saving ? '...' : '✓ Lưu'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* ── VIEW MODE (GROUPED WITH SIZES) ── */
+                  <>
+                    {/* Image */}
+                    <div className={`h-52 overflow-hidden flex items-center justify-center ${isDark ? 'bg-[#0d0d14]' : 'bg-slate-100'}`}>
+                      {group.image_url ? (
+                        <img src={group.image_url} alt={group.baseName} className="max-w-full max-h-full w-full h-full object-contain" />
+                      ) : (
+                        <span className="text-5xl opacity-20">🍿</span>
                       )}
                     </div>
-                    <div className="flex items-center justify-between mt-auto pt-2">
-                      <span className="font-mono-data font-bold text-[#e8b84b]">{Number(item.price).toLocaleString('vi-VN')}đ</span>
-                      <div className="flex gap-1.5">
-                        <button type="button"
-                          onClick={() => {
-                            setEditId(item.id)
-                            setCreating(false)
-                            setEditForm({
-                              name: item.name,
-                              price: String(item.price),
-                              category: item.category,
-                              size: item.size || '',
-                              description: item.description || '',
-                              image_url: item.image_url || '',
-                            })
-                          }}
-                          className={`px-2.5 py-1 rounded-lg text-xs cursor-pointer transition-all ${isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>
-                          ✏️ Sửa
-                        </button>
-                        <button type="button" onClick={() => handleToggleActive(item)}
-                          className={`px-2.5 py-1 rounded-lg text-xs cursor-pointer transition-all ${
-                            item.is_active
-                              ? isDark ? 'bg-red-900/20 hover:bg-red-900/30 text-red-400' : 'bg-red-50 hover:bg-red-100 text-red-600'
-                              : isDark ? 'bg-green-900/20 hover:bg-green-900/30 text-green-400' : 'bg-green-50 hover:bg-green-100 text-green-600'
-                          }`}>
-                          {item.is_active ? '🙈 Ẩn' : '👁️ Hiện'}
-                        </button>
+                    <div className="p-4 flex flex-col gap-2.5 flex-1">
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${
+                            isDark ? 'bg-[#e8b84b]/15 text-[#e8b84b]' : 'bg-amber-50 text-amber-700'
+                          }`}>{group.category}</span>
+                          {hasMultiple && (
+                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-[#e8b84b] border border-[#e8b84b]/30">
+                              {group.variants.length} Kích cỡ ({group.variants.map(v => v.size || 'S').join(', ')})
+                            </span>
+                          )}
+                        </div>
+                        <h4 className={`font-bold text-sm mt-1 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{group.baseName}</h4>
+                        {group.description && (
+                          <p className={`text-[11px] mt-0.5 line-clamp-2 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>{group.description}</p>
+                        )}
                       </div>
+
+                      {/* Variants Breakdown if Multiple Sizes */}
+                      {hasMultiple ? (
+                        <div className="space-y-1.5 pt-1 border-t border-white/5">
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[10px] font-bold uppercase tracking-wider block ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                              Kích cỡ & Giá bán:
+                            </span>
+                            {group.category !== 'combo' && SIZE_CATEGORIES.includes(group.category) && addingSizeGroupKey !== group.key && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAddingSizeGroupKey(group.key)
+                                  const existingSizes = new Set(group.variants.map(v => v.size).filter(Boolean))
+                                  const availableSize = SIZE_OPTIONS.find(s => !existingSizes.has(s.value))?.value || 'XL'
+                                  setNewSizeForm({ size: availableSize, price: '' })
+                                }}
+                                className="text-[10px] font-bold text-[#e8b84b] hover:underline cursor-pointer flex items-center gap-1"
+                              >
+                                <span>+ Thêm size</span>
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="space-y-1">
+                            {group.variants.map(v => (
+                              <div key={v.id} className={`flex items-center justify-between p-1.5 px-2.5 rounded-xl border text-xs ${
+                                isDark ? 'bg-white/[0.02] border-white/5' : 'bg-slate-50 border-slate-200'
+                              } ${!v.is_active ? 'opacity-50' : ''}`}>
+                                <span className="font-bold text-[#e8b84b]">Size {v.size || 'Tiêu chuẩn'}</span>
+                                <span className="font-mono-data font-semibold">{Number(v.price).toLocaleString('vi-VN')}đ</span>
+                                <div className="flex gap-1.5">
+                                  <button type="button"
+                                    onClick={() => {
+                                      setEditId(v.id)
+                                      setCreating(false)
+                                      setAddingSizeGroupKey(null)
+                                      setEditForm({
+                                        name: v.name,
+                                        price: String(v.price),
+                                        category: v.category,
+                                        size: v.size || '',
+                                        description: v.description || '',
+                                        image_url: v.image_url || '',
+                                      })
+                                    }}
+                                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-200 hover:bg-slate-300 text-slate-700'}`}>
+                                    ✏️ Sửa
+                                  </button>
+                                  <button type="button" onClick={() => handleToggleActive(v)}
+                                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${
+                                      v.is_active
+                                        ? isDark ? 'bg-red-900/20 hover:bg-red-900/30 text-red-400' : 'bg-red-50 hover:bg-red-100 text-red-600'
+                                        : isDark ? 'bg-green-900/20 hover:bg-green-900/30 text-green-400' : 'bg-green-50 hover:bg-green-100 text-green-600'
+                                    }`}>
+                                    {v.is_active ? 'Ẩn' : 'Hiện'}
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        /* Single Variant View Controls */
+                        <div className="space-y-2 mt-auto pt-2 border-t border-white/5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono-data font-bold text-[#e8b84b]">{Number(group.primaryConcession.price).toLocaleString('vi-VN')}đ</span>
+                            <div className="flex gap-1.5">
+                              {group.category !== 'combo' && SIZE_CATEGORIES.includes(group.category) && addingSizeGroupKey !== group.key && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAddingSizeGroupKey(group.key)
+                                    const currSize = group.primaryConcession.size
+                                    const nextSize = currSize === 'S' ? 'M' : currSize === 'M' ? 'L' : 'M'
+                                    setNewSizeForm({ size: nextSize, price: '' })
+                                  }}
+                                  className={`px-2 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all border ${
+                                    isDark ? 'border-[#e8b84b]/30 bg-[#e8b84b]/10 text-[#e8b84b] hover:bg-[#e8b84b]/20' : 'border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100'
+                                  }`}
+                                >
+                                  + Thêm Size
+                                </button>
+                              )}
+                              <button type="button"
+                                onClick={() => {
+                                  setEditId(group.primaryConcession.id)
+                                  setCreating(false)
+                                  setAddingSizeGroupKey(null)
+                                  setEditForm({
+                                    name: group.primaryConcession.name,
+                                    price: String(group.primaryConcession.price),
+                                    category: group.primaryConcession.category,
+                                    size: group.primaryConcession.size || '',
+                                    description: group.primaryConcession.description || '',
+                                    image_url: group.primaryConcession.image_url || '',
+                                  })
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-xs cursor-pointer transition-all ${isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>
+                                ✏️ Sửa
+                              </button>
+                              <button type="button" onClick={() => handleToggleActive(group.primaryConcession)}
+                                className={`px-2.5 py-1 rounded-lg text-xs cursor-pointer transition-all ${
+                                  group.primaryConcession.is_active
+                                    ? isDark ? 'bg-red-900/20 hover:bg-red-900/30 text-red-400' : 'bg-red-50 hover:bg-red-100 text-red-600'
+                                    : isDark ? 'bg-green-900/20 hover:bg-green-900/30 text-green-400' : 'bg-green-50 hover:bg-green-100 text-green-600'
+                                }`}>
+                                {group.primaryConcession.is_active ? '🙈 Ẩn' : '👁️ Hiện'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Inline Add Size Box */}
+                      {addingSizeGroupKey === group.key && (
+                        <div className={`p-3 rounded-xl border mt-2 space-y-2.5 animate-in fade-in duration-150 ${
+                          isDark ? 'bg-[#161622] border-[#e8b84b]/40' : 'bg-amber-50/80 border-amber-300'
+                        }`}>
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[11px] font-bold uppercase tracking-wide ${isDark ? 'text-[#e8b84b]' : 'text-amber-800'}`}>
+                              + Thêm Size Mới cho "{group.baseName}"
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setAddingSizeGroupKey(null)}
+                              className="text-xs text-[#a09e9a] hover:text-red-400 cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </div>
+
+                          <div>
+                            <label className={`text-[11px] font-medium block mb-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                              Chọn kích cỡ:
+                            </label>
+                            <div className="flex gap-1 flex-wrap">
+                              {SIZE_OPTIONS.map(s => {
+                                const alreadyExists = group.variants.some(v => v.size === s.value)
+                                const isSelected = newSizeForm.size === s.value
+                                return (
+                                  <button
+                                    key={s.value}
+                                    type="button"
+                                    disabled={alreadyExists}
+                                    onClick={() => setNewSizeForm(f => ({ ...f, size: s.value }))}
+                                    className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                                      alreadyExists
+                                        ? 'opacity-40 cursor-not-allowed border-transparent bg-black/10 text-slate-500 line-through'
+                                        : isSelected
+                                        ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
+                                        : isDark
+                                        ? 'bg-white/5 text-[#a09e9a] border-white/10 hover:border-white/20'
+                                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                                    }`}
+                                  >
+                                    Size {s.value} {alreadyExists ? '(đã có)' : ''}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className={`text-[11px] font-medium block mb-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                              Giá bán cho Size {newSizeForm.size} (VNĐ) *:
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1000"
+                              placeholder="Vd: 55000"
+                              value={newSizeForm.price}
+                              onChange={e => setNewSizeForm(f => ({ ...f, price: e.target.value }))}
+                              className={`w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none transition-all ${input}`}
+                            />
+                          </div>
+
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setAddingSizeGroupKey(null)}
+                              className={`flex-1 py-1 rounded-lg text-xs font-medium cursor-pointer transition-all ${
+                                isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                              }`}
+                            >
+                              Huỷ
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!newSizeForm.price || saving}
+                              onClick={() => handleAddSizeForGroup(group)}
+                              className="flex-1 py-1 rounded-lg text-xs font-bold cursor-pointer bg-[#e8b84b] text-[#09090e] hover:brightness-110 disabled:opacity-50 transition-all shadow-sm"
+                            >
+                              {saving ? '...' : '✓ Thêm Size'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
+                  </>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
@@ -1614,7 +1822,7 @@ export default function AdminView() {
     | null
 
   const [activeTabState, setActiveTabState] = useState<
-    'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'concessions' | 'loyalty' | 'analytics' | 'users' | 'scanner' | 'refunds'
+    'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'concessions' | 'loyalty' | 'analytics' | 'users' | 'scanner' | 'refunds' | 'reviews'
   >(() => {
     if (tabParam) return tabParam as any
     const stored = localStorage.getItem('admin_active_tab')
@@ -1623,7 +1831,7 @@ export default function AdminView() {
 
   const activeTab = tabParam || activeTabState
 
-  const setActiveTab = (tab: 'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'concessions' | 'loyalty' | 'analytics' | 'users' | 'scanner' | 'refunds') => {
+  const setActiveTab = (tab: 'movies' | 'showtimes' | 'rooms' | 'vouchers' | 'concessions' | 'loyalty' | 'analytics' | 'users' | 'scanner' | 'refunds' | 'reviews') => {
     setActiveTabState(tab)
     localStorage.setItem('admin_active_tab', tab)
     setSearchParams({ tab })
@@ -1706,7 +1914,14 @@ export default function AdminView() {
   const [vExpiry, setVExpiry] = useState<string>('2026-12-31')
   const [vFirstOnly, setVFirstOnly] = useState<boolean>(false)
   const [vMaxPerUser, setVMaxPerUser] = useState<number>(1)
+  const [vMinLoyaltyTier, setVMinLoyaltyTier] = useState<string>('')
   const [vLoading, setVLoading] = useState(false)
+
+  // Analytics Date Filter States (FEAT-04)
+  const [analyticsStartDate, setAnalyticsStartDate] = useState<string>('')
+  const [analyticsEndDate, setAnalyticsEndDate] = useState<string>('')
+  const [analyticsPreset, setAnalyticsPreset] = useState<'all' | 'today' | '7days' | '30days' | 'month'>('all')
+  const [analyticsLoading, setAnalyticsLoading] = useState<boolean>(false)
 
 
   // Create Showtime Form State
@@ -2056,17 +2271,36 @@ export default function AdminView() {
         expiry_date: vExpiry || null,
         is_first_booking_only: vFirstOnly,
         max_uses_per_user: Number(vMaxPerUser) || 1,
+        min_loyalty_tier: vMinLoyaltyTier || null,
         is_active: true,
       })
 
       notify('success', `Tạo voucher khuyến mãi "${vCode.toUpperCase()}" thành công!`)
       setVCode('')
+      setVMinLoyaltyTier('')
       await loadAllData()
     } catch (err: any) {
       const msg = err.response?.data?.detail ?? 'Tạo mã voucher thất bại.'
       notify('error', typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setVLoading(false)
+    }
+  }
+
+  // FEAT-04: Filter Analytics by Date Range
+  async function fetchFilteredAnalytics(startDate?: string, endDate?: string) {
+    setAnalyticsLoading(true)
+    try {
+      const params: any = {}
+      if (startDate) params.start_date = startDate
+      if (endDate) params.end_date = endDate
+      const { data } = await apiClient.get('/api/v1/analytics/dashboard', { params })
+      if (data) setLiveAnalytics(data)
+    } catch (err) {
+      console.error('Failed to load filtered analytics:', err)
+      notify('error', 'Không thể lọc dữ liệu báo cáo theo ngày.')
+    } finally {
+      setAnalyticsLoading(false)
     }
   }
 
@@ -3903,6 +4137,21 @@ export default function AdminView() {
               </div>
 
               <div>
+                <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Hạng Thành Viên Yêu Cầu (Loyalty Tier)</label>
+                <select
+                  value={vMinLoyaltyTier}
+                  onChange={(e) => setVMinLoyaltyTier(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none cursor-pointer"
+                >
+                  <option value="">🌟 Mọi hạng thành viên (Tất cả)</option>
+                  <option value="bronze">🥉 Hạng Đồng trở lên (Bronze+)</option>
+                  <option value="silver">🥈 Hạng Bạc trở lên (Silver+)</option>
+                  <option value="gold">🥇 Hạng Vàng trở lên (Gold+)</option>
+                  <option value="diamond">💎 Hạng Kim Cương (Diamond)</option>
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Ngày Hết Hạn (Expiry Date)</label>
                 <input
                   type="date"
@@ -3946,6 +4195,7 @@ export default function AdminView() {
                   <tr>
                     <th className="p-3">Mã Voucher</th>
                     <th className="p-3">Mức Giảm</th>
+                    <th className="p-3">Hạng Áp Dụng</th>
                     <th className="p-3">Hạn Dùng</th>
                     <th className="p-3">Trạng Thái</th>
                     <th className="p-3 text-right">Thao Tác</th>
@@ -3966,6 +4216,15 @@ export default function AdminView() {
                           {v.discount_type === 'percent' ? `${v.discount_value}%` : fmt(v.discount_value)}
                           {v.min_spend > 0 && (
                             <span className="block text-[9px] text-[#6e6c68]">Đơn từ {fmt(v.min_spend)}</span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          {v.min_loyalty_tier ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 border border-amber-500/30 text-amber-400 capitalize">
+                              {v.min_loyalty_tier === 'diamond' ? '💎 Kim Cương' : v.min_loyalty_tier === 'gold' ? '🥇 Vàng+' : v.min_loyalty_tier === 'silver' ? '🥈 Bạc+' : '🥉 Đồng+'}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-[#6e6c68]">Tất cả</span>
                           )}
                         </td>
                         <td className="p-3 font-mono-data">{v.expiry_date || 'Vĩnh viễn'}</td>
@@ -4227,9 +4486,138 @@ export default function AdminView() {
         </div>
       )}
 
-      {/* TAB 5: ANALYTICS & REPORTS */}
+      {/* TAB 5: ANALYTICS & REPORTS (FEAT-04) */}
       {activeTab === 'analytics' && (
         <div className="space-y-8">
+          {/* Date Range Filter Bar (FEAT-04) */}
+          <div className={`p-5 rounded-2xl border shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-colors ${
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+          }`}>
+            <div>
+              <h3 className={`font-display font-bold text-lg flex items-center gap-2 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                <span>📅</span>
+                <span>Bộ Lọc Báo Cáo & Thống Kê Theo Ngày</span>
+              </h3>
+              <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                {liveAnalytics?.start_date || liveAnalytics?.end_date
+                  ? `Đang hiển thị dữ liệu từ ${liveAnalytics.start_date || 'đầu'} đến ${liveAnalytics.end_date || 'nay'}`
+                  : 'Đang hiển thị toàn bộ lịch sử giao dịch từ trước đến nay.'}
+              </p>
+            </div>
+
+            {/* Quick Presets & Date Inputs */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setAnalyticsPreset('all')
+                  setAnalyticsStartDate('')
+                  setAnalyticsEndDate('')
+                  fetchFilteredAnalytics()
+                }}
+                className={`px-3 py-1.5 rounded-lg border font-bold transition-all cursor-pointer ${
+                  analyticsPreset === 'all'
+                    ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
+                    : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                Toàn bộ
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const todayStr = toLocalYYYYMMDD(new Date())
+                  setAnalyticsPreset('today')
+                  setAnalyticsStartDate(todayStr)
+                  setAnalyticsEndDate(todayStr)
+                  fetchFilteredAnalytics(todayStr, todayStr)
+                }}
+                className={`px-3 py-1.5 rounded-lg border font-bold transition-all cursor-pointer ${
+                  analyticsPreset === 'today'
+                    ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
+                    : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                Hôm nay
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const end = new Date()
+                  const start = new Date(Date.now() - 7 * 86400000)
+                  const startStr = toLocalYYYYMMDD(start)
+                  const endStr = toLocalYYYYMMDD(end)
+                  setAnalyticsPreset('7days')
+                  setAnalyticsStartDate(startStr)
+                  setAnalyticsEndDate(endStr)
+                  fetchFilteredAnalytics(startStr, endStr)
+                }}
+                className={`px-3 py-1.5 rounded-lg border font-bold transition-all cursor-pointer ${
+                  analyticsPreset === '7days'
+                    ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
+                    : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                7 Ngày qua
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const end = new Date()
+                  const start = new Date(Date.now() - 30 * 86400000)
+                  const startStr = toLocalYYYYMMDD(start)
+                  const endStr = toLocalYYYYMMDD(end)
+                  setAnalyticsPreset('30days')
+                  setAnalyticsStartDate(startStr)
+                  setAnalyticsEndDate(endStr)
+                  fetchFilteredAnalytics(startStr, endStr)
+                }}
+                className={`px-3 py-1.5 rounded-lg border font-bold transition-all cursor-pointer ${
+                  analyticsPreset === '30days'
+                    ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
+                    : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                30 Ngày qua
+              </button>
+
+              {/* Custom Date Pickers */}
+              <div className="flex items-center gap-1.5 pl-2 border-l border-white/10">
+                <input
+                  type="date"
+                  value={analyticsStartDate}
+                  onChange={(e) => {
+                    setAnalyticsStartDate(e.target.value)
+                    setAnalyticsPreset('all')
+                  }}
+                  className={`px-2 py-1 rounded-lg border text-xs outline-none font-mono-data ${
+                    isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-200 text-slate-900'
+                  }`}
+                />
+                <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-400'}>➔</span>
+                <input
+                  type="date"
+                  value={analyticsEndDate}
+                  onChange={(e) => {
+                    setAnalyticsEndDate(e.target.value)
+                    setAnalyticsPreset('all')
+                  }}
+                  className={`px-2 py-1 rounded-lg border text-xs outline-none font-mono-data ${
+                    isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-200 text-slate-900'
+                  }`}
+                />
+                <button
+                  type="button"
+                  disabled={analyticsLoading}
+                  onClick={() => fetchFilteredAnalytics(analyticsStartDate || undefined, analyticsEndDate || undefined)}
+                  className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg cursor-pointer transition-all disabled:opacity-50"
+                >
+                  {analyticsLoading ? 'Đang lọc...' : 'Lọc'}
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Summary Stat Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-[#111118] border border-[#e8b84b]/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
@@ -4901,66 +5289,31 @@ export default function AdminView() {
         </div>
       )}
 
-      {/* Manual Resolve Refund Modal */}
-      {resolveModalOpen && selectedRefund && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`max-w-md w-full rounded-2xl border p-6 space-y-4 shadow-2xl ${
-            isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
-          }`}>
-            <div className="flex items-center justify-between border-b pb-3 border-white/10">
-              <h3 className="font-display font-bold text-base flex items-center gap-2">
-                <span>💸</span>
-                <span>Xác Nhận Hoàn Tiền Thủ Công</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setResolveModalOpen(false)}
-                className="text-[#a09e9a] hover:text-white text-lg font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <p><strong>Mã Vé:</strong> <span className="text-[#e8b84b] font-mono-data font-bold">{selectedRefund.ticket_code || `R#${selectedRefund.reservation_id}`}</span></p>
-              <p><strong>Khách hàng:</strong> {selectedRefund.user_full_name} ({selectedRefund.user_email})</p>
-              <p><strong>Số tiền cần hoàn:</strong> <span className="text-emerald-400 font-mono-data font-bold text-sm">{fmt(selectedRefund.amount)}</span></p>
-              <p><strong>Mã Yêu Cầu VNPay:</strong> <span className="font-mono-data">{selectedRefund.vnp_request_id}</span></p>
-            </div>
-
-            <div className="space-y-1.5 pt-2">
-              <label className="text-xs font-bold text-[#a09e9a] block">Ghi chú xử lý của Admin (VD: Mã giao dịch chuyển khoản ngân hàng):</label>
-              <textarea
-                rows={3}
-                value={resolveAdminNote}
-                onChange={(e) => setResolveAdminNote(e.target.value)}
-                className={`w-full p-2.5 rounded-xl border text-xs outline-none focus:border-[#e8b84b] ${
-                  isDark ? 'bg-[#161622] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
-                }`}
-                placeholder="Nhập ghi chú chuyển khoản..."
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
-              <button
-                type="button"
-                onClick={() => setResolveModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-[#f0ede8]"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                type="button"
-                disabled={resolvingLoading}
-                onClick={handleResolveRefundManually}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-slate-950 disabled:opacity-50"
-              >
-                {resolvingLoading ? 'Đang cập nhật...' : '✓ Đã Chuyển Khoản Trực Tiếp'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* TAB: REVIEWS & RATINGS MODERATION */}
+      {activeTab === 'reviews' && (
+        <ReviewManageTab movies={movies} notify={notify} />
       )}
+
+      {/* Manual Resolve Refund Modal Component */}
+      <RefundResolveModal
+        refund={selectedRefund}
+        isOpen={resolveModalOpen}
+        onClose={() => {
+          setResolveModalOpen(false)
+          setSelectedRefund(null)
+        }}
+        onResolve={async (refundId, note) => {
+          try {
+            await apiClient.post(`/api/v1/admin/refunds/${refundId}/resolve`, {
+              admin_note: note,
+            })
+            notify('success', `Đã đánh dấu hoàn tiền thủ công cho đơn vé #${refundId}`)
+            await fetchRefunds()
+          } catch (err: any) {
+            notify('error', err.response?.data?.detail || 'Không thể cập nhật trạng thái hoàn tiền.')
+          }
+        }}
+      />
 
       {/* AUTO-SCHEDULE MODAL (PHƯƠNG ÁN A) */}
       {autoModalOpen && (
@@ -5787,170 +6140,11 @@ export default function AdminView() {
         </div>
       )}
 
-      {/* Movie Detail Modal for Admin */}
-      {detailMovieModal && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-xl flex items-center justify-center z-[99999] p-3 sm:p-6">
-          <div className="bg-[#11111a] border border-white/15 rounded-3xl max-w-5xl w-full p-5 sm:p-7 space-y-5 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] relative text-left max-h-[88vh] flex flex-col overflow-hidden">
-            {/* Header: Title + Status + Close Button */}
-            <div className="flex items-start justify-between gap-4 pb-4 border-b border-white/10 shrink-0 pr-10 relative">
-              <div className="space-y-2 min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono-data uppercase border ${
-                    detailMovieModal.status === 'now_showing'
-                      ? 'bg-[#2ecc71]/15 text-[#2ecc71] border-[#2ecc71]/30'
-                      : detailMovieModal.status === 'coming_soon'
-                      ? 'bg-[#e8b84b]/15 text-[#e8b84b] border-[#e8b84b]/30'
-                      : 'bg-white/5 text-[#a09e9a] border-white/10'
-                  }`}>
-                    {detailMovieModal.status === 'now_showing' ? '▶ Đang chiếu' : detailMovieModal.status === 'coming_soon' ? '📅 Sắp ra mắt' : '⏹ Ngừng chiếu'}
-                  </span>
-
-                  {detailMovieModal.rating && detailMovieModal.rating !== 'N/A' && (
-                    <span className="bg-[#e8b84b] text-[#09090e] font-black text-[10px] rounded px-2 py-0.5 shadow-sm">
-                      {detailMovieModal.rating}
-                    </span>
-                  )}
-
-                  {detailMovieModal.genres?.map((g) => (
-                    <span key={g.name} className="px-2 py-0.5 rounded-lg bg-white/5 border border-white/10 text-[10px] text-[#a09e9a]">
-                      {g.name}
-                    </span>
-                  ))}
-                </div>
-
-                <h2 className="font-display text-xl sm:text-2xl font-bold text-[#f0ede8] leading-tight truncate">
-                  {detailMovieModal.title}
-                </h2>
-              </div>
-
-              {/* Only X Close Button */}
-              <button
-                type="button"
-                onClick={() => setDetailMovieModal(null)}
-                className="absolute top-0 right-0 w-9 h-9 rounded-full bg-white/10 hover:bg-rose-500/25 text-[#a09e9a] hover:text-white flex items-center justify-center text-base font-bold transition-all cursor-pointer border border-white/15 shrink-0 shadow-md"
-                title="Đóng"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* SINGLE Scrollable Content Container */}
-            <div className="overflow-y-auto pr-2 space-y-6 flex-1 scrollbar-thin scrollbar-thumb-amber-500/40">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                
-                {/* Left Column: Poster + Meta + Synopsis + Cast (5 cols) */}
-                <div className="lg:col-span-5 space-y-5">
-                  <div className="flex gap-4 items-start bg-white/[0.02] border border-white/10 p-3.5 rounded-2xl">
-                    <div className="w-24 sm:w-28 aspect-[2/3] rounded-xl overflow-hidden shadow-lg border border-white/10 bg-[#181824] shrink-0">
-                      <img
-                        src={detailMovieModal.poster_url || 'https://images.unsplash.com/photo-1534996858221-380b92700493?w=300'}
-                        alt={detailMovieModal.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="flex-1 space-y-2 text-xs text-[#a09e9a] min-w-0">
-                      {detailMovieModal.director && (
-                        <div>
-                          <span className="text-[#e8b84b] font-bold block">🎬 Đạo diễn:</span>
-                          <span className="text-[#f0ede8] font-medium">{detailMovieModal.director}</span>
-                        </div>
-                      )}
-                      {detailMovieModal.duration_minutes ? (
-                        <div>
-                          <span className="text-[#e8b84b] font-bold block">⏱️ Thời lượng:</span>
-                          <span className="text-[#f0ede8] font-mono-data">{detailMovieModal.duration_minutes} phút</span>
-                        </div>
-                      ) : null}
-                      {detailMovieModal.release_date ? (
-                        <div>
-                          <span className="text-[#e8b84b] font-bold block">📅 Khởi chiếu:</span>
-                          <span className="text-[#f0ede8] font-mono-data">{detailMovieModal.release_date}</span>
-                        </div>
-                      ) : null}
-                      {detailMovieModal.tmdb_id ? (
-                        <div>
-                          <span className="text-[#e8b84b] font-bold block">🎬 TMDB ID:</span>
-                          <span className="text-[#f0ede8] font-mono-data">#{detailMovieModal.tmdb_id}</span>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {/* Synopsis Box - Single scroll flow */}
-                  {detailMovieModal.description && (
-                    <div className="space-y-2 bg-white/[0.02] border border-white/10 p-4 rounded-2xl">
-                      <span className="font-bold block text-xs text-[#e8b84b] uppercase tracking-wider flex items-center gap-1.5">
-                        <span>📖</span> Nội dung / Tóm tắt:
-                      </span>
-                      <p className="text-xs leading-relaxed text-[#f0ede8]/90">
-                        {detailMovieModal.description}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Cast Box */}
-                  {detailMovieModal.cast && detailMovieModal.cast.length > 0 && (
-                    <div className="space-y-2 bg-white/[0.02] border border-white/10 p-4 rounded-2xl">
-                      <span className="font-bold block text-xs text-[#e8b84b] uppercase tracking-wider flex items-center gap-1.5">
-                        <span>🎭</span> Diễn viên chính:
-                      </span>
-                      <div className="flex gap-2.5 overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-amber-500/30">
-                        {detailMovieModal.cast.map((actor, idx) => (
-                          <div
-                            key={actor.name + idx}
-                            className="flex-shrink-0 flex items-center gap-2 p-1.5 pr-3 rounded-xl border border-white/10 bg-[#161622] text-xs shadow-xs"
-                          >
-                            {actor.profile_url ? (
-                              <img src={actor.profile_url} alt={actor.name} className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-white/10" />
-                            ) : (
-                              <div className="w-8 h-8 rounded-lg bg-[#e8b84b]/20 text-[#e8b84b] font-bold text-xs flex items-center justify-center flex-shrink-0">
-                                {actor.name.charAt(0)}
-                              </div>
-                            )}
-                            <div className="text-left leading-tight">
-                              <div className="font-bold text-[11px] whitespace-nowrap text-[#f0ede8]">{actor.name}</div>
-                              {actor.character && (
-                                <div className="text-[9px] whitespace-nowrap text-[#a09e9a] font-mono-data opacity-75">{actor.character}</div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Right Column: Trailer Player (7 cols) */}
-                <div className="lg:col-span-7 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold block text-xs text-[#e8b84b] uppercase tracking-wider flex items-center gap-1.5">
-                      <span>▶</span> Trailer Phim (YouTube HD):
-                    </span>
-                  </div>
-
-                  {detailMovieModal.trailer_url ? (
-                    <div className="aspect-video w-full rounded-2xl overflow-hidden border border-white/15 bg-black shadow-2xl relative">
-                      <iframe
-                        src={buildTrailerEmbedUrl(detailMovieModal.trailer_url)}
-                        title={`Trailer ${detailMovieModal.title}`}
-                        className="w-full h-full border-0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                      />
-                    </div>
-                  ) : (
-                    <div className="aspect-video w-full rounded-2xl border border-white/10 bg-white/5 flex flex-col items-center justify-center text-center p-6 text-[#a09e9a] space-y-2">
-                      <span className="text-3xl">🎬</span>
-                      <span className="text-xs italic">Chưa có link trailer HD cho phim này.</span>
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Movie Detail Modal Component */}
+      <MovieDetailModal
+        movie={detailMovieModal}
+        onClose={() => setDetailMovieModal(null)}
+      />
 
       {/* Room Seat Layout Viewer Modal */}
       {viewRoomLayout && (

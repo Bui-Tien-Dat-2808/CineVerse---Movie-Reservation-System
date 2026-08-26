@@ -29,16 +29,20 @@ export default function PaymentResultView() {
   }, [reset])
 
   useEffect(() => {
-    if (isSuccess && resIdParam) {
-      setLoading(true)
+    if (resIdParam) {
+      if (isSuccess) setLoading(true)
       setReceiptError(null)
       fetchReservationDetailAPI(Number(resIdParam))
         .then((data) => setReservation(data))
         .catch((err) => {
           console.error('Failed to load reservation receipt:', err)
-          setReceiptError('Không thể tải chi tiết hóa đơn đặt vé vào lúc này. Đơn hàng của bạn đã được thanh toán thành công và có thể xem lại trong mục Lịch Sử Đặt Vé.')
+          if (isSuccess) {
+            setReceiptError('Không thể tải chi tiết hóa đơn đặt vé vào lúc này. Đơn hàng của bạn đã được thanh toán thành công và có thể xem lại trong mục Lịch Sử Đặt Vé.')
+          }
         })
-        .finally(() => setLoading(false))
+        .finally(() => {
+          if (isSuccess) setLoading(false)
+        })
     }
   }, [isSuccess, resIdParam])
 
@@ -240,7 +244,10 @@ export default function PaymentResultView() {
 
             <button
               type="button"
-              onClick={() => navigate('/rap-chieu')}
+              onClick={() => {
+                const movieId = reservation?.showtime?.movie?.id
+                navigate(movieId ? `/movie/${movieId}` : '/rap-chieu')
+              }}
               className="w-full py-3.5 rounded-xl text-xs font-black transition-all cursor-pointer bg-red-600 hover:bg-red-700 text-white border-red-600 shadow-md flex items-center justify-center gap-1.5"
             >
               <span>🔄</span>
