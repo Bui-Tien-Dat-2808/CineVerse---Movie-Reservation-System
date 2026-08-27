@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   fetchAdminReviewsAPI,
@@ -140,7 +140,7 @@ export default function ReviewManageTab({ movies, notify }: ReviewManageTabProps
         ) : items.length === 0 ? (
           <div className="text-center py-16 text-xs text-[#a09e9a] space-y-2">
             <div className="text-3xl">💬</div>
-            <p className="font-semibold text-[#f0ede8]">Không tìm thấy đánh giá nào phù hợp với bộ lọc.</p>
+            <p className={`font-semibold ${isDark ? 'text-[#f0ede8]' : 'text-slate-800'}`}>Không tìm thấy đánh giá nào phù hợp với bộ lọc.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -157,7 +157,7 @@ export default function ReviewManageTab({ movies, notify }: ReviewManageTabProps
                   <th className="py-3.5 px-4 text-right">Thao tác</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5 font-medium">
+              <tbody className={`font-medium ${isDark ? 'divide-y divide-white/5' : 'divide-y divide-slate-200'}`}>
                 {items.map((rev: AdminReviewItem) => {
                   const formattedDate = new Date(rev.created_at).toLocaleString('vi-VN', {
                     day: '2-digit',

@@ -18,9 +18,11 @@ export default function PaymentResultView() {
   const codeParam = searchParams.get('code')
 
   const isSuccess = statusParam === 'success'
+  const isCashPending = statusParam === 'cash_pending'
+  const isShowReceipt = isSuccess || isCashPending
 
   const [reservation, setReservation] = useState<ReservationItem | null>(null)
-  const [loading, setLoading] = useState<boolean>(isSuccess && !!resIdParam)
+  const [loading, setLoading] = useState<boolean>(isShowReceipt && !!resIdParam)
   const [receiptError, setReceiptError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -29,55 +31,70 @@ export default function PaymentResultView() {
   }, [reset])
 
   useEffect(() => {
-    if (resIdParam) {
-      if (isSuccess) setLoading(true)
+    if (resIdParam && isShowReceipt) {
+      setLoading(true)
       setReceiptError(null)
       fetchReservationDetailAPI(Number(resIdParam))
         .then((data) => setReservation(data))
         .catch((err) => {
           console.error('Failed to load reservation receipt:', err)
-          if (isSuccess) {
-            setReceiptError('Không thể tải chi tiết hóa đơn đặt vé vào lúc này. Đơn hàng của bạn đã được thanh toán thành công và có thể xem lại trong mục Lịch Sử Đặt Vé.')
-          }
+          setReceiptError('Không thể tải chi tiết hóa đơn đặt vé vào lúc này. Đơn hàng của bạn đã được ghi nhận và có thể xem lại trong mục Lịch Sử Đặt Vé.')
         })
         .finally(() => {
-          if (isSuccess) setLoading(false)
+          setLoading(false)
         })
     }
-  }, [isSuccess, resIdParam])
+  }, [isShowReceipt, resIdParam])
 
   return (
     <div className="max-w-[640px] mx-auto px-4 sm:px-6 py-12 pb-24">
-      {isSuccess ? (
-        /* SUCCESS STATE */
+      {isShowReceipt ? (
+        /* SUCCESS / CASH PENDING STATE */
         <div
           className={cn(
             'border rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 transition-all',
-            isDark
-              ? 'bg-[#111118] border-emerald-500/30 text-[#f0ede8]'
-              : 'bg-white border-emerald-300 text-slate-900 shadow-xl'
+            isCashPending
+              ? isDark
+                ? 'bg-[#111118] border-amber-500/40 text-[#f0ede8]'
+                : 'bg-white border-amber-300 text-slate-900 shadow-xl'
+              : isDark
+                ? 'bg-[#111118] border-emerald-500/30 text-[#f0ede8]'
+                : 'bg-white border-emerald-300 text-slate-900 shadow-xl'
           )}
         >
           {/* Status Header */}
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-full flex items-center justify-center text-3xl mx-auto mb-2 animate-bounce">
-              ✓
+            <div
+              className={cn(
+                'w-16 h-16 border rounded-full flex items-center justify-center text-3xl mx-auto mb-2 animate-bounce',
+                isCashPending
+                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                  : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+              )}
+            >
+              {isCashPending ? '💵' : '✓'}
             </div>
             <span
               className={cn(
                 'text-xs font-mono-data font-black uppercase tracking-widest px-3 py-1 rounded-full border inline-block',
-                isDark
-                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                  : 'bg-emerald-100 border-emerald-400 text-emerald-950'
+                isCashPending
+                  ? isDark
+                    ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                    : 'bg-amber-100 border-amber-400 text-amber-950'
+                  : isDark
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                    : 'bg-emerald-100 border-emerald-400 text-emerald-950'
               )}
             >
-              Giao Dịch Thành Công
+              {isCashPending ? 'Đặt Giữ Chỗ Thành Công · Thanh Toán Tại Quầy' : 'Giao Dịch Thành Công'}
             </span>
             <h1 className={cn('font-display font-black text-2xl sm:text-3xl', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
-              Xác Nhận Đặt Vé Thành Công!
+              {isCashPending ? 'Đặt Giữ Chỗ Thành Công!' : 'Xác Nhận Đặt Vé Thành Công!'}
             </h1>
             <p className={cn('text-xs sm:text-sm font-medium', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
-              Cảm ơn bạn đã đặt vé tại CineVerse. Thông tin vé điện tử của bạn đã được ghi nhận.
+              {isCashPending
+                ? 'Đơn giữ chỗ của bạn đã được ghi nhận. Vui lòng thanh toán tiền mặt tại quầy vé CineVerse trước giờ chiếu ít nhất 15 phút để nhận vé.'
+                : 'Cảm ơn bạn đã đặt vé tại CineVerse. Thông tin vé điện tử của bạn đã được ghi nhận.'}
             </p>
           </div>
 

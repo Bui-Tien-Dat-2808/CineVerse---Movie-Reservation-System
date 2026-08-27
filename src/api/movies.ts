@@ -73,9 +73,9 @@ export function mapMovieItem(m: MovieListItem): Movie {
 }
 
 /** GET /api/v1/movies/now-showing — returns { items, meta } */
-export async function fetchNowShowingMovies(): Promise<Movie[]> {
+export async function fetchNowShowingMovies(page = 1, pageSize = 5000): Promise<Movie[]> {
   const { data } = await apiClient.get<PaginatedResponse<MovieListItem>>(
-    '/api/v1/movies/now-showing',
+    `/api/v1/movies/now-showing?page=${page}&page_size=${pageSize}`,
   )
   return data.items.map(mapMovieItem)
 }

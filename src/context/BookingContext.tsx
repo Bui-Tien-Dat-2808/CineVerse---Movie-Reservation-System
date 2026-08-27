@@ -226,6 +226,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
           selectedShowtime: state.selectedShowtime,
           selectedSeats: Array.from(state.selectedSeats),
           selectedConcessions: Array.from(state.selectedConcessions.entries()),
+          createdReservation: state.createdReservation,
         }),
       )
     } catch (e) {

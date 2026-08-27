@@ -9,6 +9,7 @@ import ReviewManageTab from '../components/admin/ReviewManageTab'
 import MovieDetailModal from '../components/admin/MovieDetailModal'
 import RefundResolveModal from '../components/admin/RefundResolveModal'
 import { groupConcessions, type GroupedConcession } from '../api/concessions'
+import { CleanDatePicker, toLocalYYYYMMDD, formatVNFullDate } from '../components/common/CleanDatePicker'
 
 interface MovieItem {
   id: number
@@ -155,12 +156,17 @@ function PaginationControl({
     return pages
   }, [currentPage, totalPages])
 
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
+
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-[#161622] border-t border-white/10 text-xs">
-      <div className="text-[#a09e9a]">
-        Hiển thị <span className="font-bold text-[#f0ede8]">{startItem}</span> -{' '}
-        <span className="font-bold text-[#f0ede8]">{endItem}</span> trên tổng số{' '}
-        <span className="font-bold text-[#e8b84b]">{totalItems}</span> bản ghi
+    <div className={`flex flex-wrap items-center justify-between gap-4 p-4 border-t text-xs transition-colors ${
+      isDark ? 'bg-[#161622] border-white/10 text-[#a09e9a]' : 'bg-slate-50 border-slate-200 text-slate-600'
+    }`}>
+      <div>
+        Hiển thị <span className={`font-bold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{startItem}</span> -{' '}
+        <span className={`font-bold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{endItem}</span> trên tổng số{' '}
+        <span className={`font-bold ${isDark ? 'text-[#e8b84b]' : 'text-amber-600'}`}>{totalItems}</span> bản ghi
       </div>
 
       <div className="flex items-center gap-1.5 flex-wrap">
@@ -168,7 +174,11 @@ function PaginationControl({
           type="button"
           disabled={currentPage === 1}
           onClick={() => onPageChange(currentPage - 1)}
-          className="px-3 py-1.5 rounded border border-white/10 bg-[#111118] text-[#f0ede8] disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/10 transition-all cursor-pointer font-medium"
+          className={`px-3 py-1.5 rounded border disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer font-medium ${
+            isDark
+              ? 'border-white/10 bg-[#111118] text-[#f0ede8] hover:bg-white/10'
+              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+          }`}
         >
           ‹ Trang trước
         </button>
@@ -178,7 +188,7 @@ function PaginationControl({
             return (
               <span
                 key={`dots-${idx}`}
-                className="px-1 text-[#a09e9a] font-mono-data select-none font-bold text-sm"
+                className={`px-1 font-mono-data select-none font-bold text-sm ${isDark ? 'text-[#a09e9a]' : 'text-slate-400'}`}
               >
                 ...
               </span>
@@ -192,8 +202,10 @@ function PaginationControl({
               onClick={() => onPageChange(p)}
               className={`w-8 h-8 rounded border font-bold text-xs transition-all cursor-pointer ${
                 currentPage === p
-                  ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm scale-105'
-                  : 'border-white/10 bg-[#111118] text-[#a09e9a] hover:text-[#f0ede8] hover:border-white/20'
+                  ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm scale-105 font-black'
+                  : isDark
+                  ? 'border-white/10 bg-[#111118] text-[#a09e9a] hover:text-[#f0ede8] hover:border-white/20'
+                  : 'border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:border-slate-300'
               }`}
             >
               {p}
@@ -205,7 +217,11 @@ function PaginationControl({
           type="button"
           disabled={currentPage === totalPages}
           onClick={() => onPageChange(currentPage + 1)}
-          className="px-3 py-1.5 rounded border border-white/10 bg-[#111118] text-[#f0ede8] disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/10 transition-all cursor-pointer font-medium"
+          className={`px-3 py-1.5 rounded border disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer font-medium ${
+            isDark
+              ? 'border-white/10 bg-[#111118] text-[#f0ede8] hover:bg-white/10'
+              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+          }`}
         >
           Trang sau ›
         </button>
@@ -239,179 +255,7 @@ interface ProposedShowtimeItem {
   vip_price: number
 }
 
-function toLocalYYYYMMDD(d: Date = new Date()): string {
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function formatVNFullDate(dateStr: string): string {
-  if (!dateStr) return ''
-  const [y, m, d] = dateStr.split('-').map(Number)
-  if (!y || !m || !d) return ''
-  const dt = new Date(y, m - 1, d)
-  const daysOfWeek = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy']
-  const dayName = daysOfWeek[dt.getDay()]
-  return `${dayName}, ${d < 10 ? '0' + d : d}/${m < 10 ? '0' + m : m}/${y}`
-}
-
-interface CleanDatePickerProps {
-  value: string
-  onChange: (dateStr: string) => void
-  minDate?: string
-  label?: string
-  placeholder?: string
-  className?: string
-}
-
-function CleanDatePicker({ value, onChange, minDate, label, placeholder = 'Chọn ngày...', className }: CleanDatePickerProps) {
-  const [open, setOpen] = useState(false)
-  const [viewDate, setViewDate] = useState(() => {
-    if (value) {
-      const [y, m] = value.split('-').map(Number)
-      return new Date(y, m - 1, 1)
-    }
-    return new Date()
-  })
-
-  useEffect(() => {
-    if (value) {
-      const [y, m] = value.split('-').map(Number)
-      setViewDate(new Date(y, m - 1, 1))
-    }
-  }, [value])
-
-  const year = viewDate.getFullYear()
-  const month = viewDate.getMonth()
-
-  const monthNames = [
-    'Tháng Một', 'Tháng Hai', 'Tháng Ba', 'Tháng Tư', 'Tháng Năm', 'Tháng Sáu',
-    'Tháng Bảy', 'Tháng Tám', 'Tháng Chín', 'Tháng Mười', 'Tháng Mười Một', 'Tháng Mười Hai'
-  ]
-
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-  let firstDayIndex = new Date(year, month, 1).getDay() - 1
-  if (firstDayIndex < 0) firstDayIndex = 6
-
-  function prevMonth() {
-    setViewDate(new Date(year, month - 1, 1))
-  }
-
-  function nextMonth() {
-    setViewDate(new Date(year, month + 1, 1))
-  }
-
-  function handleSelectDay(day: number) {
-    const mStr = (month + 1).toString().padStart(2, '0')
-    const dStr = day.toString().padStart(2, '0')
-    const selectedStr = `${year}-${mStr}-${dStr}`
-    if (minDate && selectedStr < minDate) return
-    onChange(selectedStr)
-    setOpen(false)
-  }
-
-  const selectedYMD = value ? value : ''
-
-  return (
-    <div className="relative">
-      {label && <label className="block text-[#a09e9a] mb-1 font-medium text-xs">{label}</label>}
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className={className || "w-full px-3 py-2 bg-[#111118] border border-white/10 hover:border-[#e8b84b]/50 rounded-lg text-[#f0ede8] font-mono-data text-xs flex justify-between items-center cursor-pointer transition-colors"}
-      >
-        <span>{value ? formatVNFullDate(value) : placeholder}</span>
-        <span className="text-[#a09e9a] text-sm">📅</span>
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full mt-2 z-50 bg-[#111118] border border-white/20 rounded-xl p-4 shadow-2xl w-[290px] space-y-3">
-            <div className="flex justify-between items-center text-xs font-bold text-[#f0ede8]">
-              <button
-                type="button"
-                onClick={prevMonth}
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 text-[#e8b84b] cursor-pointer"
-              >
-                ◀
-              </button>
-              <span>{monthNames[month]} {year}</span>
-              <button
-                type="button"
-                onClick={nextMonth}
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 text-[#e8b84b] cursor-pointer"
-              >
-                ▶
-              </button>
-            </div>
-
-            <div className="grid grid-cols-7 text-center text-[11px] font-bold text-[#6e6c68]">
-              <span>T2</span>
-              <span>T3</span>
-              <span>T4</span>
-              <span>T5</span>
-              <span>T6</span>
-              <span>T7</span>
-              <span className="text-[#e07060]">CN</span>
-            </div>
-
-            <div className="grid grid-cols-7 gap-1 text-center text-xs font-mono-data">
-              {Array.from({ length: firstDayIndex }).map((_, i) => (
-                <div key={`empty-${i}`} className="w-8 h-8" />
-              ))}
-
-              {Array.from({ length: daysInMonth }, (_, i) => {
-                const dayNum = i + 1
-                const mStr = (month + 1).toString().padStart(2, '0')
-                const dStr = dayNum.toString().padStart(2, '0')
-                const dayYMD = `${year}-${mStr}-${dStr}`
-                const isSelected = dayYMD === selectedYMD
-                const isDisabled = Boolean(minDate && dayYMD < minDate)
-
-                return (
-                  <button
-                    key={dayNum}
-                    type="button"
-                    disabled={isDisabled}
-                    onClick={() => handleSelectDay(dayNum)}
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-[#e8b84b] text-[#09090e] font-bold scale-105 shadow-md'
-                        : isDisabled
-                          ? 'text-white/20 cursor-not-allowed'
-                          : 'text-[#c0bdb8] hover:bg-white/10 hover:text-[#f0ede8]'
-                    }`}
-                  >
-                    {dayNum}
-                  </button>
-                )
-              })}
-            </div>
-
-            <div className="pt-2 border-t border-white/10 flex justify-between items-center text-[11px]">
-              <button
-                type="button"
-                onClick={() => {
-                  const todayStr = toLocalYYYYMMDD(new Date())
-                  if (!minDate || todayStr >= minDate) {
-                    onChange(todayStr)
-                    setOpen(false)
-                  }
-                }}
-                className="text-[#e8b84b] hover:underline cursor-pointer"
-              >
-                Hôm nay
-              </button>
-              <span className="text-[#6e6c68] font-mono-data">{daysInMonth} ngày trong tháng</span>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
+// ─────────────────────────────────────────
 
 // ─────────────────────────────────────────
 // ImageUploadField — reusable file picker with preview
@@ -680,59 +524,187 @@ function LoyaltyAdminTab({ isDark }: { isDark: boolean }) {
     </div>
   )
 }
+interface SeatGridItem {
+  id?: number
+  row_label: string
+  col_number: number
+  seat_type: 'standard' | 'vip' | 'couple' | 'kids'
+  is_active: boolean
+}
 
-function RoomSeatLayoutModal({
-  room,
-  isDark,
-  onClose,
-}: {
-  room: RoomItem
+interface UnifiedRoomLayoutModalProps {
+  initialRoomType?: string | null
+  initialRoomIds?: number[]
+  rooms: RoomItem[]
   isDark: boolean
   onClose: () => void
-}) {
-  const [detailedRoom, setDetailedRoom] = useState<RoomItem>(room)
-  const [loading, setLoading] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
-  const [selectedToolSeatType, setSelectedToolSeatType] = useState<
-    'standard' | 'vip' | 'couple' | 'kids' | 'inactive'
-  >('standard')
-  const [editableSeats, setEditableSeats] = useState<SeatItemAdmin[]>([])
-  const [saving, setSaving] = useState(false)
-  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  onSuccess: () => void
+  notify: (type: 'success' | 'error' | 'warning', message: string) => void
+}
 
-  useEffect(() => {
-    if (!room.seats || room.seats.length === 0) {
-      setLoading(true)
+function UnifiedRoomLayoutModal({
+  initialRoomType,
+  initialRoomIds,
+  rooms,
+  isDark,
+  onClose,
+  onSuccess,
+  notify,
+}: UnifiedRoomLayoutModalProps) {
+  const allRooms = useMemo(() => (Array.isArray(rooms) ? rooms : []), [rooms])
+
+  // Filter tab for room types (Standard, VIP, IMAX, 3D, 4DX, Kids)
+  const [filterType, setFilterType] = useState<string>(() => {
+    if (initialRoomType && initialRoomType !== 'all') return initialRoomType
+    return 'standard'
+  })
+
+  // Selected room IDs - Empty by default unless specific room IDs passed
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => {
+    if (initialRoomIds && initialRoomIds.length > 0) {
+      return new Set(initialRoomIds)
+    }
+    return new Set()
+  })
+
+  const [rows, setRows] = useState<number>(10)
+  const [cols, setCols] = useState<number>(15)
+  const [seats, setSeats] = useState<SeatGridItem[]>([])
+  const [selectedTool, setSelectedTool] = useState<'standard' | 'vip' | 'couple' | 'kids' | 'inactive'>('standard')
+  const [saving, setSaving] = useState(false)
+  const [deletingRoomId, setDeletingRoomId] = useState<number | null>(null)
+
+  // Initialize or generate seat matrix based on rows, cols and room type
+  const generateSeatMatrix = (rCount: number, cCount: number, baseType: string = 'standard') => {
+    const newSeats: SeatGridItem[] = []
+    for (let rIdx = 0; rIdx < rCount; rIdx++) {
+      const rLabel = String.fromCharCode(65 + (rIdx % 26)) + (rIdx >= 26 ? Math.floor(rIdx / 26) : '')
+      for (let c = 1; c <= cCount; c++) {
+        let sType: 'standard' | 'vip' | 'couple' | 'kids' = 'standard'
+        if (baseType === 'vip') {
+          if (rIdx >= 1 && rIdx <= 2 && c >= 3 && c <= 4) {
+            sType = 'couple'
+          } else if (rIdx >= 1 && rIdx <= 2) {
+            sType = 'vip'
+          } else {
+            sType = 'vip'
+          }
+        } else if (baseType === 'imax') {
+          if (rIdx >= Math.floor(rCount * 0.3) && rIdx <= Math.floor(rCount * 0.6)) {
+            sType = 'vip'
+          }
+        } else if (baseType === 'kids') {
+          sType = rIdx < rCount - 2 ? 'kids' : 'standard'
+        } else if (baseType === '3d' || baseType === '4d') {
+          if (rIdx >= Math.floor(rCount * 0.35) && rIdx <= Math.floor(rCount * 0.65)) {
+            sType = 'vip'
+          }
+        }
+
+        newSeats.push({
+          row_label: rLabel,
+          col_number: c,
+          seat_type: sType,
+          is_active: true,
+        })
+      }
+    }
+    return newSeats
+  }
+
+  // Load layout from a specific room ID
+  const loadRoomLayout = (roomId: number) => {
+    const targetRoom = allRooms.find((r) => r.id === roomId)
+    if (!targetRoom) return
+
+    setRows(targetRoom.total_rows || 10)
+    setCols(targetRoom.total_cols || 15)
+
+    if (targetRoom.seats && targetRoom.seats.length > 0) {
+      setSeats(
+        targetRoom.seats.map((s) => ({
+          id: s.id,
+          row_label: s.row_label,
+          col_number: s.col_number,
+          seat_type: (s.seat_type as any) || 'standard',
+          is_active: s.is_active !== false,
+        }))
+      )
+    } else {
       apiClient
-        .get<RoomItem>(`/api/v1/rooms/${room.id}`)
+        .get<RoomItem>(`/api/v1/rooms/${roomId}`)
         .then((res) => {
-          if (res.data) {
-            setDetailedRoom(res.data)
-            setEditableSeats(res.data.seats || [])
+          if (res.data && res.data.seats && res.data.seats.length > 0) {
+            setRows(res.data.total_rows || 10)
+            setCols(res.data.total_cols || 15)
+            setSeats(
+              res.data.seats.map((s) => ({
+                id: s.id,
+                row_label: s.row_label,
+                col_number: s.col_number,
+                seat_type: (s.seat_type as any) || 'standard',
+                is_active: s.is_active !== false,
+              }))
+            )
+          } else {
+            setSeats(generateSeatMatrix(targetRoom.total_rows || 10, targetRoom.total_cols || 15, targetRoom.room_type || 'standard'))
           }
         })
-        .catch((err) => {
-          console.error('Failed to load room seats:', err)
-          setSaveMessage('❌ Không thể tải sơ đồ ghế từ máy chủ.')
+        .catch(() => {
+          setSeats(generateSeatMatrix(targetRoom.total_rows || 10, targetRoom.total_cols || 15, targetRoom.room_type || 'standard'))
         })
-        .finally(() => setLoading(false))
-    } else {
-      setDetailedRoom(room)
-      setEditableSeats(room.seats)
     }
-  }, [room])
+  }
 
-  const handleSeatClick = (seatId: number) => {
-    if (!isEditing) return
-    setEditableSeats((prev) =>
+  // Initial load if initialRoomIds are provided
+  useEffect(() => {
+    if (initialRoomIds && initialRoomIds.length > 0) {
+      loadRoomLayout(initialRoomIds[0])
+    }
+  }, [])
+
+  // When rows or cols are modified, resize seat matrix preserving custom assignments
+  const handleDimensionChange = (newRows: number, newCols: number) => {
+    const clampedRows = Math.max(4, Math.min(20, newRows))
+    const clampedCols = Math.max(4, Math.min(25, newCols))
+    setRows(clampedRows)
+    setCols(clampedCols)
+
+    const map = new Map<string, SeatGridItem>()
+    seats.forEach((s) => map.set(`${s.row_label}-${s.col_number}`, s))
+
+    const newSeats: SeatGridItem[] = []
+    for (let rIdx = 0; rIdx < clampedRows; rIdx++) {
+      const rLabel = String.fromCharCode(65 + (rIdx % 26)) + (rIdx >= 26 ? Math.floor(rIdx / 26) : '')
+      for (let c = 1; c <= clampedCols; c++) {
+        const key = `${rLabel}-${c}`
+        if (map.has(key)) {
+          newSeats.push(map.get(key)!)
+        } else {
+          newSeats.push({
+            row_label: rLabel,
+            col_number: c,
+            seat_type: 'standard',
+            is_active: true,
+          })
+        }
+      }
+    }
+    setSeats(newSeats)
+  }
+
+  // Toggle seat on click
+  const handleSeatClick = (rowLabel: string, colNum: number) => {
+    setSeats((prev) =>
       prev.map((s) => {
-        if (s.id === seatId) {
-          if (selectedToolSeatType === 'inactive') {
-            return { ...s, is_active: false }
-          } else {
-            const newType = selectedToolSeatType
-            const newWidth = newType === 'couple' ? 2 : 1
-            return { ...s, seat_type: newType, width: newWidth, is_active: true }
+        if (s.row_label === rowLabel && s.col_number === colNum) {
+          if (selectedTool === 'inactive') {
+            return { ...s, is_active: !s.is_active }
+          }
+          return {
+            ...s,
+            seat_type: selectedTool as any,
+            is_active: true,
           }
         }
         return s
@@ -740,32 +712,40 @@ function RoomSeatLayoutModal({
     )
   }
 
-  const handleSaveLayout = async () => {
-    setSaving(true)
-    setSaveMessage(null)
-    try {
-      const updates = editableSeats.map((s) => ({
-        seat_id: s.id,
-        seat_type: s.seat_type,
-        is_active: s.is_active !== false,
-      }))
-      const res = await apiClient.put<RoomItem>(`/api/v1/rooms/${room.id}/seats`, updates)
-      if (res.data) {
-        setDetailedRoom(res.data)
-        setEditableSeats(res.data.seats || [])
-        setSaveMessage(`✅ Đã lưu sơ đồ ghế mới cho phòng ${room.name} thành công!`)
-        setIsEditing(false)
-        setTimeout(() => setSaveMessage(null), 4000)
+  // Toggle room selection
+  const handleToggleRoom = (id: number) => {
+    const next = new Set(selectedIds)
+    if (next.has(id)) {
+      next.delete(id)
+      if (next.size > 0) {
+        const remaining = Array.from(next)
+        loadRoomLayout(remaining[remaining.length - 1])
       }
-    } catch (err: any) {
-      const msg = err.response?.data?.detail ?? 'Lưu sơ đồ ghế thất bại.'
-      setSaveMessage(`❌ ${msg}`)
-    } finally {
-      setSaving(false)
+    } else {
+      next.add(id)
+      loadRoomLayout(id)
+    }
+    setSelectedIds(next)
+  }
+
+  const selectAllRoomsOfFiltered = () => {
+    const target = allRooms.filter((r) => (r.room_type || 'standard') === filterType).map((r) => r.id)
+    setSelectedIds(new Set([...Array.from(selectedIds), ...target]))
+    if (target.length > 0) {
+      loadRoomLayout(target[0])
     }
   }
 
-  // Calculate breakdown stats
+  const deselectAllRoomsOfFiltered = () => {
+    const target = new Set(allRooms.filter((r) => (r.room_type || 'standard') === filterType).map((r) => r.id))
+    const next = new Set(Array.from(selectedIds).filter((id) => !target.has(id)))
+    setSelectedIds(next)
+    if (next.size > 0) {
+      loadRoomLayout(Array.from(next)[0])
+    }
+  }
+
+  // Stats calculation
   const stats = useMemo(() => {
     let standard = 0
     let vip = 0
@@ -773,344 +753,553 @@ function RoomSeatLayoutModal({
     let kids = 0
     let inactive = 0
 
-    editableSeats.forEach((s) => {
-      if (s.is_active === false) {
+    seats.forEach((s) => {
+      if (!s.is_active) {
         inactive++
         return
       }
-      const type = (s.seat_type || '').toLowerCase()
-      if (type === 'couple') couple++
-      else if (type === 'kids') kids++
-      else if (type === 'vip') vip++
+      if (s.seat_type === 'couple') couple++
+      else if (s.seat_type === 'kids') kids++
+      else if (s.seat_type === 'vip') vip++
       else standard++
     })
 
     const activeTotal = standard + vip + couple + kids
-    return { standard, vip, couple, kids, inactive, activeTotal }
-  }, [editableSeats])
+    const totalSelected = selectedIds.size
+    const grandTotal = activeTotal * totalSelected
+    return { standard, vip, couple, kids, inactive, activeTotal, totalSelected, grandTotal }
+  }, [seats, selectedIds])
 
-  // Group seats by row_label
+  // Group seats by row for layout
   const rowsMap = useMemo(() => {
-    const map = new Map<string, SeatItemAdmin[]>()
-    editableSeats.forEach((s) => {
-      const rLabel = s.row_label || 'A'
-      if (!map.has(rLabel)) map.set(rLabel, [])
-      map.get(rLabel)!.push(s)
+    const map = new Map<string, SeatGridItem[]>()
+    seats.forEach((s) => {
+      if (!map.has(s.row_label)) map.set(s.row_label, [])
+      map.get(s.row_label)!.push(s)
     })
     map.forEach((list) => list.sort((a, b) => a.col_number - b.col_number))
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
-  }, [editableSeats])
+    const entries = Array.from(map.entries())
+    entries.sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: 'base' }))
+    return entries
+  }, [seats])
 
-  const roomTypeName =
-    detailedRoom.room_type === 'standard' ? 'Standard' :
-    detailedRoom.room_type === 'vip' ? 'VIP Gold Lounge' :
-    detailedRoom.room_type === 'imax' ? 'IMAX 3D Laser' :
-    detailedRoom.room_type === '3d' ? '3D Surround' :
-    detailedRoom.room_type === '4d' ? '4DX Motion' :
-    detailedRoom.room_type === 'kids' ? 'Kids / Gia Đình' : detailedRoom.room_type
+  // Save handler
+  const handleSave = async () => {
+    if (selectedIds.size === 0) {
+      notify('warning', 'Vui lòng tích chọn ít nhất 1 phòng chiếu để áp dụng.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const customSeatsPayload = seats.map((s) => ({
+        row_label: s.row_label,
+        col_number: s.col_number,
+        seat_type: s.seat_type,
+        is_active: s.is_active,
+      }))
+
+      const { data } = await apiClient.put<{ message: string; updated_count: number }>(
+        '/api/v1/rooms/batch-layout',
+        {
+          room_ids: Array.from(selectedIds),
+          total_rows: rows,
+          total_cols: cols,
+          custom_seats: customSeatsPayload,
+        }
+      )
+
+      notify('success', data.message || `Đã áp dụng sơ đồ ghế thành công cho ${data.updated_count} phòng!`)
+      onSuccess()
+      onClose()
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || 'Không thể lưu cấu trúc sơ đồ ghế.'
+      notify('error', typeof msg === 'string' ? msg : JSON.stringify(msg))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteRoomInModal = async (roomId: number, roomName: string) => {
+    if (!confirm(`Bạn có chắc chắn muốn xóa phòng "${roomName}"?\nLưu ý: Cần hủy tất cả các suất chiếu của phòng này trước khi xóa.`)) return
+    setDeletingRoomId(roomId)
+    try {
+      const res = await apiClient.delete(`/api/v1/rooms/${roomId}`)
+      const msg = res.data?.message ?? `Đã xóa phòng "${roomName}" thành công!`
+      notify('success', msg)
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(roomId)
+        return next
+      })
+      await onSuccess()
+    } catch (err: any) {
+      const msg = err.response?.data?.detail ?? 'Xóa phòng thất bại.'
+      notify('error', typeof msg === 'string' ? msg : JSON.stringify(msg))
+    } finally {
+      setDeletingRoomId(null)
+    }
+  }
+
+  const displayedRooms = allRooms.filter((r) => (r.room_type || 'standard') === filterType)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className={`w-full max-w-4xl max-h-[92vh] flex flex-col rounded-3xl border shadow-2xl overflow-hidden ${
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 pt-16 sm:pt-8 pb-6 bg-black/80 backdrop-blur-sm animate-fade-in">
+      <div className={`w-full max-w-5xl max-h-[88vh] flex flex-col rounded-3xl border shadow-2xl overflow-hidden ${
         isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
       }`}>
-        {/* Modal Header */}
-        <div className={`p-5 border-b flex items-center justify-between gap-4 ${
+        {/* Header */}
+        <div className={`p-4 sm:p-5 border-b flex items-center justify-between gap-4 shrink-0 ${
           isDark ? 'border-white/10 bg-[#0d0d14]' : 'border-slate-200 bg-slate-50'
         }`}>
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className={`font-display text-xl font-black ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                🪑 Sơ Đồ Bố Trí Ghế: {detailedRoom.name}
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">📐</span>
+              <h3 className={`font-display text-lg sm:text-xl font-black ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                Cấu Hình Hàng, Cột & Sơ Đồ Ghế Phòng Chiếu
               </h3>
-              <span className={`text-xs font-mono-data uppercase px-2.5 py-0.5 rounded-full font-bold border ${
-                isDark ? 'bg-[#e8b84b]/15 text-[#e8b84b] border-[#e8b84b]/30' : 'bg-amber-100 text-amber-900 border-amber-300'
+              <span className={`text-xs font-mono-data px-2.5 py-0.5 rounded-full font-bold border ${
+                selectedIds.size > 0
+                  ? isDark
+                    ? 'bg-[#e8b84b]/15 text-[#e8b84b] border-[#e8b84b]/30'
+                    : 'bg-amber-100 text-amber-950 border-amber-300 font-extrabold'
+                  : 'bg-slate-500/15 text-slate-400 border-slate-500/20'
               }`}>
-                {roomTypeName}
+                Đã chọn {selectedIds.size} / {allRooms.length} phòng
               </span>
             </div>
-            <p className={`text-xs mt-1 font-mono-data ${isDark ? 'text-[#a09e9a]' : 'text-slate-600 font-medium'}`}>
-              Cấu trúc: {detailedRoom.total_rows} hàng × {detailedRoom.total_cols} cột ({stats.activeTotal} ghế khả dụng / {detailedRoom.total_seats} tổng)
+            <p className={`text-xs mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+              Tích chọn phòng để xem sơ đồ hiện tại, điều chỉnh số hàng/cột và click vào ghế để đổi loại ghế.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setIsEditing(!isEditing)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
-                isEditing
-                  ? isDark
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-xs'
-                    : 'bg-amber-200 text-amber-950 border-amber-400 font-extrabold shadow-xs'
-                  : isDark
-                  ? 'bg-white/10 text-[#f0ede8] hover:bg-white/20 border-white/10'
-                  : 'bg-slate-100 text-slate-800 hover:bg-slate-200 border-slate-300 font-bold'
-              }`}
-            >
-              <span>{isEditing ? '👀 Quay lại chế độ Xem' : '✏️ Chỉnh sửa sơ đồ'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm transition-colors cursor-pointer ${
-                isDark ? 'bg-white/10 text-[#f0ede8] hover:bg-white/20' : 'bg-slate-200 text-slate-800 hover:bg-slate-300'
-              }`}
-            >
-              ✕
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer transition-colors ${
+              isDark ? 'bg-white/10 text-[#f0ede8] hover:bg-white/20' : 'bg-slate-200 text-slate-800 hover:bg-slate-300'
+            }`}
+          >
+            ✕
+          </button>
         </div>
 
-        {/* Save Message Notification */}
-        {saveMessage && (
-          <div className={`px-5 py-2.5 text-xs font-bold border-b flex items-center justify-between ${
-            saveMessage.startsWith('✅')
-              ? isDark ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20' : 'bg-emerald-100 text-emerald-900 border-emerald-300'
-              : isDark ? 'bg-red-500/15 text-red-400 border-red-500/20' : 'bg-red-100 text-red-900 border-red-300'
+        {/* Scrollable Content Body */}
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
+          {/* SECTION 1: ROOMS SELECTION BAR */}
+          <div className={`p-4 rounded-2xl border space-y-3 ${
+            isDark ? 'bg-[#181824] border-white/10' : 'bg-slate-50 border-slate-200 shadow-xs'
           }`}>
-            <span>{saveMessage}</span>
-            <button type="button" onClick={() => setSaveMessage(null)} className="opacity-70 hover:opacity-100">✕</button>
-          </div>
-        )}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#e8b84b]">
+                  1. Chọn phòng chiếu:
+                </span>
+              </div>
 
-        {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1">
-          {/* Admin Editing Palette Bar */}
-          {isEditing && (
-            <div className={`p-4 rounded-2xl border ${
-              isDark ? 'bg-[#181824] border-[#e8b84b]/30' : 'bg-amber-50/90 border-amber-300 shadow-sm'
+              <div className="flex items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={selectAllRoomsOfFiltered}
+                  className="text-amber-500 hover:underline font-bold cursor-pointer"
+                >
+                  ✓ Chọn tất cả ({displayedRooms.length})
+                </button>
+                <span className="text-slate-400">·</span>
+                <button
+                  type="button"
+                  onClick={deselectAllRoomsOfFiltered}
+                  className="text-slate-400 hover:underline cursor-pointer"
+                >
+                  Bỏ chọn
+                </button>
+              </div>
+            </div>
+
+            {/* Room Type Tabs Filter (Standard, VIP, IMAX, 3D, 4DX, Kids) */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+              {[
+                { key: 'standard', label: 'Standard' },
+                { key: 'vip', label: 'VIP Lounge' },
+                { key: 'imax', label: 'IMAX 3D Laser' },
+                { key: '3d', label: '3D Surround' },
+                { key: '4d', label: '4DX Motion' },
+                { key: 'kids', label: 'Kids' },
+              ].map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setFilterType(t.key)}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer border ${
+                    filterType === t.key
+                      ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] font-bold shadow-xs'
+                      : isDark
+                      ? 'bg-white/5 text-[#a09e9a] border-white/10 hover:border-white/20'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Room Checkbox Badges with Integrated Delete button */}
+            <div className="flex flex-wrap gap-2 pt-1">
+              {displayedRooms.length === 0 ? (
+                <span className="text-xs text-slate-400 italic">Không có phòng nào thuộc danh mục này.</span>
+              ) : (
+                displayedRooms.map((r) => {
+                  const isChecked = selectedIds.has(r.id)
+                  const isDeleting = deletingRoomId === r.id
+                  return (
+                    <div
+                      key={r.id}
+                      onClick={() => handleToggleRoom(r.id)}
+                      className={`flex items-center gap-2 pl-3 pr-2 py-2 rounded-xl text-xs font-mono-data cursor-pointer transition-all border select-none ${
+                        isChecked
+                          ? isDark
+                            ? 'bg-[#e8b84b]/15 border-[#e8b84b] text-[#f0ede8] font-bold shadow-xs'
+                            : 'bg-amber-100 border-amber-400 text-amber-950 font-bold shadow-xs'
+                          : isDark
+                          ? 'bg-[#09090e] border-white/10 text-[#a09e9a] hover:border-white/20'
+                          : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {}} // handled by parent div
+                        className="w-4 h-4 accent-amber-500 rounded cursor-pointer pointer-events-none"
+                      />
+                      <span>{r.name}</span>
+                      <span className="text-[10px] opacity-75 font-normal">
+                        ({r.total_rows}×{r.total_cols})
+                      </span>
+
+                      {/* Integrated Delete Room Button */}
+                      <button
+                        type="button"
+                        disabled={isDeleting}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleDeleteRoomInModal(r.id, r.name)
+                        }}
+                        title={`Xóa phòng ${r.name}`}
+                        className="p-1 rounded-md text-red-400 hover:text-red-300 hover:bg-red-500/20 transition-colors ml-0.5 cursor-pointer disabled:opacity-50"
+                      >
+                        {isDeleting ? '⏳' : '🗑️'}
+                      </button>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Conditional Display: Only show layout controls & matrix when at least 1 room is selected */}
+          {selectedIds.size === 0 ? (
+            <div className={`py-16 text-center border-2 border-dashed rounded-3xl p-8 space-y-3 ${
+              isDark ? 'border-white/10 bg-[#09090e]/50 text-[#a09e9a]' : 'border-slate-300 bg-slate-50 text-slate-500'
             }`}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-4xl block">🪑</span>
+              <h4 className={`font-display font-bold text-base ${isDark ? 'text-[#f0ede8]' : 'text-slate-800'}`}>
+                Chưa chọn phòng chiếu nào
+              </h4>
+              <p className="text-xs max-w-md mx-auto">
+                Vui lòng tích chọn ít nhất 1 phòng chiếu ở danh sách phía trên để xem và điều chỉnh sơ đồ bố trí ghế.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* SECTION 2: GRID ROWS & COLS CONTROLS */}
+              <div className={`p-4 rounded-2xl border grid grid-cols-1 sm:grid-cols-2 gap-4 items-center ${
+                isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-50 border-slate-200'
+              }`}>
                 <div>
-                  <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                    isDark ? 'text-[#e8b84b]' : 'text-amber-900 font-extrabold'
-                  }`}>
-                    <span>✏️ Đang ở chế độ chỉnh sửa loại ghế</span>
-                  </h4>
-                  <p className={`text-[11px] mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-700 font-medium'}`}>
-                    Chọn loại ghế cọ vẽ bên dưới, sau đó click vào bất kỳ vị trí ghế nào trên sơ đồ để gán loại ghế đó.
-                  </p>
+                  <label className={`block text-xs font-bold mb-1.5 ${isDark ? 'text-[#f0ede8]' : 'text-slate-800'}`}>
+                    Số Hàng Ghế (Rows: 4–20)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleDimensionChange(rows - 1, cols)}
+                      disabled={rows <= 4}
+                      className={`w-9 h-9 rounded-lg border font-bold text-sm cursor-pointer disabled:opacity-40 ${
+                        isDark ? 'bg-white/10 border-white/10 hover:bg-white/20 text-white' : 'bg-white border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min={4}
+                      max={20}
+                      value={rows}
+                      onChange={(e) => handleDimensionChange(Number(e.target.value), cols)}
+                      className={`w-16 h-9 text-center rounded-lg border text-sm font-mono-data font-bold outline-none ${
+                        isDark ? 'bg-[#181824] border-white/15 text-[#f0ede8] focus:border-[#e8b84b]' : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleDimensionChange(rows + 1, cols)}
+                      disabled={rows >= 20}
+                      className={`w-9 h-9 rounded-lg border font-bold text-sm cursor-pointer disabled:opacity-40 ${
+                        isDark ? 'bg-white/10 border-white/10 hover:bg-white/20 text-white' : 'bg-white border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-xs font-bold ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Cọ vẽ:</span>
-                  {(
-                    [
+                <div>
+                  <label className={`block text-xs font-bold mb-1.5 ${isDark ? 'text-[#f0ede8]' : 'text-slate-800'}`}>
+                    Số Ghế/Hàng (Cols: 4–25)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleDimensionChange(rows, cols - 1)}
+                      disabled={cols <= 4}
+                      className={`w-9 h-9 rounded-lg border font-bold text-sm cursor-pointer disabled:opacity-40 ${
+                        isDark ? 'bg-white/10 border-white/10 hover:bg-white/20 text-white' : 'bg-white border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min={4}
+                      max={25}
+                      value={cols}
+                      onChange={(e) => handleDimensionChange(rows, Number(e.target.value))}
+                      className={`w-16 h-9 text-center rounded-lg border text-sm font-mono-data font-bold outline-none ${
+                        isDark ? 'bg-[#181824] border-white/15 text-[#f0ede8] focus:border-[#e8b84b]' : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleDimensionChange(rows, cols + 1)}
+                      disabled={cols >= 25}
+                      className={`w-9 h-9 rounded-lg border font-bold text-sm cursor-pointer disabled:opacity-40 ${
+                        isDark ? 'bg-white/10 border-white/10 hover:bg-white/20 text-white' : 'bg-white border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 3: PAINTBRUSH PALETTE */}
+              <div className={`p-4 rounded-2xl border ${
+                isDark ? 'bg-[#181824] border-[#e8b84b]/30' : 'bg-amber-50/90 border-amber-300 shadow-sm'
+              }`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                      isDark ? 'text-[#e8b84b]' : 'text-amber-900 font-extrabold'
+                    }`}>
+                      <span>2. Chỉnh sửa loại ghế cho phòng chiếu</span>
+                    </h4>
+                    <p className={`text-[11px] mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                      Click vào bất kỳ ghế nào trên sơ đồ bên dưới để gán loại ghế đó.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {[
                       {
                         type: 'standard',
                         label: 'Ghế thường',
-                        cls: isDark ? 'bg-slate-700 text-slate-100 border-slate-500' : 'bg-slate-200 text-slate-900 border-slate-400 font-bold'
+                        activeClass: isDark ? 'bg-[#181824] border-white text-white' : 'bg-slate-800 text-white border-slate-900',
                       },
                       {
                         type: 'vip',
-                        label: 'Ghế VIP',
-                        cls: isDark ? 'bg-[#e8b84b]/20 text-[#e8b84b] border-[#e8b84b]' : 'bg-amber-200 text-amber-950 border-amber-400 font-extrabold'
+                        label: 'Ghế VIP (👑)',
+                        activeClass: isDark ? 'bg-[#e8b84b]/20 border-[#e8b84b] text-[#e8b84b]' : 'bg-amber-100 border-amber-500 text-amber-900 font-bold',
                       },
                       {
                         type: 'couple',
                         label: 'Ghế đôi (💑)',
-                        cls: isDark ? 'bg-pink-500/20 text-pink-300 border-pink-400' : 'bg-pink-200 text-pink-950 border-pink-400 font-extrabold'
+                        activeClass: isDark ? 'bg-pink-500/20 border-pink-500 text-pink-400' : 'bg-pink-100 border-pink-500 text-pink-900 font-bold',
                       },
                       {
                         type: 'kids',
                         label: 'Ghế trẻ em (🎈)',
-                        cls: isDark ? 'bg-teal-500/20 text-teal-300 border-teal-400' : 'bg-teal-200 text-teal-950 border-teal-400 font-extrabold'
+                        activeClass: isDark ? 'bg-teal-500/20 border-teal-500 text-teal-300' : 'bg-teal-100 border-teal-500 text-teal-900 font-bold',
                       },
                       {
                         type: 'inactive',
-                        label: '🚫 Không sử dụng',
-                        cls: isDark ? 'bg-slate-800 text-slate-400 border-slate-600' : 'bg-slate-200 text-slate-600 border-slate-400 font-bold'
+                        label: 'Không sử dụng',
+                        icon: '🚫',
+                        activeClass: isDark ? 'bg-slate-700/50 border-slate-500 text-slate-300' : 'bg-slate-200 border-slate-400 text-slate-700',
                       },
-                    ] as const
-                  ).map((tool) => (
-                    <button
-                      key={tool.type}
-                      type="button"
-                      onClick={() => setSelectedToolSeatType(tool.type)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${tool.cls} ${
-                        selectedToolSeatType === tool.type
-                          ? isDark
-                            ? 'ring-2 ring-white scale-105 shadow-md'
-                            : 'ring-2 ring-slate-900 scale-105 shadow-md'
-                          : 'opacity-75 hover:opacity-100'
-                      }`}
-                    >
-                      {tool.label}
-                    </button>
+                    ].map((tool) => (
+                      <button
+                        key={tool.type}
+                        type="button"
+                        onClick={() => setSelectedTool(tool.type as any)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                          selectedTool === tool.type
+                            ? `${tool.activeClass} shadow-md ring-2 ${isDark ? 'ring-[#e8b84b]/40' : 'ring-amber-400'}`
+                            : isDark
+                            ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:border-white/20'
+                            : 'bg-white border-slate-300 text-slate-700 hover:border-slate-400'
+                        }`}
+                      >
+                        {tool.icon && <span>{tool.icon}</span>}
+                        <span>{tool.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 4: CAPACITY STATS BREAKDOWN */}
+              <div className={`p-4 rounded-2xl border flex flex-wrap items-center justify-between gap-4 text-xs ${
+                isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-50 border-slate-200'
+              }`}>
+                <div className="flex flex-wrap items-center gap-4">
+                  <span className="font-bold flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-slate-400"></span> Thường: <strong>{stats.standard}</strong>
+                  </span>
+                  <span className="font-bold flex items-center gap-1.5 text-amber-500">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span> VIP: <strong>{stats.vip}</strong>
+                  </span>
+                  <span className="font-bold flex items-center gap-1.5 text-pink-500">
+                    <span className="w-2.5 h-2.5 rounded-full bg-pink-400"></span> Ghế đôi: <strong>{stats.couple}</strong>
+                  </span>
+                  <span className="font-bold flex items-center gap-1.5 text-teal-500">
+                    <span className="w-2.5 h-2.5 rounded-full bg-teal-400"></span> Trẻ em: <strong>{stats.kids}</strong>
+                  </span>
+                  {stats.inactive > 0 && (
+                    <span className="font-bold flex items-center gap-1.5 text-slate-400">
+                      <span className="w-2.5 h-2.5 rounded-full bg-slate-500"></span> Tắt: <strong>{stats.inactive}</strong>
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] font-mono-data">
+                    Sức chứa 1 phòng: <strong className={isDark ? 'text-[#e8b84b]' : 'text-amber-800'}>{stats.activeTotal} ghế</strong>
+                  </span>
+                  <span className="text-slate-400">|</span>
+                  <span className="text-[11px] font-mono-data">
+                    Tổng cộng ({stats.totalSelected} phòng): <strong className={isDark ? 'text-[#e8b84b]' : 'text-amber-800'}>{stats.grandTotal} ghế</strong>
+                  </span>
+                </div>
+              </div>
+
+              {/* SECTION 5: INTERACTIVE SCREEN & SEAT MATRIX */}
+              <div className={`p-5 sm:p-8 rounded-2xl border flex flex-col items-center overflow-x-auto ${
+                isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-100/60 border-slate-200'
+              }`}>
+                {/* Screen Header Banner */}
+                <div className="w-full max-w-lg mb-8 text-center flex flex-col items-center">
+                  <div className="w-full h-2.5 bg-gradient-to-r from-transparent via-[#e8b84b] to-transparent rounded-full shadow-[0_0_16px_rgba(232,184,75,0.6)]"></div>
+                  <span className="text-[10px] uppercase font-mono-data tracking-widest text-[#a09e9a] mt-2">
+                    MÀN HÌNH CHIẾU (SCREEN)
+                  </span>
+                </div>
+
+                {/* Seat Matrix Grid */}
+                <div className="space-y-2.5 min-w-fit">
+                  {rowsMap.map(([rowLabel, rowSeats]) => (
+                    <div key={rowLabel} className="flex items-center gap-2">
+                      <span className={`w-5 text-center font-bold ${isDark ? 'text-[#e8b84b]' : 'text-slate-800 font-black'}`}>{rowLabel}</span>
+
+                      <div className="flex items-center gap-1.5">
+                        {rowSeats.map((s) => {
+                          const type = s.seat_type
+                          const isInactive = !s.is_active
+                          const isCouple = type === 'couple'
+                          const isVip = type === 'vip'
+                          const isKids = type === 'kids'
+
+                          return (
+                            <div
+                              key={`${rowLabel}-${s.col_number}`}
+                              onClick={() => handleSeatClick(rowLabel, s.col_number)}
+                              className={`h-8 rounded-lg border flex items-center justify-center text-[10px] font-bold shadow-xs transition-transform cursor-pointer hover:scale-115 hover:ring-2 ${
+                                isDark ? 'hover:ring-white' : 'hover:ring-slate-900'
+                              } ${
+                                isInactive
+                                  ? isDark
+                                    ? 'w-8 bg-slate-800/40 border-dashed border-slate-600/60 text-slate-500 opacity-50'
+                                    : 'w-8 bg-slate-200/60 border-dashed border-slate-400 text-slate-400 opacity-60'
+                                  : isCouple
+                                  ? isDark
+                                    ? 'w-[70px] bg-pink-500/15 border-pink-500/40 text-pink-400'
+                                    : 'w-[70px] bg-pink-100 border-pink-400 text-pink-950 font-black shadow-xs'
+                                  : isKids
+                                  ? isDark
+                                    ? 'w-8 bg-teal-500/15 border-teal-500/40 text-teal-300'
+                                    : 'w-8 bg-teal-100 border-teal-400 text-teal-950 font-black shadow-xs'
+                                  : isVip
+                                  ? isDark
+                                    ? 'w-8 bg-[#e8b84b]/15 border-[#e8b84b]/40 text-[#e8b84b]'
+                                    : 'w-8 bg-amber-100 border-amber-400 text-amber-950 font-black shadow-xs'
+                                  : isDark
+                                  ? 'w-8 bg-[#181824] border-white/15 text-[#f0ede8]'
+                                  : 'w-8 bg-slate-100 border-slate-300 text-slate-800 font-bold'
+                              }`}
+                              title={`Ghế ${rowLabel}${s.col_number} (${
+                                isInactive ? 'Không sử dụng' : isCouple ? 'Ghế đôi' : isKids ? 'Ghế trẻ em' : isVip ? 'Ghế VIP' : 'Ghế thường'
+                              }) - Click để đổi loại ghế`}
+                            >
+                              {isInactive ? `🚫 ${s.col_number}` : isCouple ? `💑 ${s.col_number}` : isKids ? `🎈 ${s.col_number}` : s.col_number}
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      <span className={`w-5 text-center font-bold ${isDark ? 'text-[#e8b84b]' : 'text-slate-800 font-black'}`}>{rowLabel}</span>
+                    </div>
                   ))}
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Stats Bar */}
-          <div className={`p-4 rounded-2xl border flex flex-wrap items-center justify-between gap-4 text-xs ${
-            isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-50 border-slate-200'
-          }`}>
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-2">
-                <div className={`w-4 h-4 rounded border ${isDark ? 'bg-[#181824] border-white/20' : 'bg-slate-100 border-slate-300'}`} />
-                <span>Ghế thường: <strong className={isDark ? 'text-[#f0ede8]' : 'text-slate-900'}>{stats.standard}</strong></span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className={`w-4 h-4 rounded border ${isDark ? 'bg-[#e8b84b]/20 border-[#e8b84b]' : 'bg-amber-200 border-amber-400'}`} />
-                <span className={isDark ? 'text-[#e8b84b]' : 'text-amber-900 font-bold'}>
-                  Ghế VIP: <strong>{stats.vip}</strong>
-                </span>
-              </div>
-              {stats.couple > 0 && (
-                <div className="flex items-center gap-2">
-                  <div className={`w-6 h-4 rounded border ${isDark ? 'bg-pink-500/20 border-pink-400' : 'bg-pink-200 border-pink-400'}`} />
-                  <span className={isDark ? 'text-pink-400' : 'text-pink-900 font-bold'}>
-                    Ghế đôi (💑): <strong>{stats.couple}</strong>
-                  </span>
-                </div>
-              )}
-              {stats.kids > 0 && (
-                <div className="flex items-center gap-2">
-                  <div className={`w-4 h-4 rounded border ${isDark ? 'bg-teal-500/20 border-teal-400' : 'bg-teal-200 border-teal-400'}`} />
-                  <span className={isDark ? 'text-teal-400' : 'text-teal-900 font-bold'}>
-                    Ghế Trẻ em (🎈): <strong>{stats.kids}</strong>
-                  </span>
-                </div>
-              )}
-              {stats.inactive > 0 && (
-                <div className="flex items-center gap-2 opacity-75">
-                  <div className="w-4 h-4 rounded border border-dashed border-slate-500 bg-slate-700/40" />
-                  <span className="text-slate-400 font-semibold">
-                    Không sử dụng: <strong>{stats.inactive}</strong>
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div className={`font-mono-data text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-              Sức chứa thực tế: <strong className={isDark ? 'text-[#e8b84b]' : 'text-amber-900 font-bold'}>{stats.activeTotal} ghế</strong> (trên {detailedRoom.total_seats} vị trí)
-            </div>
-          </div>
-
-          {/* Screen Indicator */}
-          <div className="text-center my-2">
-            <div className={`w-3/4 mx-auto h-1.5 rounded-full ${
-              isDark
-                ? 'bg-gradient-to-r from-transparent via-[#e8b84b] to-transparent opacity-80 shadow-[0_0_12px_#e8b84b]'
-                : 'bg-gradient-to-r from-transparent via-amber-500 to-transparent opacity-90 shadow-[0_0_8px_rgba(245,158,11,0.5)]'
-            }`} />
-            <span className={`text-[10px] font-mono-data uppercase tracking-widest block mt-1 font-bold ${
-              isDark ? 'text-[#a09e9a]' : 'text-slate-700 font-black'
-            }`}>
-              ────── MÀN HÌNH CHÍNH ──────
-            </span>
-          </div>
-
-          {/* Seat Grid */}
-          {loading ? (
-            <div className={`py-12 text-center text-xs font-mono-data animate-pulse ${
-              isDark ? 'text-[#e8b84b]' : 'text-amber-800 font-bold'
-            }`}>
-              ⏳ Đang tải sơ đồ ghế phòng chiếu...
-            </div>
-          ) : (
-            <div className="overflow-x-auto pb-4 pt-2 flex flex-col items-center gap-2 select-none">
-              {rowsMap.map(([rowLabel, rowSeats]) => (
-                <div key={rowLabel} className="flex items-center gap-2 font-mono-data text-xs">
-                  <span className={`w-5 text-center font-bold ${isDark ? 'text-[#e8b84b]' : 'text-slate-800 font-black'}`}>{rowLabel}</span>
-
-                  <div className="flex items-center gap-1.5">
-                    {rowSeats.map((s) => {
-                      const type = (s.seat_type || '').toLowerCase()
-                      const isInactive = s.is_active === false
-                      const isCouple = type === 'couple'
-                      const isVip = type === 'vip'
-                      const isKids = type === 'kids'
-
-                      return (
-                        <div
-                          key={`${rowLabel}-${s.col_number}`}
-                          onClick={() => handleSeatClick(s.id)}
-                          className={`h-8 rounded-lg border flex items-center justify-center text-[10px] font-bold shadow-xs transition-transform ${
-                            isEditing
-                              ? isDark
-                                ? 'cursor-pointer hover:scale-115 hover:ring-2 hover:ring-white'
-                                : 'cursor-pointer hover:scale-115 hover:ring-2 hover:ring-slate-900'
-                              : 'cursor-default hover:scale-105'
-                          } ${
-                            isInactive
-                              ? isDark
-                                ? 'w-8 bg-slate-800/40 border-dashed border-slate-600/60 text-slate-500 opacity-50'
-                                : 'w-8 bg-slate-200/60 border-dashed border-slate-400 text-slate-400 opacity-60'
-                              : isCouple
-                              ? isDark
-                                ? 'w-16 bg-pink-500/15 border-pink-500/40 text-pink-400'
-                                : 'w-16 bg-pink-100 border-pink-400 text-pink-950 font-black shadow-xs'
-                              : isKids
-                              ? isDark
-                                ? 'w-8 bg-teal-500/15 border-teal-500/40 text-teal-300'
-                                : 'w-8 bg-teal-100 border-teal-400 text-teal-950 font-black shadow-xs'
-                              : isVip
-                              ? isDark
-                                ? 'w-8 bg-[#e8b84b]/15 border-[#e8b84b]/40 text-[#e8b84b]'
-                                : 'w-8 bg-amber-100 border-amber-400 text-amber-950 font-black shadow-xs'
-                              : isDark
-                              ? 'w-8 bg-[#181824] border-white/15 text-[#f0ede8]'
-                              : 'w-8 bg-slate-100 border-slate-300 text-slate-800 font-bold'
-                          }`}
-                          title={`Ghế ${rowLabel}${s.col_number} (${
-                            isInactive ? 'Không sử dụng' : isCouple ? 'Ghế đôi' : isKids ? 'Ghế trẻ em' : isVip ? 'Ghế VIP' : 'Ghế thường'
-                          })${isEditing ? ' - Click để đổi loại ghế' : ''}`}
-                        >
-                          {isInactive ? `🚫 ${s.col_number}` : isCouple ? `💑 ${s.col_number}` : isKids ? `🎈 ${s.col_number}` : s.col_number}
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  <span className={`w-5 text-center font-bold ${isDark ? 'text-[#e8b84b]' : 'text-slate-800 font-black'}`}>{rowLabel}</span>
-                </div>
-              ))}
-            </div>
+            </>
           )}
         </div>
 
         {/* Modal Footer */}
-        <div className={`p-4 border-t flex items-center justify-between ${
+        <div className={`p-4 sm:p-5 border-t flex items-center justify-between gap-4 shrink-0 ${
           isDark ? 'border-white/10 bg-[#0d0d14]' : 'border-slate-200 bg-slate-50'
         }`}>
-          <div>
-            {isEditing ? (
-              <span className={`text-xs font-semibold ${isDark ? 'text-[#e8b84b]' : 'text-amber-900'}`}>
-                💡 Hãy bấm "💾 Lưu Sơ Đồ Ghế" sau khi đã tùy chỉnh xong.
+          <div className="text-xs">
+            {selectedIds.size === 0 ? (
+              <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-500'}>
+                ⚠️ Chưa chọn phòng nào. Vui lòng tích chọn phòng ở danh sách phía trên.
               </span>
             ) : (
-              <span className={`text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-600 font-medium'}`}>
-                💡 Bấm "✏️ Chỉnh sửa sơ đồ" nếu bạn muốn thay đổi trực tiếp loại ghế.
+              <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-600 font-medium'}>
+                💡 Sơ đồ này sẽ được áp dụng cho <strong className={isDark ? 'text-[#e8b84b]' : 'text-amber-800 font-bold'}>{selectedIds.size} phòng</strong> đã tích chọn.
               </span>
             )}
           </div>
 
           <div className="flex items-center gap-3">
-            {isEditing && (
-              <button
-                type="button"
-                disabled={saving}
-                onClick={handleSaveLayout}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl cursor-pointer transition-all shadow-md flex items-center gap-1.5 disabled:opacity-50"
-              >
-                <span>💾</span>
-                <span>{saving ? 'Đang lưu...' : 'Lưu Sơ Đồ Ghế'}</span>
-              </button>
-            )}
-
             <button
               type="button"
               onClick={onClose}
-              className={`px-5 py-2 font-bold text-xs rounded-xl cursor-pointer transition-all shadow-md ${
-                isDark ? 'bg-[#e8b84b] hover:bg-[#f5c759] text-[#09090e]' : 'bg-slate-800 hover:bg-slate-900 text-white'
+              disabled={saving}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
+                isDark ? 'bg-white/10 hover:bg-white/15 text-[#f0ede8]' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
               }`}
             >
-              Đóng
+              Hủy
+            </button>
+
+            <button
+              type="button"
+              disabled={saving || selectedIds.size === 0}
+              onClick={handleSave}
+              className="px-6 py-2.5 bg-[#e8b84b] hover:bg-[#f5c759] text-[#09090e] font-black text-xs rounded-xl cursor-pointer transition-all shadow-md flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <span>{saving ? '⏳ Đang lưu...' : selectedIds.size === 0 ? '💾 Lưu & Áp Dụng (0 phòng)' : `💾 Lưu & Áp Dụng Cho (${selectedIds.size} Phòng)`}</span>
             </button>
           </div>
         </div>
@@ -2020,13 +2209,17 @@ export default function AdminView() {
     }
   }
 
-  // Create Room Form & Layout View State
+  // Create Room Form & Unified Layout Modal State
   const [rName, setRName] = useState('')
   const [rType, setRType] = useState('standard')
   const [rRows, setRRows] = useState(8)
   const [rCols, setRCols] = useState(10)
   const [rLoading, setRLoading] = useState(false)
-  const [viewRoomLayout, setViewRoomLayout] = useState<RoomItem | null>(null)
+  const [layoutModalConfig, setLayoutModalConfig] = useState<{
+    isOpen: boolean
+    roomType?: string | null
+    roomIds?: number[]
+  }>({ isOpen: false, roomType: null, roomIds: [] })
 
   const safeRooms = useMemo(() => (Array.isArray(rooms) ? rooms : []), [rooms])
 
@@ -2204,20 +2397,11 @@ export default function AdminView() {
     revenue: number
   }>>([])
 
-  // Check Admin Access Guard - Redirect non-admin users to home
-  useEffect(() => {
-    if (!isAuthenticated || user?.role !== 'admin') {
-      navigate('/')
-      return
-    }
-    loadAllData()
-  }, [isAuthenticated, user, navigate])
-
   async function loadAllData() {
     setLoading(true)
     try {
       const [movRes, rmRes, stRes, anaRes, capRes, vchRes] = await Promise.all([
-        apiClient.get<{ items: MovieItem[] }>('/api/v1/movies/?page_size=100').catch((err) => {
+        apiClient.get<{ items: MovieItem[] }>('/api/v1/movies/?page_size=5000').catch((err) => {
           console.error('Failed to load movies:', err)
           setActionMsg({ type: 'error', text: 'Không thể tải danh sách phim từ máy chủ.' })
           return null
@@ -2966,17 +3150,21 @@ export default function AdminView() {
       {activeTab === 'movies' && (
         <div className="space-y-6">
           {/* Header Action Bar */}
-          <div className="bg-[#111118] border border-white/10 rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className={`border rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-center gap-4 ${
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-sm'
+          }`}>
             <div>
-              <h3 className="font-display font-bold text-lg text-[#f0ede8]">Danh Sách Phim Trong Hệ Thống</h3>
-              <p className="text-xs text-[#a09e9a]">Quản lý phim theo từng mục Đang chiếu / Sắp ra mắt / Đã ngừng chiếu.</p>
+              <h3 className={`font-display font-bold text-lg ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Danh Sách Phim Trong Hệ Thống</h3>
+              <p className={`text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Quản lý phim theo từng mục Đang chiếu / Sắp ra mắt / Đã ngừng chiếu.</p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
               <select
                 value={syncLimit}
                 onChange={(e) => setSyncLimit(Number(e.target.value))}
-                className="bg-[#161622] text-[#f0ede8] border border-white/10 rounded-xl px-3 py-2.5 text-xs font-bold focus:border-[#e8b84b] outline-none cursor-pointer"
+                className={`border rounded-xl px-3 py-2.5 text-xs font-bold focus:border-[#e8b84b] outline-none cursor-pointer ${
+                  isDark ? 'bg-[#161622] text-[#f0ede8] border-white/10' : 'bg-slate-50 text-slate-900 border-slate-300'
+                }`}
                 title="Chọn số lượng phim cần quét mỗi loại từ TMDB"
               >
                 <option value={6}>6 phim / mục</option>
@@ -3009,7 +3197,9 @@ export default function AdminView() {
           </div>
 
           {/* Sub-tab Category Switcher */}
-          <div className="flex items-center justify-between bg-[#111118] border border-white/10 rounded-xl p-3">
+          <div className={`flex items-center justify-between border rounded-xl p-3 ${
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-sm'
+          }`}>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -3017,7 +3207,9 @@ export default function AdminView() {
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
                   movieSubTab === 'now_showing'
                     ? 'bg-[#2ecc71]/15 text-[#2ecc71] border-[#2ecc71]/40 shadow-sm'
-                    : 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
+                    : isDark
+                    ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
+                    : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <span>▶</span>
@@ -3030,7 +3222,9 @@ export default function AdminView() {
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
                   movieSubTab === 'coming_soon'
                     ? 'bg-[#e8b84b]/15 text-[#e8b84b] border-[#e8b84b]/40 shadow-sm'
-                    : 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
+                    : isDark
+                    ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
+                    : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <span>📅</span>
@@ -3043,7 +3237,9 @@ export default function AdminView() {
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
                   movieSubTab === 'ended'
                     ? 'bg-rose-500/15 text-rose-400 border-rose-500/40 shadow-sm'
-                    : 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
+                    : isDark
+                    ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
+                    : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <span>⏹</span>
@@ -3055,8 +3251,12 @@ export default function AdminView() {
                 onClick={() => { setMovieSubTab('all'); setMoviePage(1); }}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
                   movieSubTab === 'all'
-                    ? 'bg-white/15 text-[#f0ede8] border-white/30 shadow-sm'
-                    : 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
+                    ? isDark
+                      ? 'bg-white/15 text-[#f0ede8] border-white/30 shadow-sm'
+                      : 'bg-amber-100 text-amber-900 border-amber-300 shadow-sm'
+                    : isDark
+                    ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
+                    : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <span>Tất Cả ({movies.length})</span>
@@ -3065,7 +3265,9 @@ export default function AdminView() {
           </div>
 
           {/* Movies List Table */}
-          <div className="bg-[#111118] border border-white/10 rounded-2xl overflow-hidden shadow-xl">
+          <div className={`border rounded-2xl overflow-hidden shadow-xl ${
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+          }`}>
             {(() => {
               const filtered = movies.filter((m) => {
                 if (movieSubTab === 'now_showing') return m.status === 'now_showing'
@@ -3077,8 +3279,10 @@ export default function AdminView() {
               return (
                 <>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs text-[#a09e9a]">
-                      <thead className="bg-[#161622] text-[#f0ede8] font-mono-data uppercase border-b border-white/10">
+                    <table className={`w-full text-left text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                      <thead className={`font-mono-data uppercase border-b ${
+                        isDark ? 'bg-[#161622] text-[#f0ede8] border-white/10' : 'bg-slate-50 text-slate-800 border-slate-200'
+                      }`}>
                         <tr>
                           <th className="p-4">Phim</th>
                           <th className="p-4">Trạng Thái</th>
@@ -3087,7 +3291,7 @@ export default function AdminView() {
                           <th className="p-4 text-right">Thao Tác</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/5">
+                      <tbody className={isDark ? 'divide-y divide-white/5' : 'divide-y divide-slate-200'}>
                         {paginated.map((m) => (
                           <tr key={m.id} className="hover:bg-white/[0.02] transition-colors">
                             <td className="p-4 flex items-center gap-3">
@@ -3608,10 +3812,14 @@ export default function AdminView() {
           </div>
 
           {/* Showtimes List Table */}
-          <div className="lg:col-span-7 bg-[#111118] border border-white/10 rounded-2xl p-6 shadow-xl space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-white/10 pb-4">
+          <div className={`lg:col-span-7 border rounded-2xl p-6 shadow-xl space-y-4 ${
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+          }`}>
+            <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-4 ${
+              isDark ? 'border-white/10' : 'border-slate-200'
+            }`}>
               <div>
-                <h3 className="font-display font-bold text-lg text-[#f0ede8]">
+                <h3 className={`font-display font-bold text-lg ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
                   Danh Sách Suất Chiếu Hiện Có{' '}
                   <span className="text-sm font-mono-data font-normal text-[#e8b84b]">
                     ({filteredShowtimes.length}{filteredShowtimes.length !== showtimes.length && `/${showtimes.length}`})
@@ -3628,7 +3836,9 @@ export default function AdminView() {
                       setStFilterRoomId('all')
                       setShowtimePage(1)
                     }}
-                    className="text-xs text-[#a09e9a] hover:text-[#f0ede8] cursor-pointer flex items-center gap-1 border border-white/10 px-2.5 py-1 rounded-lg"
+                    className={`text-xs cursor-pointer flex items-center gap-1 border px-2.5 py-1 rounded-lg ${
+                      isDark ? 'text-[#a09e9a] hover:text-[#f0ede8] border-white/10' : 'text-slate-600 hover:text-slate-900 border-slate-300 bg-slate-50'
+                    }`}
                   >
                     ✕ Xóa bộ lọc
                   </button>
@@ -3637,14 +3847,16 @@ export default function AdminView() {
             </div>
 
             {/* Time Filter Tabs (Approach 1) */}
-            <div className="flex items-center gap-1 bg-[#09090e] p-1 rounded-xl border border-white/5 text-xs">
+            <div className={`flex items-center gap-1 p-1 rounded-xl border text-xs ${
+              isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-100 border-slate-200'
+            }`}>
               <button
                 type="button"
                 onClick={() => { setStTimeFilter('upcoming'); setShowtimePage(1) }}
                 className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   stTimeFilter === 'upcoming'
                     ? 'bg-[#e8b84b] text-[#09090e] shadow-md'
-                    : 'text-[#a09e9a] hover:text-[#f0ede8]'
+                    : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <span>🟢 Sắp chiếu</span>
@@ -3658,8 +3870,8 @@ export default function AdminView() {
                 onClick={() => { setStTimeFilter('past'); setShowtimePage(1) }}
                 className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   stTimeFilter === 'past'
-                    ? 'bg-white/20 text-[#f0ede8] shadow-md'
-                    : 'text-[#a09e9a] hover:text-[#f0ede8]'
+                    ? isDark ? 'bg-white/20 text-[#f0ede8] shadow-md' : 'bg-white text-slate-900 shadow-sm border border-slate-200'
+                    : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <span>⚪ Đã chiếu</span>
@@ -3673,8 +3885,8 @@ export default function AdminView() {
                 onClick={() => { setStTimeFilter('all'); setShowtimePage(1) }}
                 className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   stTimeFilter === 'all'
-                    ? 'bg-white/20 text-[#f0ede8] shadow-md'
-                    : 'text-[#a09e9a] hover:text-[#f0ede8]'
+                    ? isDark ? 'bg-white/20 text-[#f0ede8] shadow-md' : 'bg-white text-slate-900 shadow-sm border border-slate-200'
+                    : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <span>📋 Tất cả</span>
@@ -3685,16 +3897,20 @@ export default function AdminView() {
             </div>
 
             {/* Filter Dropdowns */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#09090e] p-3 rounded-xl border border-white/5 text-xs">
+            <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl border text-xs ${
+              isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-50 border-slate-200'
+            }`}>
               <div>
-                <label className="block text-[#a09e9a] mb-1 font-medium">🎬 Lọc Theo Phim</label>
+                <label className={`block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>🎬 Lọc Theo Phim</label>
                 <select
                   value={stFilterMovieId}
                   onChange={(e) => {
                     setStFilterMovieId(e.target.value === 'all' ? 'all' : Number(e.target.value))
                     setShowtimePage(1)
                   }}
-                  className="w-full px-2.5 py-1.5 bg-[#111118] border border-white/10 rounded-lg text-[#f0ede8] outline-none cursor-pointer"
+                  className={`w-full px-2.5 py-1.5 border rounded-lg outline-none cursor-pointer ${
+                    isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
                 >
                   <option value="all">-- Tất cả phim ({moviesForShowtimeFilter.length}) --</option>
                   {moviesForShowtimeFilter.map((m) => (
@@ -3706,14 +3922,16 @@ export default function AdminView() {
               </div>
 
               <div>
-                <label className="block text-[#a09e9a] mb-1 font-medium">🏛️ Lọc Theo Phòng Chiếu</label>
+                <label className={`block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>🏛️ Lọc Theo Phòng Chiếu</label>
                 <select
                   value={stFilterRoomId}
                   onChange={(e) => {
                     setStFilterRoomId(e.target.value === 'all' ? 'all' : Number(e.target.value))
                     setShowtimePage(1)
                   }}
-                  className="w-full px-2.5 py-1.5 bg-[#111118] border border-white/10 rounded-lg text-[#f0ede8] outline-none cursor-pointer"
+                  className={`w-full px-2.5 py-1.5 border rounded-lg outline-none cursor-pointer ${
+                    isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
                 >
                   <option value="all">-- Tất cả phòng ({roomsForShowtimeFilter.length}) --</option>
                   {roomsForShowtimeFilter.map((r) => (
@@ -3725,66 +3943,11 @@ export default function AdminView() {
               </div>
             </div>
             
-            {/* Multi-Select Action Banner for List Table */}
-            {(() => {
-              const currentFilteredPageSts = filteredShowtimes
-                .slice((showtimePage - 1) * PAGE_SIZE, showtimePage * PAGE_SIZE)
-                .filter((st) => new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed' && st.status !== 'cancelled')
-              
-              const pageSelectedCount = currentFilteredPageSts.filter((st) => selectedStIds.includes(st.id)).length
-              const allPageSelected = currentFilteredPageSts.length > 0 && pageSelectedCount === currentFilteredPageSts.length
-
-              return (
-                <div className="flex items-center justify-between bg-[#09090e] border border-white/10 rounded-xl p-3 text-xs">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={allPageSelected}
-                      onChange={() => {
-                        if (allPageSelected) {
-                          const pageIds = currentFilteredPageSts.map((st) => st.id)
-                          setSelectedStIds((prev) => prev.filter((id) => !pageIds.includes(id)))
-                        } else {
-                          const pageIds = currentFilteredPageSts.map((st) => st.id)
-                          setSelectedStIds((prev) => Array.from(new Set([...prev, ...pageIds])))
-                        }
-                      }}
-                      className="accent-rose-500 w-4 h-4 rounded cursor-pointer"
-                    />
-                    <span className="text-[#a09e9a] font-medium">
-                      Tích chọn trang này ({pageSelectedCount}/{currentFilteredPageSts.length})
-                    </span>
-                  </div>
-
-                  {selectedStIds.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-rose-400 font-bold">
-                        Đã chọn {selectedStIds.length} suất
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleBulkCancelSelectedShowtimes()}
-                        className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-all shadow-md flex items-center gap-1"
-                      >
-                        <span>🗑️</span>
-                        <span>Hủy {selectedStIds.length} Suất Đã Chọn</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedStIds([])}
-                        className="text-[#a09e9a] hover:text-[#f0ede8] cursor-pointer text-[11px] underline"
-                      >
-                        Bỏ chọn
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )
-            })()}
-
             <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
               {filteredShowtimes.length === 0 ? (
-                <div className="py-12 text-center text-xs text-[#a09e9a] italic bg-[#09090e] border border-white/5 rounded-xl">
+                <div className={`py-12 text-center text-xs italic border rounded-xl ${
+                  isDark ? 'bg-[#09090e] border-white/5 text-[#a09e9a]' : 'bg-slate-50 border-slate-200 text-slate-500'
+                }`}>
                   🍿 Không tìm thấy suất chiếu nào phù hợp với bộ lọc đã chọn.
                 </div>
               ) : (
@@ -3800,57 +3963,50 @@ export default function AdminView() {
                     })
 
                     const isPast = new Date(st.end_time || st.start_time).getTime() < Date.now() || st.status === 'completed'
-                    const isChecked = selectedStIds.includes(st.id)
 
                     return (
                       <div
                         key={st.id}
                         className={`border rounded-xl p-4 flex justify-between items-center gap-4 transition-colors ${
-                          isChecked
-                            ? 'bg-rose-500/10 border-rose-500/40 shadow-sm'
-                            : isPast ? 'bg-[#09090e]/60 border-white/5 opacity-80' : 'bg-[#09090e] border-white/10 hover:border-white/20'
+                          isPast
+                            ? isDark
+                              ? 'bg-[#09090e]/60 border-white/5 opacity-80'
+                              : 'bg-slate-100/70 border-slate-200 opacity-80'
+                            : isDark
+                            ? 'bg-[#09090e] border-white/10 hover:border-white/20'
+                            : 'bg-slate-50/60 border-slate-200 hover:border-slate-300 shadow-xs'
                         }`}
                       >
-                        <div className="flex items-start gap-3">
-                          {!isPast && (
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => handleToggleSelectSt(st.id)}
-                              className="accent-rose-500 w-4 h-4 rounded cursor-pointer mt-1"
-                            />
-                          )}
-                          <div>
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <span className="text-[10px] font-mono-data text-[#e8b84b] bg-[#e8b84b]/10 border border-[#e8b84b]/20 rounded px-2 py-0.5 uppercase font-semibold">
-                                {st.room?.name ?? `Phòng #${st.room_id}`}
+                        <div>
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className="text-[10px] font-mono-data text-[#e8b84b] bg-[#e8b84b]/10 border border-[#e8b84b]/20 rounded px-2 py-0.5 uppercase font-semibold">
+                              {st.room?.name ?? `Phòng #${st.room_id}`}
+                            </span>
+
+                            {isPast ? (
+                              <span className="text-[10px] font-mono-data text-slate-400 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 font-bold">
+                                ⚪ Đã kết thúc
                               </span>
+                            ) : (
+                              <span className="text-[10px] font-mono-data text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5 font-bold">
+                                🟢 Sắp chiếu
+                              </span>
+                            )}
 
-                              {isPast ? (
-                                <span className="text-[10px] font-mono-data text-slate-400 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 font-bold">
-                                  ⚪ Đã kết thúc
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-mono-data text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5 font-bold">
-                                  🟢 Sắp chiếu
-                                </span>
-                              )}
-
-                              <span className="text-xs text-[#a09e9a] font-mono-data">🕒 {startTimeFmt}</span>
-                            </div>
-
-                            <h4 className="font-display font-bold text-base text-[#f0ede8]">
-                              {st.movie?.title ?? `Phim #${st.movie_id}`}
-                            </h4>
-
-                            <p className="text-xs text-[#a09e9a] mt-1 font-mono-data">
-                              Giá vé: <strong className="text-[#e8b84b]">{fmt(Number(st.base_price))}</strong> (Thường) / <strong className="text-[#e8b84b]">{fmt(Number(st.vip_price ?? st.base_price))}</strong> (VIP)
-                            </p>
+                            <span className={`text-xs font-mono-data ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>🕒 {startTimeFmt}</span>
                           </div>
+
+                          <h4 className={`font-display font-bold text-base ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                            {st.movie?.title ?? `Phim #${st.movie_id}`}
+                          </h4>
+
+                          <p className={`text-xs mt-1 font-mono-data ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                            Giá vé: <strong className="text-[#e8b84b]">{fmt(Number(st.base_price))}</strong> (Thường) / <strong className="text-[#e8b84b]">{fmt(Number(st.vip_price ?? st.base_price))}</strong> (VIP)
+                          </p>
                         </div>
 
                         <div className="text-right flex flex-col items-end justify-center">
-                          <span className="text-[11px] text-[#6e6c68] font-mono-data block">
+                          <span className={`text-[11px] font-mono-data block ${isDark ? 'text-[#6e6c68]' : 'text-slate-500'}`}>
                             Ghế trống: {st.available_seats ?? 'N/A'}/{st.total_seats ?? 'N/A'}
                           </span>
                         </div>
@@ -3874,13 +4030,21 @@ export default function AdminView() {
       {activeTab === 'rooms' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Form Create Room */}
-          <div className="lg:col-span-5 bg-[#111118] border border-white/10 rounded-2xl p-6 shadow-xl h-fit">
-            <h3 className="font-display font-bold text-lg text-[#f0ede8] mb-1">Tạo Phòng Chiếu Mới</h3>
-            <p className="text-xs text-[#a09e9a] mb-5">Hệ thống sẽ tự động sinh sơ đồ ghế VIP và Thường tương ứng.</p>
+          <div className={`lg:col-span-5 border rounded-2xl p-6 shadow-xl h-fit transition-colors ${
+            isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <h3 className={`font-display font-bold text-lg mb-1 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+              Tạo Phòng Chiếu Mới
+            </h3>
+            <p className={`text-xs mb-5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+              Hệ thống sẽ tự động sinh sơ đồ ghế VIP và Thường tương ứng theo loại phòng.
+            </p>
 
             <form onSubmit={handleCreateRoom} className="space-y-4">
               <div>
-                <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Tên Phòng Chiếu (Để trống coi như tự động đặt)</label>
+                <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                  Tên Phòng Chiếu (Để trống coi như tự động đặt)
+                </label>
                 <input
                   type="text"
                   value={rName}
@@ -3888,9 +4052,13 @@ export default function AdminView() {
                   placeholder={`Ví dụ: ${
                     rType === 'standard' ? 'Standard' : rType === 'vip' ? 'VIP' : rType === 'imax' ? 'IMAX' : rType === '4d' ? '4DX' : rType === 'kids' ? 'Kids' : '3D'
                   } ${nextRoomNum}`}
-                  className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none"
+                  className={`w-full px-3 py-2.5 border rounded-lg text-sm outline-none transition-colors ${
+                    isDark
+                      ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
+                      : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500'
+                  }`}
                 />
-                <span className="text-[11px] text-[#e8b84b] font-mono-data mt-1 block">
+                <span className={`text-[11px] font-mono-data mt-1 block ${isDark ? 'text-[#e8b84b]' : 'text-amber-700 font-semibold'}`}>
                   💡Đây sẽ là phòng thứ {nextRoomNum} của loại phòng {' '}
                   {rType === 'standard'
                     ? 'Standard'
@@ -3908,7 +4076,9 @@ export default function AdminView() {
               </div>
 
               <div>
-                <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Loại Phòng</label>
+                <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                  Loại Phòng
+                </label>
                 <select
                   value={rType}
                   onChange={(e) => {
@@ -3930,8 +4100,16 @@ export default function AdminView() {
                         ? 'Kids'
                         : '3D'
                     setRName(`${label} ${nextNum}`)
+                    if (targetRooms.length > 0) {
+                      setRRows(targetRooms[0].total_rows || 8)
+                      setRCols(targetRooms[0].total_cols || 10)
+                    }
                   }}
-                  className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none cursor-pointer"
+                  className={`w-full px-3 py-2.5 border rounded-lg text-sm outline-none cursor-pointer ${
+                    isDark
+                      ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
+                      : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500'
+                  }`}
                 >
                   <option value="standard">Standard</option>
                   <option value="imax">IMAX 3D Laser</option>
@@ -3944,27 +4122,39 @@ export default function AdminView() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Số Hàng Ghế (Rows)</label>
+                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                    Số Hàng Ghế (Rows)
+                  </label>
                   <input
                     type="number"
                     required
                     min={4}
-                    max={15}
+                    max={20}
                     value={rRows}
                     onChange={(e) => setRRows(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none font-mono-data"
+                    className={`w-full px-3 py-2 border rounded-lg text-sm outline-none font-mono-data ${
+                      isDark
+                        ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500'
+                    }`}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Số Ghế/Hàng (Cols)</label>
+                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                    Số Ghế/Hàng (Cols)
+                  </label>
                   <input
                     type="number"
                     required
-                    min={6}
-                    max={20}
+                    min={4}
+                    max={25}
                     value={rCols}
                     onChange={(e) => setRCols(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none font-mono-data"
+                    className={`w-full px-3 py-2 border rounded-lg text-sm outline-none font-mono-data ${
+                      isDark
+                        ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500'
+                    }`}
                   />
                 </div>
               </div>
@@ -3981,6 +4171,35 @@ export default function AdminView() {
 
           {/* Rooms Grid Grouped By Room Type */}
           <div className="lg:col-span-7 space-y-6">
+            {/* Unified Master Config Button Header */}
+            <div className={`p-5 rounded-2xl border flex flex-wrap items-center justify-between gap-4 shadow-md transition-colors ${
+              isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+            }`}>
+              <div>
+                <h3 className={`font-display font-black text-lg ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                  🏛️ Quản Lý Bố Trí & Sơ Đồ Ghế
+                </h3>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                  Hiện có <strong>{safeRooms.length} phòng chiếu</strong> đang hoạt động trong toàn hệ thống rạp.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setLayoutModalConfig({
+                    isOpen: true,
+                    roomType: 'standard',
+                    roomIds: [],
+                  })
+                }
+                className="px-5 py-2.5 bg-[#e8b84b] hover:bg-[#f5c759] text-[#09090e] font-black text-xs rounded-xl cursor-pointer transition-all shadow-md flex items-center gap-2 hover:shadow-[0_4px_16px_rgba(232,184,75,0.35)]"
+              >
+                <span>⚙️</span>
+                <span>Chỉnh Hàng, Cột & Sơ Đồ Ghế</span>
+              </button>
+            </div>
+
             {['standard', 'vip', 'imax', '3d', '4d', 'kids'].map((typeKey) => {
               const typeRooms = (rooms || []).filter((r) => (r?.room_type || 'standard') === typeKey)
               if (typeRooms.length === 0) return null
@@ -3998,56 +4217,62 @@ export default function AdminView() {
                   ? { title: '4DX Motion', icon: '⚡' }
                   : { title: 'Kids / Gia Đình', icon: '🎈' }
 
+              const sampleRoom = typeRooms[0]
+
               return (
                 <div key={typeKey} className="space-y-3">
-                  <div className="flex items-center gap-2 border-b border-white/10 pb-2">
-                    <span className="text-lg">{typeInfo.icon}</span>
-                    <h4 className="font-display font-bold text-base text-[#f0ede8]">
-                      {typeInfo.title}{' '}
-                      <span className="text-xs font-mono-data font-normal text-[#e8b84b]">
-                        ({typeRooms.length} phòng)
+                  <div className={`flex flex-wrap items-center justify-between gap-3 border-b pb-2.5 ${
+                    isDark ? 'border-white/10' : 'border-slate-200'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{typeInfo.icon}</span>
+                      <h4 className={`font-display font-bold text-base ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
+                        {typeInfo.title}{' '}
+                        <span className={`text-xs font-mono-data font-semibold ${isDark ? 'text-[#e8b84b]' : 'text-amber-700 font-bold'}`}>
+                          ({typeRooms.length} phòng)
+                        </span>
+                      </h4>
+                    </div>
+
+                    {sampleRoom && (
+                      <span className={`text-[11px] font-mono-data px-2.5 py-1 rounded-lg border ${
+                        isDark ? 'bg-white/5 border-white/10 text-[#a09e9a]' : 'bg-slate-100 border-slate-300 text-slate-600'
+                      }`}>
+                        📐 {sampleRoom.total_rows} hàng × {sampleRoom.total_cols} cột ({sampleRoom.total_seats} ghế / phòng)
                       </span>
-                    </h4>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 gap-3">
                     {typeRooms.map((r) => (
                       <div
                         key={r.id}
-                        className="bg-[#111118] border border-white/10 rounded-2xl p-4 shadow-xl flex flex-wrap justify-between items-center gap-3 hover:border-white/20 transition-colors"
+                        className={`border rounded-2xl p-4 shadow-xl flex flex-wrap justify-between items-center gap-3 transition-colors ${
+                          isDark
+                            ? 'bg-[#111118] border-white/10 hover:border-white/20'
+                            : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                        }`}
                       >
                         <div>
                           <div className="flex items-center gap-2 mb-1">
-                            <h5 className="font-display font-bold text-base text-[#f0ede8]">{r.name}</h5>
-                            <span className="text-[10px] font-mono-data text-[#e8b84b] uppercase bg-[#e8b84b]/10 border border-[#e8b84b]/20 px-2 py-0.5 rounded">
+                            <h5 className={`font-display font-bold text-base ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{r.name}</h5>
+                            <span className={`text-[10px] font-mono-data uppercase px-2 py-0.5 rounded border ${
+                              isDark ? 'text-[#e8b84b] bg-[#e8b84b]/10 border-[#e8b84b]/20' : 'text-amber-800 bg-amber-50 border-amber-300 font-bold'
+                            }`}>
                               Phòng #{r.room_number ?? 1}
                             </span>
                           </div>
-                          <p className="text-xs text-[#a09e9a]">
-                            Bố trí: <strong className="text-[#f0ede8]">{r.total_rows} hàng × {r.total_cols} cột</strong> · Tổng sức chứa: <strong className="text-[#e8b84b]">{r.total_seats} ghế</strong>
+                          <p className={`text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                            Bố trí: <strong className={isDark ? 'text-[#f0ede8]' : 'text-slate-800'}>{r.total_rows} hàng × {r.total_cols} cột</strong> · Sức chứa: <strong className={isDark ? 'text-[#e8b84b]' : 'text-amber-700 font-bold'}>{r.total_seats} ghế</strong>
                           </p>
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setViewRoomLayout(r)}
-                            title={`Xem sơ đồ ghế phòng ${r.name}`}
-                            className="px-3 py-1.5 bg-[#e8b84b]/10 hover:bg-[#e8b84b]/20 text-[#e8b84b] border border-[#e8b84b]/30 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 shadow-sm"
-                          >
-                            <span>🪑</span>
-                            <span>Xem sơ đồ ghế</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteRoom(r.id, r.name)}
-                            title={`Xóa phòng ${r.name}`}
-                            className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 shadow-sm"
-                          >
-                            <span>🗑️</span>
-                            <span>Xóa phòng</span>
-                          </button>
+                          <span className={`text-xs font-mono-data font-semibold px-3 py-1.5 rounded-xl border ${
+                            isDark ? 'bg-white/5 border-white/10 text-[#e8b84b]' : 'bg-amber-50 border-amber-200 text-amber-900 font-bold'
+                          }`}>
+                            ✓ {r.total_seats} ghế khả dụng
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -4076,17 +4301,21 @@ export default function AdminView() {
                   value={vCode}
                   onChange={(e) => setVCode(e.target.value)}
                   placeholder="Ví dụ: SUMMER2026"
-                  className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm uppercase font-mono-data focus:border-[#e8b84b] outline-none"
+                  className={`w-full px-3 py-2.5 border rounded-lg text-sm uppercase font-mono-data focus:border-[#e8b84b] outline-none ${
+                    isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
+                  }`}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Loại Giảm Giá</label>
+                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Loại Giảm Giá</label>
                   <select
                     value={vType}
                     onChange={(e) => setVType(e.target.value as 'percent' | 'fixed')}
-                    className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none cursor-pointer"
+                    className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:border-[#e8b84b] outline-none cursor-pointer ${
+                      isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
                   >
                     <option value="percent">Phần Trăm (%)</option>
                     <option value="fixed">Số Tiền Cố Định (VNĐ)</option>
@@ -4094,7 +4323,7 @@ export default function AdminView() {
                 </div>
 
                 <div>
-                  <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">
+                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>
                     Giá Trị Giảm {vType === 'percent' ? '(%)' : '(VNĐ)'}
                   </label>
                   <input
@@ -4103,45 +4332,53 @@ export default function AdminView() {
                     min={1}
                     value={vValue}
                     onChange={(e) => setVValue(Number(e.target.value))}
-                    className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none font-mono-data"
+                    className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:border-[#e8b84b] outline-none font-mono-data ${
+                      isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Đơn Hóa Đơn Tối Thiểu (VNĐ)</label>
+                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Đơn Hóa Đơn Tối Thiểu (VNĐ)</label>
                   <input
                     type="number"
                     min={0}
                     step={10000}
                     value={vMinSpend}
                     onChange={(e) => setVMinSpend(Number(e.target.value))}
-                    className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none font-mono-data"
+                    className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:border-[#e8b84b] outline-none font-mono-data ${
+                      isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
                   />
                 </div>
 
                 {vType === 'percent' && (
                   <div>
-                    <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Giảm Tối Đa (VNĐ)</label>
+                    <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Giảm Tối Đa (VNĐ)</label>
                     <input
                       type="number"
                       min={0}
                       step={10000}
                       value={vMaxDiscount}
                       onChange={(e) => setVMaxDiscount(Number(e.target.value))}
-                      className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none font-mono-data"
+                      className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:border-[#e8b84b] outline-none font-mono-data ${
+                        isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
+                      }`}
                     />
                   </div>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Hạng Thành Viên Yêu Cầu (Loyalty Tier)</label>
+                <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Hạng Thành Viên Yêu Cầu (Loyalty Tier)</label>
                 <select
                   value={vMinLoyaltyTier}
                   onChange={(e) => setVMinLoyaltyTier(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none cursor-pointer"
+                  className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:border-[#e8b84b] outline-none cursor-pointer ${
+                    isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
+                  }`}
                 >
                   <option value="">🌟 Mọi hạng thành viên (Tất cả)</option>
                   <option value="bronze">🥉 Hạng Đồng trở lên (Bronze+)</option>
@@ -4152,19 +4389,21 @@ export default function AdminView() {
               </div>
 
               <div>
-                <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Ngày Hết Hạn (Expiry Date)</label>
+                <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Ngày Hết Hạn (Expiry Date)</label>
                 <input
                   type="date"
                   value={vExpiry}
                   min={toLocalYYYYMMDD(new Date())}
                   onChange={(e) => setVExpiry(e.target.value)}
                   onClick={(e) => e.currentTarget.showPicker?.()}
-                  className="w-full px-3 py-2.5 bg-[#09090e] border border-white/10 rounded-lg text-[#f0ede8] text-sm focus:border-[#e8b84b] outline-none font-mono-data cursor-pointer [color-scheme:dark]"
+                  className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:border-[#e8b84b] outline-none font-mono-data cursor-pointer ${
+                    isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8] [color-scheme:dark]' : 'bg-slate-50 border-slate-300 text-slate-900 [color-scheme:light]'
+                  }`}
                 />
               </div>
 
               <div className="flex items-center gap-3 pt-2">
-                <label className="flex items-center gap-2 cursor-pointer text-xs text-[#f0ede8]">
+                <label className={`flex items-center gap-2 cursor-pointer text-xs ${isDark ? 'text-[#f0ede8]' : 'text-slate-800 font-medium'}`}>
                   <input
                     type="checkbox"
                     checked={vFirstOnly}
@@ -4186,12 +4425,16 @@ export default function AdminView() {
           </div>
 
           {/* Vouchers List Table */}
-          <div className="lg:col-span-7 bg-[#111118] border border-white/10 rounded-2xl p-6 shadow-xl space-y-4">
-            <h3 className="font-display font-bold text-lg text-[#f0ede8]">Danh Sách Mã Khuyến Mãi Hợp Lệ</h3>
+          <div className={`lg:col-span-7 border rounded-2xl p-6 shadow-xl space-y-4 ${
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+          }`}>
+            <h3 className={`font-display font-bold text-lg ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Danh Sách Mã Khuyến Mãi Hợp Lệ</h3>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-[#a09e9a]">
-                <thead className="bg-[#161622] text-[#f0ede8] font-mono-data uppercase border-b border-white/10">
+              <table className={`w-full text-left text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                <thead className={`font-mono-data uppercase border-b ${
+                  isDark ? 'bg-[#161622] text-[#f0ede8] border-white/10' : 'bg-slate-50 text-slate-800 border-slate-200'
+                }`}>
                   <tr>
                     <th className="p-3">Mã Voucher</th>
                     <th className="p-3">Mức Giảm</th>
@@ -4201,7 +4444,7 @@ export default function AdminView() {
                     <th className="p-3 text-right">Thao Tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className={isDark ? 'divide-y divide-white/5' : 'divide-y divide-slate-200'}>
                   {vouchers
                     .slice((voucherPage - 1) * PAGE_SIZE, voucherPage * PAGE_SIZE)
                     .map((v) => (
@@ -4620,22 +4863,26 @@ export default function AdminView() {
 
           {/* Summary Stat Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="bg-[#111118] border border-[#e8b84b]/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+            <div className={`border rounded-2xl p-6 shadow-xl relative overflow-hidden ${
+              isDark ? 'bg-[#111118] border-[#e8b84b]/30' : 'bg-amber-50/60 border-amber-300'
+            }`}>
               <div className="absolute top-0 right-0 p-4 opacity-15 text-3xl">💰</div>
-              <span className="text-xs text-[#a09e9a] font-mono-data block mb-1 uppercase tracking-wider">Tổng Doanh Thu Hóa Đơn</span>
+              <span className={`text-xs font-mono-data block mb-1 uppercase tracking-wider ${isDark ? 'text-[#a09e9a]' : 'text-amber-900 font-semibold'}`}>Tổng Doanh Thu Hóa Đơn</span>
               <h3 className="font-display font-black text-2xl text-[#e8b84b]">
-                {liveAnalytics ? fmt(liveAnalytics.total_revenue) : '48.750.000 VNĐ'}
+                {liveAnalytics ? fmt(liveAnalytics.total_revenue) : '0 VNĐ'}
               </h3>
               <p className="text-[10px] text-[#2ecc71] font-mono-data mt-2 font-bold flex items-center gap-1">
                 <span>↑ Live Database</span>
-                <span className="text-[#a09e9a] font-normal">từ đơn hàng thực tế</span>
+                <span className={`font-normal ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>từ đơn hàng thực tế</span>
               </p>
             </div>
 
-            <div className="bg-[#111118] border border-white/10 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+            <div className={`border rounded-2xl p-6 shadow-xl relative overflow-hidden ${
+              isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-sm'
+            }`}>
               <div className="absolute top-0 right-0 p-4 opacity-15 text-3xl">🎟️</div>
-              <span className="text-xs text-[#a09e9a] font-mono-data block mb-1 uppercase tracking-wider">Vé Đã Bán Ra</span>
-              <h3 className="font-display font-black text-2xl text-[#f0ede8]">
+              <span className={`text-xs font-mono-data block mb-1 uppercase tracking-wider ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>Vé Đã Bán Ra</span>
+              <h3 className={`font-display font-black text-2xl ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
                 {liveAnalytics ? `${liveAnalytics.total_reservations} Vé` : '0 Vé'}
               </h3>
               <p className="text-[10px] text-[#2ecc71] font-mono-data mt-2 font-bold">
@@ -4643,19 +4890,23 @@ export default function AdminView() {
               </p>
             </div>
 
-            <div className="bg-[#111118] border border-white/10 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+            <div className={`border rounded-2xl p-6 shadow-xl relative overflow-hidden ${
+              isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-sm'
+            }`}>
               <div className="absolute top-0 right-0 p-4 opacity-15 text-3xl">🎬</div>
-              <span className="text-xs text-[#a09e9a] font-mono-data block mb-1 uppercase tracking-wider">Phim Đang Chiếu</span>
-              <h3 className="font-display font-black text-2xl text-[#f0ede8]">
+              <span className={`text-xs font-mono-data block mb-1 uppercase tracking-wider ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>Phim Đang Chiếu</span>
+              <h3 className={`font-display font-black text-2xl ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
                 {liveAnalytics ? `${liveAnalytics.active_movies_count} Phim` : `${movies.length} Phim`}
               </h3>
-              <p className="text-[10px] text-[#e8b84b] font-mono-data mt-2">Dữ liệu thời gian thực</p>
+              <p className="text-[10px] text-[#e8b84b] font-mono-data mt-2 font-bold">Dữ liệu thời gian thực</p>
             </div>
 
-            <div className="bg-[#111118] border border-white/10 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+            <div className={`border rounded-2xl p-6 shadow-xl relative overflow-hidden ${
+              isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-sm'
+            }`}>
               <div className="absolute top-0 right-0 p-4 opacity-15 text-3xl">👥</div>
-              <span className="text-xs text-[#a09e9a] font-mono-data block mb-1 uppercase tracking-wider">Tài Khoản Đăng Ký</span>
-              <h3 className="font-display font-black text-2xl text-[#f0ede8]">
+              <span className={`text-xs font-mono-data block mb-1 uppercase tracking-wider ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>Tài Khoản Đăng Ký</span>
+              <h3 className={`font-display font-black text-2xl ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
                 {liveAnalytics ? `${liveAnalytics.total_users_count} Thành Viên` : '0 Thành Viên'}
               </h3>
               <p className="text-[10px] text-[#2ecc71] font-mono-data mt-2 font-bold">100% trong PostgreSQL</p>
@@ -4663,13 +4914,17 @@ export default function AdminView() {
           </div>
 
           {/* Chart Section 1: Revenue & Ticket Sales Trend */}
-          <div className="bg-[#111118] border border-white/10 rounded-2xl p-6 shadow-xl">
+          <div className={`border rounded-2xl p-6 shadow-xl ${
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+          }`}>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <div>
-                <h3 className="font-display font-bold text-xl text-[#f0ede8] flex items-center gap-2">
+                <h3 className={`font-display font-bold text-xl flex items-center gap-2 ${
+                  isDark ? 'text-[#f0ede8]' : 'text-slate-900'
+                }`}>
                   <span>📈</span> Biểu Đồ Tăng Trưởng Doanh Thu Theo Tháng (2026)
                 </h3>
-                <p className="text-xs text-[#a09e9a] mt-0.5">Phân tích xu hướng doanh thu vé và tăng trưởng khách hàng trong 8 tháng qua.</p>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Phân tích xu hướng doanh thu vé và tăng trưởng khách hàng trong 8 tháng qua.</p>
               </div>
 
               <div className="flex items-center gap-4 text-xs font-mono-data">
@@ -6146,12 +6401,16 @@ export default function AdminView() {
         onClose={() => setDetailMovieModal(null)}
       />
 
-      {/* Room Seat Layout Viewer Modal */}
-      {viewRoomLayout && (
-        <RoomSeatLayoutModal
-          room={viewRoomLayout}
+      {/* Unified Room Seat Layout & Dimension Config Modal */}
+      {layoutModalConfig.isOpen && (
+        <UnifiedRoomLayoutModal
+          initialRoomType={layoutModalConfig.roomType}
+          initialRoomIds={layoutModalConfig.roomIds}
+          rooms={safeRooms}
           isDark={isDark}
-          onClose={() => setViewRoomLayout(null)}
+          onClose={() => setLayoutModalConfig({ isOpen: false, roomType: null, roomIds: [] })}
+          onSuccess={loadAllData}
+          notify={notify}
         />
       )}
     </div>

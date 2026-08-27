@@ -94,6 +94,7 @@ export default function CineVerseMovieView() {
   const {
     data: seatMap,
     isLoading: isLoadingSeatMap,
+    isFetching: isFetchingSeatMap,
     isError: isErrorSeatMap,
     refetch: refetchSeatMap,
   } = useSeatMap(state.selectedShowtime)
@@ -181,6 +182,16 @@ export default function CineVerseMovieView() {
       return stTimeMs > nowMs
     })
   }, [showtimes, selectedDateStr])
+
+  // Auto-select first available showtime when date changes or if none selected
+  useEffect(() => {
+    if (displayShowtimes.length > 0) {
+      const isCurrentValid = state.selectedShowtime && displayShowtimes.some((st) => st.id === state.selectedShowtime?.id)
+      if (!isCurrentValid) {
+        selectShowtime(displayShowtimes[0])
+      }
+    }
+  }, [displayShowtimes, state.selectedShowtime, selectShowtime])
 
   // Group showtimes by room type
   const groupedShowtimes = useMemo(() => {
@@ -931,7 +942,7 @@ export default function CineVerseMovieView() {
                         selectedSeats={state.selectedSeats}
                         onToggle={toggleSeat}
                         seats={seatMap?.seats}
-                        isLoading={isLoadingSeatMap}
+                        isLoading={isLoadingSeatMap || isFetchingSeatMap || (!seatMap && !!state.selectedShowtime)}
                       />
                     </div>
                   )}

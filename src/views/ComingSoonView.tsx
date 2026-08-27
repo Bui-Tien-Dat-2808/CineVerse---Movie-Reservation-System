@@ -30,7 +30,7 @@ export default function ComingSoonView() {
     setLoading(true)
     setError(null)
     apiClient
-      .get<{ items: ComingSoonMovieItem[] }>('/api/v1/movies/coming-soon')
+      .get<{ items: ComingSoonMovieItem[] }>('/api/v1/movies/coming-soon?page_size=5000')
       .then(({ data }) => setMovies(data.items ?? []))
       .catch((err) => {
         console.error('Failed to load coming soon movies:', err)

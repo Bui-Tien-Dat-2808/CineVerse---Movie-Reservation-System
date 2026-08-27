@@ -39,6 +39,7 @@ export default function Navbar() {
 
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const moreMenuRef = useRef<HTMLDivElement>(null)
 
@@ -49,7 +50,11 @@ export default function Navbar() {
   const activeMoreItem = MORE_ADMIN_NAV_ITEMS.find((item) => item.tab === currentAdminTab)
   const isMoreTabActive = !!activeMoreItem
 
-  // Close dropdowns on click outside
+  // Close dropdowns on click outside or route change
+  useEffect(() => {
+    setMobileMenuOpen(false)
+  }, [location.pathname, location.search])
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -307,6 +312,26 @@ export default function Navbar() {
                       </span>
                     </div>
 
+                    {/* Menu Item 0: Bảng Quản Trị Admin (For Admin role) */}
+                    {user?.role === 'admin' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserMenuOpen(false)
+                          navigate('/admin')
+                        }}
+                        className={cn(
+                          'w-full text-left px-3 py-2 rounded-xl font-bold transition-colors flex items-center gap-2 cursor-pointer',
+                          location.pathname.startsWith('/admin')
+                            ? 'bg-[#e8b84b]/15 text-[#e8b84b]'
+                            : isDark ? 'text-[#f0ede8] hover:bg-white/5 hover:text-[#e8b84b]' : 'text-slate-800 hover:bg-amber-50 hover:text-amber-900'
+                        )}
+                      >
+                        <span>⚡</span>
+                        <span>Bảng Quản Trị Admin</span>
+                      </button>
+                    )}
+
                     {/* Menu Item 1: Thông Tin Cá Nhân */}
                     <button
                       type="button"
@@ -443,8 +468,99 @@ export default function Navbar() {
               </button>
             </div>
           )}
+
+          {/* Mobile Hamburger Menu Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className={cn(
+              'p-2 rounded-xl border text-sm font-bold flex items-center justify-center transition-colors md:hidden cursor-pointer',
+              isDark
+                ? 'bg-white/5 border-white/10 text-[#f0ede8] hover:bg-white/10'
+                : 'bg-slate-100 border-slate-300 text-slate-900 hover:bg-slate-200'
+            )}
+            aria-label="Toggle Navigation Menu"
+          >
+            {mobileMenuOpen ? '✕' : '☰'}
+          </button>
         </div>
       </div>
+
+      {/* Mobile Drawer Navigation Menu */}
+      {mobileMenuOpen && (
+        <div className={cn(
+          'md:hidden border-b px-4 py-3 space-y-1.5 shadow-xl transition-all duration-200 animate-in fade-in slide-in-from-top-2',
+          isDark
+            ? 'bg-[#09090e]/95 border-white/10 text-[#f0ede8]'
+            : 'bg-white/95 border-slate-200 text-slate-900'
+        )}>
+          {isAdminPage ? (
+            <div className="space-y-1">
+              <p className={cn('text-[10px] uppercase font-mono-data font-bold px-3 py-1', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                ⚡ Bảng Điều Khiển Admin
+              </p>
+              {[...PRIMARY_ADMIN_NAV_ITEMS, ...MORE_ADMIN_NAV_ITEMS].map((item) => {
+                const isActive = currentAdminTab === item.tab
+                return (
+                  <button
+                    key={item.tab}
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false)
+                      navigate(`/admin?tab=${item.tab}`)
+                      window.scrollTo({ top: 0, behavior: 'smooth' })
+                    }}
+                    className={cn(
+                      'w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer',
+                      isActive
+                        ? isDark
+                          ? 'bg-[#e8b84b]/15 text-[#e8b84b] border border-[#e8b84b]/30'
+                          : 'bg-amber-100 text-amber-900 border border-amber-300'
+                        : isDark
+                          ? 'text-[#a09e9a] hover:text-[#f0ede8] hover:bg-white/5'
+                          : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100'
+                    )}
+                  >
+                    <span>{item.icon}</span>
+                    <span>{item.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {USER_NAV_ITEMS.map((item) => {
+                const isActive = location.pathname === item.path
+                return (
+                  <button
+                    key={item.path}
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false)
+                      reset()
+                      navigate(item.path)
+                      window.scrollTo({ top: 0, behavior: 'smooth' })
+                    }}
+                    className={cn(
+                      'w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer',
+                      isActive
+                        ? isDark
+                          ? 'bg-[#e8b84b]/15 text-[#e8b84b] border border-[#e8b84b]/30'
+                          : 'bg-amber-100 text-amber-900 border border-amber-300'
+                        : isDark
+                          ? 'text-[#a09e9a] hover:text-[#f0ede8] hover:bg-white/5'
+                          : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100'
+                    )}
+                  >
+                    <span className="text-sm">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </nav>
   )
 }

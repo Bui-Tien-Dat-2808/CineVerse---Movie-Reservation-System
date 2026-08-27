@@ -42,7 +42,15 @@ export default function CheckoutView() {
     if (window.confirm('Bạn có chắc chắn muốn huỷ giữ chỗ không? Ghế đã giữ sẽ được giải phóng ngay lập tức.')) {
       if (showtime && showtime.id && state.selectedSeats.size > 0) {
         try {
-          const numericSeatIds = Array.from(state.selectedSeats).map((s) => Number(s)).filter((n) => !isNaN(n))
+          const seatIdMap = new Map<string, number>()
+          if (seatMap?.seats) {
+            seatMap.seats.forEach((s) => {
+              seatIdMap.set(`${s.row_label}${s.col_number}`, s.id)
+            })
+          }
+          const numericSeatIds = Array.from(state.selectedSeats)
+            .map((s) => seatIdMap.get(s) ?? Number(s))
+            .filter((n) => !isNaN(n))
           await releaseSeatsAPI(showtime.id, numericSeatIds)
         } catch (err) {
           console.error('Failed to release seats on backend:', err)
@@ -226,12 +234,11 @@ export default function CheckoutView() {
         setCreatedReservation(res)
 
         if (paymentMethod === 'cash') {
-          // Cash payment confirmed at cinema counter
-          await apiClient.post('/api/v1/payments/cash-confirm', { reservation_id: res.id })
+          // Cash payment: Reservation created in PENDING state to be paid at cinema counter
           if (showtime) {
             sessionStorage.removeItem(`cineverse_hold_start_${showtime.id}`)
           }
-          navigate(`/payment-result?status=success&reservation_id=${res.id}`)
+          navigate(`/payment-result?status=cash_pending&reservation_id=${res.id}`)
           return
         }
 
