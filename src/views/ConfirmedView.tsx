@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useBooking } from '../context/BookingContext'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { getDateList } from '../lib/utils'
 import { ETicketModal } from '../components/features/ticket/ETicketModal'
 
@@ -12,6 +13,8 @@ export default function ConfirmedView() {
   const navigate = useNavigate()
   const { state, reset } = useBooking()
   const { user } = useAuth()
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
   const [showQRModal, setShowQRModal] = useState(false)
 
   // Guard: must have a completed booking
@@ -27,6 +30,11 @@ export default function ConfirmedView() {
 
   const { selectedMovie: movie, selectedShowtime: showtime, selectedDate, selectedSeats, createdReservation } = state
   const bookingCode = createdReservation?.ticket_code || 'CVN-' + Math.random().toString(36).slice(2, 8).toUpperCase()
+
+  const safeShowtimeDateStr = showtime.date || (DATES[selectedDate] ? DATES[selectedDate].toISOString().split('T')[0] : new Date().toISOString().split('T')[0])
+  const formattedShowtimeDate = showtime.date 
+    ? new Date(showtime.date).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+    : (DATES[selectedDate] ?? new Date()).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
   const reservationForModal = createdReservation || {
     id: 1,
@@ -46,8 +54,8 @@ export default function ConfirmedView() {
       movie_title: movie.title,
       movie_poster_url: movie.img,
       room_name: showtime.hall,
-      start_time: `${DATES[selectedDate].toISOString().split('T')[0]}T${showtime.time}:00Z`,
-      end_time: `${DATES[selectedDate].toISOString().split('T')[0]}T${showtime.time}:00Z`,
+      start_time: `${safeShowtimeDateStr}T${showtime.time}:00Z`,
+      end_time: `${safeShowtimeDateStr}T${showtime.time}:00Z`,
     },
     created_at: new Date().toISOString(),
   }
@@ -56,7 +64,7 @@ export default function ConfirmedView() {
   const paymentMethodLabel = pmCode === 'cash' ? 'Tiền mặt (Thanh toán tại rạp)' : 'VNPay / ATM / Ví điện tử'
 
   const ticketInfo = [
-    ['Ngày chiếu', DATES[selectedDate].toLocaleDateString('vi-VN')],
+    ['Ngày chiếu', formattedShowtimeDate],
     ['Suất chiếu', showtime.time],
     ['Rạp / Phòng', showtime.hall],
     ['Loại phòng', showtime.type],
@@ -102,13 +110,15 @@ export default function ConfirmedView() {
       )}
 
       {/* Ticket card */}
-      <div className="bg-[#111118] border border-white/10 rounded-lg p-7 mb-8 relative overflow-hidden text-left shadow-xl">
+      <div className={`border rounded-xl p-7 mb-8 relative overflow-hidden text-left shadow-xl ${
+        isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+      }`}>
         <div
           className="absolute top-0 left-0 right-0 h-[3px]"
           style={{ background: 'linear-gradient(90deg, #e8b84b, #c0392b, #e8b84b)' }}
         />
 
-        <div className="flex justify-between items-center mb-6 pb-4 border-b border-white/10">
+        <div className={`flex justify-between items-center mb-6 pb-4 border-b ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
           <h3 className="font-display font-bold text-xl text-[#e8b84b]">
             Thông tin vé đã thanh toán
           </h3>
@@ -126,8 +136,8 @@ export default function ConfirmedView() {
         <div className="space-y-3">
           {ticketInfo.map(([label, val]) => (
             <div key={label} className="flex justify-between items-center text-sm">
-              <span className="text-[#a09e9a] font-mono-data uppercase text-xs">{label}</span>
-              <span className="font-bold text-[#f0ede8] font-mono-data">{val}</span>
+              <span className={`font-mono-data uppercase text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-500 font-semibold'}`}>{label}</span>
+              <span className={`font-bold font-mono-data ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{val}</span>
             </div>
           ))}
         </div>
@@ -137,7 +147,9 @@ export default function ConfirmedView() {
         <button
           type="button"
           onClick={() => setShowQRModal(true)}
-          className="flex-1 bg-white/10 hover:bg-white/20 text-[#f0ede8] font-bold py-3.5 rounded text-sm transition-all border border-white/10 flex items-center justify-center gap-2 cursor-pointer"
+          className={`flex-1 font-bold py-3.5 rounded-xl text-sm transition-all border flex items-center justify-center gap-2 cursor-pointer shadow-sm ${
+            isDark ? 'bg-white/10 hover:bg-white/20 text-[#f0ede8] border-white/10' : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300'
+          }`}
         >
           <span>📱</span>
           <span>Mở Vé QR Vào Cổng</span>
@@ -145,7 +157,7 @@ export default function ConfirmedView() {
 
         <button
           onClick={handleReset}
-          className="flex-1 bg-[#e8b84b] text-[#09090e] border-0 rounded py-3.5 text-sm font-bold cursor-pointer hover:shadow-[0_8px_30px_rgba(232,184,75,0.4)] transition-all"
+          className="flex-1 bg-[#e8b84b] text-[#09090e] border-0 rounded-xl py-3.5 text-sm font-bold cursor-pointer hover:bg-[#f5c759] hover:shadow-[0_8px_30px_rgba(232,184,75,0.4)] transition-all"
         >
           Quay lại →
         </button>

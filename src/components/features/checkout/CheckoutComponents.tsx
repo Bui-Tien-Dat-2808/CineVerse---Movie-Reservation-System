@@ -1,3 +1,24 @@
+import {
+  Calendar,
+  Clock,
+  Film,
+  Popcorn,
+  CupSoda,
+  UtensilsCrossed,
+  Cookie,
+  Ticket,
+  Plus,
+  X,
+  Check,
+  Banknote,
+  SlidersHorizontal,
+  ArrowRight,
+  Armchair,
+  Building2,
+  Tag,
+  ShieldCheck,
+  CreditCard,
+} from 'lucide-react'
 import type { Movie, ShowTime } from '../../../types'
 import { fmt, cn, getDateList } from '../../../lib/utils'
 import { useTheme } from '../../../context/ThemeContext'
@@ -21,57 +42,94 @@ export function BookingSummary({
   const { theme } = useTheme()
   const isDark = theme === 'dark'
   const dates = getDateList(7)
+  const dateObj = dates[selectedDate] || new Date()
 
   return (
     <div
       className={cn(
-        'border rounded-2xl overflow-hidden mb-6 shadow-md transition-colors',
-        isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+        'relative border rounded-3xl overflow-hidden mb-6 shadow-xl transition-colors',
+        isDark ? 'bg-[#111118]/95 border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
       )}
     >
-      <div className="flex">
-        <img
-          src={movie.img}
-          alt={movie.title}
-          className="w-[120px] object-cover flex-shrink-0"
-        />
-        <div className="p-5">
-          <p className={cn('font-mono-data text-[10px] font-bold tracking-[2px] uppercase mb-1.5', isDark ? 'text-[#e8b84b]' : 'text-amber-800')}>
-            {showtime.type}
-          </p>
-          <h3 className={cn('font-display text-xl font-bold mb-2.5 leading-tight', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
-            {movie.title}
-          </h3>
-          <div className={cn('text-[13px] flex flex-col gap-1 font-medium', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
-            <span>
-              📅{' '}
-              {dates[selectedDate].toLocaleDateString('vi-VN', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
+      <div className="flex flex-col sm:flex-row">
+        {/* Movie Poster */}
+        <div className="sm:w-[130px] aspect-[2/3] sm:aspect-auto overflow-hidden bg-[#14141e] shrink-0 relative">
+          <img
+            src={movie.img}
+            alt={movie.title}
+            className="w-full h-full object-cover"
+          />
+          {movie.rating && (
+            <div className="absolute top-2 left-2 bg-amber-500 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-lg shadow-md font-mono-data">
+              {movie.rating}
+            </div>
+          )}
+        </div>
+
+        {/* Screening Details */}
+        <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className={cn('font-mono-data text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider',
+                isDark ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'bg-amber-100 text-amber-900 border border-amber-200'
+              )}>
+                {showtime.type || 'Standard'}
+              </span>
+              {showtime.hall && (
+                <span className={cn('text-[11px] font-mono-data font-bold opacity-80', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                  {showtime.hall}
+                </span>
+              )}
+            </div>
+
+            <h3 className={cn('font-display text-lg sm:text-xl font-black mb-2 leading-snug', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+              {movie.title}
+            </h3>
+          </div>
+
+          <div className={cn('text-xs flex flex-col gap-1.5 font-medium', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+            <span className="flex items-center gap-2">
+              <Calendar className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span>
+                {dateObj.toLocaleDateString('vi-VN', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </span>
             </span>
-            <span>
-              🕐 {showtime.time} · {showtime.hall}
+            <span className="flex items-center gap-2">
+              <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span className="font-mono-data font-bold">{showtime.time}</span>
+              {showtime.hall && <span>· {showtime.hall}</span>}
             </span>
-            <span>🎬 {movie.director}</span>
+            {movie.director && (
+              <span className="flex items-center gap-2">
+                <Film className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                <span>{movie.director}</span>
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      <div className={cn('border-t px-5 py-4', isDark ? 'border-white/10' : 'border-slate-200 bg-slate-50/50')}>
-        <p className={cn('text-xs mb-2 font-mono-data font-bold uppercase', isDark ? 'text-[#6e6c68]' : 'text-slate-500')}>
-          Ghế đã chọn
-        </p>
-        <div className="flex gap-1.5 flex-wrap">
+      {/* Selected Seats Chips */}
+      <div className={cn('border-t px-5 py-3.5 flex items-center justify-between gap-3', isDark ? 'border-white/10 bg-white/[0.02]' : 'border-slate-100 bg-slate-50/70')}>
+        <div className="flex items-center gap-1.5">
+          <Armchair className="w-4 h-4 text-amber-500" />
+          <span className={cn('text-xs font-mono-data font-bold uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+            Ghế ({selectedSeats.size})
+          </span>
+        </div>
+        <div className="flex gap-1.5 flex-wrap justify-end">
           {[...selectedSeats].sort().map((s) => (
             <span
               key={s}
               className={cn(
-                'font-mono-data text-xs px-2.5 py-0.5 rounded border font-black',
+                'font-mono-data text-xs px-2.5 py-0.5 rounded-lg border font-black shadow-xs',
                 isDark
-                  ? 'bg-[#e8b84b]/15 text-[#e8b84b] border-[#e8b84b]/30'
+                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
                   : 'bg-amber-100 text-amber-950 border-amber-300'
               )}
             >
@@ -93,16 +151,29 @@ export interface ConcessionItemDetail {
   price: number
   quantity: number
   category?: string
+  key?: string
 }
 
-interface PriceBreakdownProps {
+export interface AppliedVoucherDetail {
+  code: string
+  discount_amount: number
+  message?: string
+  title?: string
+}
+
+export interface PriceBreakdownProps {
   seatCount: number
   pricePerSeat?: number
   subtotal: number
   discountOverride?: number
   concessionTotal?: number
   concessionItems?: ConcessionItemDetail[]
-  onRemoveConcession?: (id: number) => void
+  onRemoveConcession?: (keyOrId: string | number) => void
+  onOpenConcessionModal?: () => void
+  appliedVoucher?: AppliedVoucherDetail | null
+  appliedVouchers?: AppliedVoucherDetail[]
+  onOpenVoucherModal?: () => void
+  onRemoveVoucher?: (code?: string) => void
 }
 
 export function PriceBreakdown({
@@ -113,88 +184,227 @@ export function PriceBreakdown({
   concessionTotal = 0,
   concessionItems = [],
   onRemoveConcession,
+  onOpenConcessionModal,
+  appliedVoucher,
+  appliedVouchers = [],
+  onOpenVoucherModal,
+  onRemoveVoucher,
 }: PriceBreakdownProps) {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
-  const discount = discountOverride !== undefined ? discountOverride : 0
+
+  // Consolidate vouchers list
+  const voucherList = appliedVouchers.length > 0
+    ? appliedVouchers
+    : appliedVoucher
+    ? [appliedVoucher]
+    : []
+
+  const totalVoucherDiscount = voucherList.reduce((sum, v) => sum + v.discount_amount, 0)
+  const discount = discountOverride !== undefined ? discountOverride : totalVoucherDiscount
   const total = Math.max(0, subtotal - discount + concessionTotal)
 
   return (
     <div
       className={cn(
-        'border rounded-2xl p-5 mb-6 shadow-md transition-colors',
-        isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+        'border rounded-3xl p-5 sm:p-6 mb-6 shadow-xl transition-colors',
+        isDark ? 'bg-[#111118]/95 border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
       )}
     >
-      <h4 className={cn('font-mono-data text-[13px] tracking-wide uppercase mb-3.5 font-extrabold', isDark ? 'text-[#a09e9a]' : 'text-slate-700')}>
-        Chi tiết giá
+      <h4 className={cn('font-mono-data text-xs tracking-wider uppercase mb-4 font-bold flex items-center gap-2', isDark ? 'text-amber-400' : 'text-amber-800')}>
+        <Ticket className="w-4 h-4 text-amber-500" />
+        <span>Chi tiết giá thanh toán</span>
       </h4>
 
-      {/* Ticket Row */}
-      <div className="flex justify-between mb-2.5 text-sm font-medium">
+      {/* 1. Ticket Row */}
+      <div className="flex justify-between py-2.5 text-xs sm:text-sm font-medium">
         <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-600'}>
-          {pricePerSeat ? `${seatCount} vé × ${fmt(pricePerSeat)}` : `${seatCount} vé đã chọn`}
+          {pricePerSeat ? `${seatCount} vé xem phim × ${fmt(pricePerSeat)}` : `${seatCount} vé xem phim đã chọn`}
         </span>
         <span className={cn('font-mono-data font-bold', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
           {fmt(subtotal)}
         </span>
       </div>
 
-      {/* List each selected concession item */}
-      {concessionItems.length > 0 && (
-        <div className={cn('my-2.5 py-2.5 border-t border-b space-y-2.5', isDark ? 'border-white/10' : 'border-slate-200')}>
+      {/* 2. Concession Section */}
+      {concessionItems.length === 0 ? (
+        <div className={cn('flex items-center justify-between py-3.5 border-t border-dashed', isDark ? 'border-white/10' : 'border-slate-200')}>
+          <div className="flex items-center gap-2">
+            <Popcorn className="w-4 h-4 text-amber-500 shrink-0" />
+            <span className={cn('text-xs sm:text-sm font-medium', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+              Bắp rang & Nước uống
+            </span>
+          </div>
+          {onOpenConcessionModal && (
+            <button
+              type="button"
+              onClick={onOpenConcessionModal}
+              className={cn(
+                'text-xs font-bold px-3.5 py-2 rounded-xl border transition-all cursor-pointer shadow-xs flex items-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0',
+                isDark
+                  ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border-amber-500/30'
+                  : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+              )}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Thêm bắp nước</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className={cn('my-2 py-3.5 border-t border-dashed space-y-3', isDark ? 'border-white/10' : 'border-slate-200')}>
           {concessionItems.map((item) => {
             const itemTotal = Number(item.price) * item.quantity
-            const emoji =
-              item.category === 'snack' ? '🧀' :
-              item.category === 'drink' ? '🥤' :
-              item.category === 'food' ? '🌭' : '🍿'
+            const Icon =
+              item.category === 'snack' ? Cookie :
+              item.category === 'drink' ? CupSoda :
+              item.category === 'food' ? UtensilsCrossed : Popcorn
 
             return (
-              <div key={item.id} className="flex justify-between items-center text-sm gap-3">
+              <div key={item.key || item.id} className="flex justify-between items-center text-xs sm:text-sm gap-3">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-base shrink-0">{emoji}</span>
-                  <span className={cn('font-medium truncate', isDark ? 'text-[#a09e9a]' : 'text-slate-700')}>{item.name}</span>
+                  <Icon className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span className={cn('font-medium truncate text-xs sm:text-sm', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>
+                    {item.name}
+                  </span>
                   <span className={cn(
-                    'font-mono-data font-bold text-xs px-2 py-0.5 rounded-full shrink-0 border',
-                    isDark ? 'bg-[#e8b84b]/15 text-[#e8b84b] border-[#e8b84b]/30' : 'bg-amber-100 text-amber-900 border-amber-300'
+                    'font-mono-data font-bold text-[11px] px-2 py-0.5 rounded-full shrink-0 border',
+                    isDark ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-amber-100 text-amber-900 border-amber-300'
                   )}>
                     ×{item.quantity}
                   </span>
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className={cn('font-mono-data font-semibold', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>{fmt(itemTotal)}</span>
+                  <span className={cn('font-mono-data font-bold text-xs sm:text-sm', isDark ? 'text-amber-400' : 'text-amber-800')}>
+                    +{fmt(itemTotal)}
+                  </span>
                   {onRemoveConcession && (
                     <button
                       type="button"
-                      onClick={() => onRemoveConcession(item.id)}
-                      className="w-6 h-6 rounded-full bg-red-500/20 hover:bg-red-500/40 text-red-400 font-bold text-xs flex items-center justify-center transition-all cursor-pointer border border-red-500/40"
+                      onClick={() => onRemoveConcession(item.key || item.id)}
+                      className="w-6 h-6 rounded-full bg-rose-500/15 hover:bg-rose-500/30 text-rose-400 font-bold text-xs flex items-center justify-center transition-all cursor-pointer border border-rose-500/30 ml-1"
                       title={`Gỡ bỏ ${item.name}`}
                       aria-label={`Gỡ bỏ ${item.name}`}
                     >
-                      ✕
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
               </div>
             )
           })}
+
+          {onOpenConcessionModal && (
+            <div className="flex items-center justify-between pt-2 border-t border-white/5">
+              <span className="text-xs opacity-60 font-mono-data">
+                {concessionItems.reduce((acc, c) => acc + c.quantity, 0)} món bắp nước đã chọn
+              </span>
+              <button
+                type="button"
+                onClick={onOpenConcessionModal}
+                className={cn(
+                  'text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer shadow-xs flex items-center gap-1.5',
+                  isDark
+                    ? 'bg-white/5 hover:bg-white/10 text-amber-400 border-white/10'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300'
+                )}
+              >
+                <SlidersHorizontal className="w-3 h-3" />
+                <span>Chỉnh sửa bắp nước</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Discount */}
-      {discount > 0 && (
-        <div className="flex justify-between mb-2.5 text-sm font-medium">
-          <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-600'}>Mã ưu đãi Voucher</span>
-          <span className="text-emerald-500 font-mono-data font-bold">- {fmt(discount)}</span>
+      {/* 3. Voucher Section */}
+      {voucherList.length === 0 ? (
+        <div className={cn('flex items-center justify-between py-3.5 border-t border-dashed', isDark ? 'border-white/10' : 'border-slate-200')}>
+          <div className="flex items-center gap-2">
+            <Tag className="w-4 h-4 text-amber-500 shrink-0" />
+            <span className={cn('text-xs sm:text-sm font-medium', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+              Mã giảm giá (Voucher)
+            </span>
+          </div>
+          {onOpenVoucherModal && (
+            <button
+              type="button"
+              onClick={onOpenVoucherModal}
+              className={cn(
+                'text-xs font-bold px-3.5 py-2 rounded-xl border transition-all cursor-pointer shadow-xs flex items-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0',
+                isDark
+                  ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border-amber-500/30'
+                  : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+              )}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Chọn hoặc nhập mã</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className={cn('my-2 py-3.5 border-t border-dashed space-y-2.5', isDark ? 'border-white/10' : 'border-slate-200')}>
+          {voucherList.map((v) => (
+            <div key={v.code} className="flex justify-between items-center text-xs sm:text-sm gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <Tag className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className={cn('font-medium text-xs sm:text-sm', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>
+                    Voucher
+                  </span>
+                  <span className="font-mono-data font-bold text-xs px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    [{v.code}]
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-emerald-400 font-mono-data font-black text-xs sm:text-sm">
+                  - {fmt(v.discount_amount)}
+                </span>
+                {onRemoveVoucher && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveVoucher(v.code)}
+                    className="w-6 h-6 rounded-full bg-rose-500/15 hover:bg-rose-500/30 text-rose-400 font-bold text-xs flex items-center justify-center cursor-pointer border border-rose-500/30 ml-1"
+                    title={`Gỡ voucher ${v.code}`}
+                    aria-label={`Gỡ voucher ${v.code}`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {onOpenVoucherModal && (
+            <div className="flex items-center justify-between pt-2 border-t border-white/5">
+              <span className="text-xs opacity-60 font-mono-data">
+                {voucherList.length} mã đã áp dụng
+              </span>
+              <button
+                type="button"
+                onClick={onOpenVoucherModal}
+                className={cn(
+                  'text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer shadow-xs flex items-center gap-1.5',
+                  isDark
+                    ? 'bg-white/5 hover:bg-white/10 text-amber-400 border-white/10'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300'
+                )}
+              >
+                <Tag className="w-3 h-3" />
+                <span>Đổi mã voucher</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Total */}
-      <div className={cn('border-t pt-3.5 mt-1 flex justify-between items-baseline', isDark ? 'border-white/10' : 'border-slate-200')}>
-        <span className={cn('text-sm font-black', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>Tổng cộng</span>
-        <span className={cn('font-display text-[28px] font-black', isDark ? 'text-[#e8b84b]' : 'text-amber-600')}>{fmt(total)}</span>
+      {/* 4. Total Row */}
+      <div className={cn('border-t pt-4 mt-2 flex justify-between items-baseline', isDark ? 'border-white/10' : 'border-slate-200')}>
+        <span className={cn('text-sm sm:text-base font-black', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>Tổng thanh toán</span>
+        <span className="font-display text-3xl sm:text-4xl font-black text-emerald-400">{fmt(total)}</span>
       </div>
     </div>
   )
@@ -263,29 +473,29 @@ export function PaymentMethods({ selected, onSelect }: PaymentMethodsProps) {
   const methods = [
     {
       id: 'vnpay',
-      title: 'VNPay / ATM',
-      subtitle: 'Cổng thanh toán online',
+      title: 'VNPay / Thẻ ATM',
+      subtitle: 'Quét QR & Internet Banking',
       logo: <VNPayLogo className="h-7 w-auto shrink-0" />,
       enabled: true,
     },
     {
       id: 'momo',
       title: 'Ví MoMo',
-      subtitle: 'Sắp hỗ trợ',
+      subtitle: 'Sắp ra mắt',
       logo: <MoMoLogo className="h-7 w-7 shrink-0" />,
       enabled: false,
     },
     {
       id: 'zalopay',
       title: 'Ví ZaloPay',
-      subtitle: 'Sắp hỗ trợ',
+      subtitle: 'Sắp ra mắt',
       logo: <ZaloPayLogo className="h-7 w-auto shrink-0" />,
       enabled: false,
     },
     {
       id: 'cash',
       title: 'Tiền mặt',
-      subtitle: 'Thanh toán tại rạp chiếu',
+      subtitle: 'Thanh toán tại quầy vé',
       logo: null,
       enabled: true,
     },
@@ -294,11 +504,12 @@ export function PaymentMethods({ selected, onSelect }: PaymentMethodsProps) {
   return (
     <div className="mb-7">
       <div className="flex items-center justify-between mb-3.5">
-        <h4 className={cn('text-sm font-extrabold', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
-          Phương thức thanh toán
+        <h4 className={cn('text-xs sm:text-sm font-bold uppercase font-mono-data flex items-center gap-2', isDark ? 'text-amber-400' : 'text-amber-800')}>
+          <CreditCard className="w-4 h-4 text-amber-500" />
+          <span>Phương thức thanh toán</span>
         </h4>
         <span className={cn('text-xs font-normal', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
-          Chọn 1 phương thức để tiếp tục
+          Chọn 1 phương thức
         </span>
       </div>
 
@@ -313,21 +524,21 @@ export function PaymentMethods({ selected, onSelect }: PaymentMethodsProps) {
               onClick={() => m.enabled && onSelect(m.id)}
               disabled={!m.enabled}
               className={cn(
-                'relative p-4 rounded-2xl border text-left transition-all duration-200 flex flex-col justify-between items-start min-h-[100px] cursor-pointer group',
+                'relative p-4 rounded-2xl border text-left transition-all duration-200 flex flex-col justify-between items-start min-h-[105px] cursor-pointer group shadow-xs',
                 !m.enabled && 'opacity-40 cursor-not-allowed border-dashed bg-slate-500/5',
                 m.enabled && isSelected
                   ? isDark
-                    ? 'border-[#e8b84b] bg-[#e8b84b]/15 text-[#f0ede8] ring-2 ring-[#e8b84b]/40 shadow-lg'
+                    ? 'border-amber-500 bg-amber-500/15 text-[#f0ede8] ring-2 ring-amber-500/40 shadow-lg'
                     : 'border-amber-500 bg-amber-50 text-slate-900 ring-2 ring-amber-500/40 shadow-md'
                   : m.enabled && (isDark
                   ? 'border-white/10 bg-[#111118] text-[#a09e9a] hover:border-white/20 hover:bg-[#161622]'
-                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 shadow-xs')
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 shadow-2xs')
               )}
             >
               {/* Checkmark badge when selected */}
               {m.enabled && isSelected && (
                 <span className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center text-xs font-black shadow-sm">
-                  ✓
+                  <Check className="w-3 h-3 stroke-[3]" />
                 </span>
               )}
 
@@ -336,8 +547,9 @@ export function PaymentMethods({ selected, onSelect }: PaymentMethodsProps) {
                 {m.logo ? (
                   m.logo
                 ) : (
-                  <span className={cn('text-xs font-bold font-mono-data px-2 py-0.5 rounded border', isDark ? 'border-white/10 text-[#a09e9a]' : 'border-slate-200 text-slate-500')}>
-                    💵 Tiền mặt
+                  <span className={cn('text-xs font-bold font-mono-data px-2.5 py-1 rounded-lg border flex items-center gap-1.5', isDark ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10' : 'border-emerald-200 text-emerald-800 bg-emerald-50')}>
+                    <Banknote className="w-4 h-4 text-emerald-500" />
+                    <span>Tiền mặt</span>
                   </span>
                 )}
               </div>
@@ -367,3 +579,4 @@ export function PaymentMethods({ selected, onSelect }: PaymentMethodsProps) {
     </div>
   )
 }
+

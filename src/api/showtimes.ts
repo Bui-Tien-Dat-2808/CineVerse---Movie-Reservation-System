@@ -141,11 +141,13 @@ export async function createReservationAPI(
   seatIds: number[],
   voucherCode?: string,
   concessionOrders?: Array<{ concession_id: number; quantity: number; custom_options?: string; unit_price?: number }>,
+  paymentMethod?: string,
 ): Promise<any> {
   const { data } = await apiClient.post('/api/v1/reservations/', {
     showtime_id: showtimeId,
     seat_ids: seatIds,
     voucher_code: voucherCode || undefined,
+    payment_method: paymentMethod || 'vnpay',
     concessions: concessionOrders?.length ? concessionOrders : undefined,
   })
   return data

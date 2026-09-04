@@ -1,4 +1,6 @@
+import { Search } from 'lucide-react'
 import { useGenres } from '../../../hooks/useMovies'
+import { useTheme } from '../../../context/ThemeContext'
 import { cn } from '../../../lib/utils'
 
 interface SearchBarProps {
@@ -18,6 +20,8 @@ export default function SearchBar({
   resultCount,
   isLoading,
 }: SearchBarProps) {
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
   const { data: apiGenres } = useGenres()
 
   const genreList = ['All', ...(apiGenres ? apiGenres.map((g) => g.name.replace(/^Phim\s+/i, '')) : [])]
@@ -31,16 +35,21 @@ export default function SearchBar({
       <div className="flex gap-3 mb-7 flex-wrap">
         {/* Search input */}
         <div className="relative flex-1 min-w-[280px] max-w-[400px]">
-          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6e6c68] text-base pointer-events-none">
-            ⌕
+          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+            <Search className={cn('w-4 h-4', isDark ? 'text-[#6e6c68]' : 'text-slate-400')} />
           </span>
           <input
             id="movie-search"
             type="text"
             value={searchQuery}
             onChange={(e) => onSearch(e.target.value)}
-            placeholder="Tìm kiếm phim..."
-            className="w-full pl-10 pr-4 py-[11px] bg-[#111118] border border-white/[0.08] rounded text-[#f0ede8] text-sm outline-none placeholder:text-[#4e4c48] focus:border-[rgba(232,184,75,0.35)] transition-colors"
+            placeholder="Tìm kiếm tên phim, đạo diễn..."
+            className={cn(
+              'w-full pl-10 pr-4 py-2.5 rounded-xl text-sm outline-none transition-all border',
+              isDark
+                ? 'bg-[#111118] border-white/10 text-[#f0ede8] placeholder:text-[#6e6c68] focus:border-[#e8b84b]/60'
+                : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-amber-500 shadow-xs'
+            )}
           />
         </div>
 
@@ -51,20 +60,24 @@ export default function SearchBar({
               key={g}
               onClick={() => onGenre(g)}
               className={cn(
-                'px-4 py-[9px] rounded text-[13px] font-medium cursor-pointer border transition-all duration-150',
+                'px-4 py-2 rounded-xl text-xs font-bold cursor-pointer border transition-all duration-150',
                 activeGenre === g
-                  ? 'border-[#e8b84b] bg-[rgba(232,184,75,0.12)] text-[#e8b84b]'
-                  : 'border-white/[0.08] bg-[#111118] text-[#a09e9a] hover:border-white/20 hover:text-[#f0ede8]',
+                  ? isDark
+                    ? 'border-[#e8b84b] bg-[#e8b84b]/15 text-[#e8b84b] shadow-sm'
+                    : 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                  : isDark
+                    ? 'border-white/10 bg-[#111118] text-[#a09e9a] hover:border-white/20 hover:text-[#f0ede8]'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900 shadow-2xs'
               )}
             >
-              {g}
+              {g === 'All' ? 'Tất cả thể loại' : g}
             </button>
           ))}
         </div>
       </div>
 
       {/* Results header / count */}
-      <div className="flex justify-between items-center text-xs text-[#a09e9a] font-mono-data mb-6">
+      <div className={cn('flex justify-between items-center text-xs font-mono-data mb-6', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
         <span>
           {isLoading
             ? 'Đang tải danh sách phim...'

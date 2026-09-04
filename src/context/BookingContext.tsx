@@ -253,50 +253,53 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     }))
   }, [state.selectedConcessions])
 
-  const value: BookingContextValue = {
-    state,
-    totalPrice,
-    concessionTotal,
-    concessionsTotal: concessionTotal,
-    selectedConcessionsList,
-    calculateTotalPrice: calcTotalPrice,
-    selectMovie: (movie) => dispatch({ type: 'SELECT_MOVIE', payload: movie }),
-    selectDate: (i) => dispatch({ type: 'SELECT_DATE', payload: i }),
-    selectShowtime: (st) => dispatch({ type: 'SELECT_SHOWTIME', payload: st }),
-    toggleSeat: (key) => dispatch({ type: 'TOGGLE_SEAT', payload: key }),
-    clearSeats: () => dispatch({ type: 'CLEAR_SEATS' }),
-    setConcession: (concession, quantity, customOptions, unitPrice, itemKey) =>
-      dispatch({
-        type: 'SET_CONCESSION',
-        payload: { concession, quantity, customOptions, unitPrice, itemKey },
-      }),
-    addConcession: (concession, quantity = 1, customOptions, unitPrice) =>
-      dispatch({
-        type: 'SET_CONCESSION',
-        payload: { concession, quantity, customOptions, unitPrice },
-      }),
-    updateConcessionQuantity: (itemKey, quantity) => {
-      const item = state.selectedConcessions.get(itemKey)
-      if (item) {
+  const value = useMemo<BookingContextValue>(
+    () => ({
+      state,
+      totalPrice,
+      concessionTotal,
+      concessionsTotal: concessionTotal,
+      selectedConcessionsList,
+      calculateTotalPrice: calcTotalPrice,
+      selectMovie: (movie) => dispatch({ type: 'SELECT_MOVIE', payload: movie }),
+      selectDate: (i) => dispatch({ type: 'SELECT_DATE', payload: i }),
+      selectShowtime: (st) => dispatch({ type: 'SELECT_SHOWTIME', payload: st }),
+      toggleSeat: (key) => dispatch({ type: 'TOGGLE_SEAT', payload: key }),
+      clearSeats: () => dispatch({ type: 'CLEAR_SEATS' }),
+      setConcession: (concession, quantity, customOptions, unitPrice, itemKey) =>
         dispatch({
           type: 'SET_CONCESSION',
-          payload: {
-            concession: item.concession,
-            quantity,
-            customOptions: item.customOptions,
-            unitPrice: item.unitPrice,
-            itemKey,
-          },
-        })
-      }
-    },
-    removeConcession: (itemKey) => dispatch({ type: 'REMOVE_CONCESSION_KEY', payload: itemKey }),
-    removeConcessionKey: (key) => dispatch({ type: 'REMOVE_CONCESSION_KEY', payload: key }),
-    clearConcessions: () => dispatch({ type: 'CLEAR_CONCESSIONS' }),
-    setCreatedReservation: (reservation) =>
-      dispatch({ type: 'SET_CREATED_RESERVATION', payload: reservation }),
-    reset: () => dispatch({ type: 'RESET' }),
-  }
+          payload: { concession, quantity, customOptions, unitPrice, itemKey },
+        }),
+      addConcession: (concession, quantity = 1, customOptions, unitPrice) =>
+        dispatch({
+          type: 'SET_CONCESSION',
+          payload: { concession, quantity, customOptions, unitPrice },
+        }),
+      updateConcessionQuantity: (itemKey, quantity) => {
+        const item = state.selectedConcessions.get(itemKey)
+        if (item) {
+          dispatch({
+            type: 'SET_CONCESSION',
+            payload: {
+              concession: item.concession,
+              quantity,
+              customOptions: item.customOptions,
+              unitPrice: item.unitPrice,
+              itemKey,
+            },
+          })
+        }
+      },
+      removeConcession: (itemKey) => dispatch({ type: 'REMOVE_CONCESSION_KEY', payload: itemKey }),
+      removeConcessionKey: (key) => dispatch({ type: 'REMOVE_CONCESSION_KEY', payload: key }),
+      clearConcessions: () => dispatch({ type: 'CLEAR_CONCESSIONS' }),
+      setCreatedReservation: (reservation) =>
+        dispatch({ type: 'SET_CREATED_RESERVATION', payload: reservation }),
+      reset: () => dispatch({ type: 'RESET' }),
+    }),
+    [state, totalPrice, concessionTotal, selectedConcessionsList, calcTotalPrice],
+  )
 
   return <BookingContext.Provider value={value}>{children}</BookingContext.Provider>
 }

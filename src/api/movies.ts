@@ -1,5 +1,6 @@
 import { apiClient } from './client'
 import type { Movie, CastMember } from '../types'
+import { normalizeInternationalName } from '../lib/utils'
 
 // ── Response shape từ backend (/api/v1/movies/now-showing) ──
 export interface MovieListItem {
@@ -50,6 +51,13 @@ export interface GenreItem {
 
 /** Transform backend schema → Frontend Movie type */
 export function mapMovieItem(m: MovieListItem): Movie {
+  const normalizedCast = m.cast
+    ? m.cast.map((c) => ({
+        ...c,
+        name: normalizeInternationalName(c.name),
+      }))
+    : undefined
+
   return {
     id: m.id,
     title: m.title,
@@ -62,20 +70,22 @@ export function mapMovieItem(m: MovieListItem): Movie {
     avg_rating: m.avg_rating,
     total_reviews: m.total_reviews ?? 0,
     year: m.release_date ? new Date(m.release_date).getFullYear() : 2026,
-    director: m.director ?? '',
+    director: normalizeInternationalName(m.director) || '',
     synopsis: m.description || 'Nội dung bộ phim đang được cập nhật. Vui lòng theo dõi thêm thông tin chi tiết.',
     img: m.poster_url
       ?? `https://placehold.co/480x680/111118/f0ede8?text=${encodeURIComponent(m.title)}`,
     trailerUrl: m.trailer_url || undefined,
-    cast: m.cast || undefined,
+    cast: normalizedCast,
     status: m.status,
   }
 }
 
 /** GET /api/v1/movies/now-showing — returns { items, meta } */
-export async function fetchNowShowingMovies(page = 1, pageSize = 5000): Promise<Movie[]> {
+export async function fetchNowShowingMovies(page: any = 1, pageSize: any = 5000): Promise<Movie[]> {
+  const safePage = typeof page === 'number' && !isNaN(page) ? page : 1
+  const safePageSize = typeof pageSize === 'number' && !isNaN(pageSize) ? pageSize : 5000
   const { data } = await apiClient.get<PaginatedResponse<MovieListItem>>(
-    `/api/v1/movies/now-showing?page=${page}&page_size=${pageSize}`,
+    `/api/v1/movies/now-showing?page=${safePage}&page_size=${safePageSize}`,
   )
   return data.items.map(mapMovieItem)
 }

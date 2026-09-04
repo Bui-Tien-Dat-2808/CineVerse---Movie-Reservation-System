@@ -69,16 +69,14 @@ function AppShell() {
 
   return (
     <div className="min-h-screen relative bg-cinema-pattern text-[#f0ede8] selection:bg-[#e8b84b] selection:text-[#09090e]">
-      {/* Decorative ambient background glows */}
+      {/* Decorative subtle ambient cinema ceiling glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
-        <div className="absolute -top-[20%] left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-radial from-[#e8b84b]/10 via-[#e8b84b]/2 to-transparent rounded-full blur-3xl opacity-70" />
-        <div className="absolute top-[30%] -left-[10%] w-[600px] h-[600px] bg-radial from-[#c0392b]/6 via-transparent to-transparent rounded-full blur-3xl" />
-        <div className="absolute top-[60%] -right-[10%] w-[700px] h-[700px] bg-radial from-[#8e44ad]/5 via-transparent to-transparent rounded-full blur-3xl" />
+        <div className="absolute -top-[15%] left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-gradient-to-b from-[#e8b84b]/8 to-transparent rounded-full blur-3xl opacity-60" />
       </div>
 
       <Navbar />
 
-      <main className="relative z-10 pt-16">
+      <main className="relative pt-16">
         <Suspense fallback={<PageFallback />}>
           <Routes>
             <Route path="/" element={isAdmin ? <Navigate to="/admin" replace /> : <HomeView />} />

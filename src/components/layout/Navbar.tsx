@@ -1,32 +1,56 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import {
+  Film,
+  Clock,
+  Building2,
+  Ticket,
+  Popcorn,
+  Sparkles,
+  RotateCcw,
+  MessageSquare,
+  BarChart3,
+  User as UserIcon,
+  Sun,
+  Moon,
+  LogOut,
+  ChevronDown,
+  ChevronUp,
+  Menu,
+  X,
+  ShieldCheck,
+  Check,
+  MoreHorizontal,
+  Tag,
+  Award,
+} from 'lucide-react'
 import { useBooking } from '../../context/BookingContext'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { cn } from '../../lib/utils'
 
 const USER_NAV_ITEMS = [
-  { label: 'Phim đang chiếu', icon: '🎬', path: '/' },
-  { label: 'Sắp ra mắt', icon: '⏳', path: '/sap-ra-mat' },
-  { label: 'Rạp chiếu', icon: '🏛️', path: '/rap-chieu' },
-  { label: 'Khuyến mãi', icon: '🎟️', path: '/khuyen-mai' },
+  { label: 'Phim đang chiếu', Icon: Film, path: '/' },
+  { label: 'Sắp ra mắt', Icon: Clock, path: '/sap-ra-mat' },
+  { label: 'Rạp chiếu', Icon: Building2, path: '/rap-chieu' },
+  { label: 'Khuyến mãi', Icon: Tag, path: '/khuyen-mai' },
 ]
 
 // Primary Admin Nav Items (Shown directly on Navbar)
 const PRIMARY_ADMIN_NAV_ITEMS = [
-  { label: 'Phim', icon: '🎬', tab: 'movies' },
-  { label: 'Suất chiếu', icon: '🕐', tab: 'showtimes' },
-  { label: 'Phòng chiếu', icon: '🏛️', tab: 'rooms' },
-  { label: 'Bắp nước', icon: '🍿', tab: 'concessions' },
+  { label: 'Phim', Icon: Film, tab: 'movies' },
+  { label: 'Suất chiếu', Icon: Clock, tab: 'showtimes' },
+  { label: 'Phòng chiếu', Icon: Building2, tab: 'rooms' },
+  { label: 'Bắp nước', Icon: Popcorn, tab: 'concessions' },
 ]
 
 // Secondary Admin Nav Items (Inside "Thêm" Dropdown Menu)
 const MORE_ADMIN_NAV_ITEMS = [
-  { label: 'Voucher', icon: '🎟️', tab: 'vouchers', desc: 'Quản lý mã giảm giá' },
-  { label: 'Tích điểm', icon: '🏆', tab: 'loyalty', desc: 'Điểm thưởng thành viên' },
-  { label: 'Hoàn tiền', icon: '💸', tab: 'refunds', desc: 'Yêu cầu hoàn tiền vé' },
-  { label: 'Đánh giá', icon: '💬', tab: 'reviews', desc: 'Kiểm duyệt bình luận phim' },
-  { label: 'Báo cáo', icon: '📊', tab: 'analytics', desc: 'Thống kê & báo cáo' },
+  { label: 'Voucher', Icon: Ticket, tab: 'vouchers', desc: 'Quản lý mã giảm giá' },
+  { label: 'Tích điểm', Icon: Award, tab: 'loyalty', desc: 'Điểm thưởng thành viên' },
+  { label: 'Hoàn tiền', Icon: RotateCcw, tab: 'refunds', desc: 'Yêu cầu hoàn tiền vé' },
+  { label: 'Đánh giá', Icon: MessageSquare, tab: 'reviews', desc: 'Kiểm duyệt bình luận phim' },
+  { label: 'Báo cáo', Icon: BarChart3, tab: 'analytics', desc: 'Thống kê & báo cáo' },
 ]
 
 export default function Navbar() {
@@ -133,6 +157,7 @@ export default function Navbar() {
               {/* Primary 4 Admin Tabs */}
               {PRIMARY_ADMIN_NAV_ITEMS.map((item) => {
                 const isActive = currentAdminTab === item.tab
+                const IconComponent = item.Icon
                 return (
                   <button
                     key={item.tab}
@@ -142,7 +167,7 @@ export default function Navbar() {
                       window.scrollTo({ top: 0, behavior: 'smooth' })
                     }}
                     className={cn(
-                      'bg-transparent border-0 cursor-pointer text-xs lg:text-sm font-medium transition-all duration-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 whitespace-nowrap',
+                      'bg-transparent border-0 cursor-pointer text-xs lg:text-sm font-medium transition-all duration-200 px-3 py-1.5 rounded-xl flex items-center gap-2 whitespace-nowrap',
                       isActive
                         ? isDark
                           ? 'text-[#e8b84b] font-bold border-b-2 border-[#e8b84b] bg-white/5'
@@ -152,7 +177,7 @@ export default function Navbar() {
                         : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100 font-bold',
                     )}
                   >
-                    <span className="text-sm">{item.icon}</span>
+                    <IconComponent className="w-4 h-4 shrink-0 stroke-[1.75]" />
                     <span>{item.label}</span>
                   </button>
                 )
@@ -174,9 +199,13 @@ export default function Navbar() {
                       : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100 font-bold',
                   )}
                 >
-                  <span className="text-sm">⋯</span>
+                  <MoreHorizontal className="w-4 h-4 shrink-0 stroke-[1.75]" />
                   <span>{activeMoreItem ? activeMoreItem.label : 'Thêm'}</span>
-                  <span className="text-[9px] opacity-70">{moreMenuOpen ? '▲' : '▼'}</span>
+                  {moreMenuOpen ? (
+                    <ChevronUp className="w-3.5 h-3.5 opacity-70 shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 opacity-70 shrink-0" />
+                  )}
                 </button>
 
                 {/* Dropdown Menu Panel */}
@@ -195,6 +224,7 @@ export default function Navbar() {
                     </div>
                     {MORE_ADMIN_NAV_ITEMS.map((subItem) => {
                       const isSubActive = currentAdminTab === subItem.tab
+                      const SubIcon = subItem.Icon
                       return (
                         <button
                           key={subItem.tab}
@@ -216,13 +246,13 @@ export default function Navbar() {
                           )}
                         >
                           <div className="flex items-center gap-2.5">
-                            <span className="text-base">{subItem.icon}</span>
+                            <SubIcon className="w-4 h-4 shrink-0 text-[#e8b84b] stroke-[1.75]" />
                             <div>
                               <p className="leading-tight">{subItem.label}</p>
                               <p className={cn('text-[10px] font-normal font-mono-data', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>{subItem.desc}</p>
                             </div>
                           </div>
-                          {isSubActive && <span className="text-xs text-amber-500 font-bold">✓</span>}
+                          {isSubActive && <Check className="w-3.5 h-3.5 text-amber-500 stroke-[2.5]" />}
                         </button>
                       )
                     })}
@@ -233,6 +263,7 @@ export default function Navbar() {
           ) : (
             USER_NAV_ITEMS.map((item) => {
               const isActive = location.pathname === item.path
+              const NavIcon = item.Icon
               return (
                 <button
                   key={item.label}
@@ -242,7 +273,7 @@ export default function Navbar() {
                     window.scrollTo({ top: 0, behavior: 'smooth' })
                   }}
                   className={cn(
-                    'bg-transparent border-0 cursor-pointer text-xs lg:text-sm font-medium transition-all duration-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 whitespace-nowrap',
+                    'bg-transparent border-0 cursor-pointer text-xs lg:text-sm font-medium transition-all duration-200 px-3 py-1.5 rounded-xl flex items-center gap-2 whitespace-nowrap',
                     isActive
                       ? isDark
                         ? 'text-[#e8b84b] font-bold border-b-2 border-[#e8b84b] bg-white/5'
@@ -252,7 +283,7 @@ export default function Navbar() {
                       : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100 font-bold',
                   )}
                 >
-                  <span className="text-sm">{item.icon}</span>
+                  <NavIcon className="w-4 h-4 shrink-0 stroke-[1.75]" />
                   <span>{item.label}</span>
                 </button>
               )
@@ -277,7 +308,7 @@ export default function Navbar() {
                   )}
                 >
                   <div className="w-7 h-7 rounded-full bg-[#e8b84b]/20 text-[#e8b84b] font-bold text-xs flex items-center justify-center border border-[#e8b84b]/40">
-                    {user?.full_name ? user.full_name.charAt(0).toUpperCase() : '👤'}
+                    {user?.full_name ? user.full_name.charAt(0).toUpperCase() : <UserIcon className="w-3.5 h-3.5" />}
                   </div>
                   <div className="hidden sm:block">
                     <p className={cn(
@@ -286,13 +317,25 @@ export default function Navbar() {
                     )}>
                       {user?.full_name ?? user?.email.split('@')[0]}
                     </p>
-                    <span className={cn('font-mono-data text-[9px]', isDark ? 'text-[#a09e9a]' : 'text-slate-600 font-medium')}>
-                      {user?.role === 'admin' ? '⚡ Admin' : 'Khách hàng · Hạng Bạc 🎟️'}
+                    <span className={cn('font-mono-data text-[9px] flex items-center gap-1', isDark ? 'text-[#a09e9a]' : 'text-slate-600 font-medium')}>
+                      {user?.role === 'admin' ? (
+                        <>
+                          <ShieldCheck className="w-3 h-3 text-amber-400 inline" />
+                          <span>Admin</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-2.5 h-2.5 text-amber-400 inline" />
+                          <span>Hạng Bạc</span>
+                        </>
+                      )}
                     </span>
                   </div>
-                  <span className={cn('text-[10px] ml-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
-                    {userMenuOpen ? '▲' : '▼'}
-                  </span>
+                  {userMenuOpen ? (
+                    <ChevronUp className="w-3 h-3 opacity-70 ml-0.5" />
+                  ) : (
+                    <ChevronDown className="w-3 h-3 opacity-70 ml-0.5" />
+                  )}
                 </button>
 
                 {/* Dropdown Menu */}
@@ -307,8 +350,18 @@ export default function Navbar() {
                     <div className={cn('p-2.5 border-b mb-1', isDark ? 'border-white/10' : 'border-slate-200')}>
                       <p className={cn('font-bold truncate', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>{user?.full_name || 'System Administrator'}</p>
                       <p className={cn('text-[10px] truncate mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>{user?.email}</p>
-                      <span className="inline-block mt-1.5 px-2 py-0.5 rounded text-[9px] font-bold font-mono-data bg-[#e8b84b]/15 text-[#e8b84b] border border-[#e8b84b]/30">
-                        {user?.role === 'admin' ? '⚡ Quyền Admin' : '🎟️ Khách Hàng · Thành Viên Bạc'}
+                      <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded text-[9px] font-bold font-mono-data bg-[#e8b84b]/15 text-[#e8b84b] border border-[#e8b84b]/30">
+                        {user?.role === 'admin' ? (
+                          <>
+                            <ShieldCheck className="w-3 h-3 text-amber-400" />
+                            <span>Quyền Quản Trị Admin</span>
+                          </>
+                        ) : (
+                          <>
+                            <Ticket className="w-3 h-3 text-amber-400" />
+                            <span>Thành Viên Bạc</span>
+                          </>
+                        )}
                       </span>
                     </div>
 
@@ -321,13 +374,13 @@ export default function Navbar() {
                           navigate('/admin')
                         }}
                         className={cn(
-                          'w-full text-left px-3 py-2 rounded-xl font-bold transition-colors flex items-center gap-2 cursor-pointer',
+                          'w-full text-left px-3 py-2 rounded-xl font-bold transition-colors flex items-center gap-2.5 cursor-pointer',
                           location.pathname.startsWith('/admin')
                             ? 'bg-[#e8b84b]/15 text-[#e8b84b]'
                             : isDark ? 'text-[#f0ede8] hover:bg-white/5 hover:text-[#e8b84b]' : 'text-slate-800 hover:bg-amber-50 hover:text-amber-900'
                         )}
                       >
-                        <span>⚡</span>
+                        <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
                         <span>Bảng Quản Trị Admin</span>
                       </button>
                     )}
@@ -340,11 +393,11 @@ export default function Navbar() {
                         navigate('/profile?tab=profile')
                       }}
                       className={cn(
-                        'w-full text-left px-3 py-2 rounded-xl font-bold transition-colors flex items-center gap-2 cursor-pointer',
+                        'w-full text-left px-3 py-2 rounded-xl font-bold transition-colors flex items-center gap-2.5 cursor-pointer',
                         isDark ? 'text-[#f0ede8] hover:bg-white/5 hover:text-[#e8b84b]' : 'text-slate-800 hover:bg-amber-50 hover:text-amber-900'
                       )}
                     >
-                      <span>👤</span>
+                      <UserIcon className="w-4 h-4 text-slate-400 shrink-0" />
                       <span>Thông Tin Cá Nhân</span>
                     </button>
 
@@ -357,11 +410,11 @@ export default function Navbar() {
                           navigate('/profile?tab=history')
                         }}
                         className={cn(
-                          'w-full text-left px-3 py-2 rounded-xl font-bold transition-colors flex items-center gap-2 cursor-pointer',
+                          'w-full text-left px-3 py-2 rounded-xl font-bold transition-colors flex items-center gap-2.5 cursor-pointer',
                           isDark ? 'text-[#f0ede8] hover:bg-white/5 hover:text-[#e8b84b]' : 'text-slate-800 hover:bg-amber-50 hover:text-amber-900'
                         )}
                       >
-                        <span>🎟️</span>
+                        <Ticket className="w-4 h-4 text-slate-400 shrink-0" />
                         <span>Lịch Sử Mua Vé</span>
                       </button>
                     )}
@@ -375,11 +428,11 @@ export default function Navbar() {
                           navigate('/profile?tab=vouchers')
                         }}
                         className={cn(
-                          'w-full text-left px-3 py-2 rounded-xl font-bold transition-colors flex items-center gap-2 cursor-pointer',
+                          'w-full text-left px-3 py-2 rounded-xl font-bold transition-colors flex items-center gap-2.5 cursor-pointer',
                           isDark ? 'text-[#f0ede8] hover:bg-white/5 hover:text-[#e8b84b]' : 'text-slate-800 hover:bg-amber-50 hover:text-amber-900'
                         )}
                       >
-                        <span>🏷️</span>
+                        <Tag className="w-4 h-4 text-slate-400 shrink-0" />
                         <span>Voucher Của Tôi</span>
                       </button>
                     )}
@@ -393,11 +446,11 @@ export default function Navbar() {
                           navigate('/profile?tab=loyalty')
                         }}
                         className={cn(
-                          'w-full text-left px-3 py-2 rounded-xl font-bold transition-colors flex items-center gap-2 cursor-pointer',
+                          'w-full text-left px-3 py-2 rounded-xl font-bold transition-colors flex items-center gap-2.5 cursor-pointer',
                           isDark ? 'text-[#f0ede8] hover:bg-white/5 hover:text-[#e8b84b]' : 'text-slate-800 hover:bg-amber-50 hover:text-amber-900'
                         )}
                       >
-                        <span>🏆</span>
+                        <Award className="w-4 h-4 text-slate-400 shrink-0" />
                         <span>Điểm Thưởng</span>
                       </button>
                     )}
@@ -413,15 +466,19 @@ export default function Navbar() {
                         isDark ? 'text-[#f0ede8] hover:bg-white/5 hover:text-[#e8b84b]' : 'text-slate-800 hover:bg-amber-50 hover:text-amber-900'
                       )}
                     >
-                      <div className="flex items-center gap-2">
-                        <span>{theme === 'dark' ? '🌙' : '☀️'}</span>
+                      <div className="flex items-center gap-2.5">
+                        {theme === 'dark' ? (
+                          <Moon className="w-4 h-4 text-indigo-400 shrink-0" />
+                        ) : (
+                          <Sun className="w-4 h-4 text-amber-500 shrink-0" />
+                        )}
                         <span>Giao diện {theme === 'dark' ? 'Tối' : 'Sáng'}</span>
                       </div>
                       <span className={cn(
                         'text-[10px] font-mono-data rounded px-1.5 py-0.5 border',
                         isDark ? 'bg-white/5 border-white/10 text-[#a09e9a]' : 'bg-slate-100 border-slate-300 text-slate-700'
                       )}>
-                        {theme === 'dark' ? 'Dark Mode' : 'Light Mode'}
+                        {theme === 'dark' ? 'Dark' : 'Light'}
                       </span>
                     </button>
 
@@ -435,9 +492,9 @@ export default function Navbar() {
                         logout()
                         navigate('/')
                       }}
-                      className="w-full text-left px-3 py-2 rounded-xl text-red-500 hover:bg-red-500/10 font-bold transition-colors flex items-center gap-2 cursor-pointer"
+                      className="w-full text-left px-3 py-2 rounded-xl text-rose-500 hover:bg-rose-500/10 font-bold transition-colors flex items-center gap-2.5 cursor-pointer"
                     >
-                      <span>🚪</span>
+                      <LogOut className="w-4 h-4 shrink-0" />
                       <span>Đăng Xuất</span>
                     </button>
                   </div>
@@ -457,7 +514,11 @@ export default function Navbar() {
                 )}
                 title={theme === 'dark' ? 'Chuyển sang Giao diện Sáng' : 'Chuyển sang Giao diện Tối'}
               >
-                <span>{theme === 'dark' ? '🌙' : '☀️'}</span>
+                {theme === 'dark' ? (
+                  <Moon className="w-4 h-4 text-amber-400" />
+                ) : (
+                  <Sun className="w-4 h-4 text-amber-600" />
+                )}
               </button>
               <button
                 type="button"
@@ -481,7 +542,7 @@ export default function Navbar() {
             )}
             aria-label="Toggle Navigation Menu"
           >
-            {mobileMenuOpen ? '✕' : '☰'}
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
       </div>
@@ -496,11 +557,13 @@ export default function Navbar() {
         )}>
           {isAdminPage ? (
             <div className="space-y-1">
-              <p className={cn('text-[10px] uppercase font-mono-data font-bold px-3 py-1', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
-                ⚡ Bảng Điều Khiển Admin
+              <p className={cn('text-[10px] uppercase font-mono-data font-bold px-3 py-1 flex items-center gap-1.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                <span>Bảng Điều Khiển Admin</span>
               </p>
               {[...PRIMARY_ADMIN_NAV_ITEMS, ...MORE_ADMIN_NAV_ITEMS].map((item) => {
                 const isActive = currentAdminTab === item.tab
+                const ItemIcon = item.Icon
                 return (
                   <button
                     key={item.tab}
@@ -511,7 +574,7 @@ export default function Navbar() {
                       window.scrollTo({ top: 0, behavior: 'smooth' })
                     }}
                     className={cn(
-                      'w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer',
+                      'w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer',
                       isActive
                         ? isDark
                           ? 'bg-[#e8b84b]/15 text-[#e8b84b] border border-[#e8b84b]/30'
@@ -521,7 +584,7 @@ export default function Navbar() {
                           : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100'
                     )}
                   >
-                    <span>{item.icon}</span>
+                    <ItemIcon className="w-4 h-4 shrink-0 text-[#e8b84b]" />
                     <span>{item.label}</span>
                   </button>
                 )
@@ -531,6 +594,7 @@ export default function Navbar() {
             <div className="space-y-1">
               {USER_NAV_ITEMS.map((item) => {
                 const isActive = location.pathname === item.path
+                const ItemIcon = item.Icon
                 return (
                   <button
                     key={item.path}
@@ -552,7 +616,7 @@ export default function Navbar() {
                           : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100'
                     )}
                   >
-                    <span className="text-sm">{item.icon}</span>
+                    <ItemIcon className="w-4 h-4 shrink-0 text-[#e8b84b]" />
                     <span>{item.label}</span>
                   </button>
                 )

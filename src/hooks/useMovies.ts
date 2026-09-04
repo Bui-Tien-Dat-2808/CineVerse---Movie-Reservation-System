@@ -7,7 +7,7 @@ import { fetchNowShowingMovies, fetchMovieById, fetchGenres } from '../api/movie
 export function useNowShowingMovies() {
   return useQuery({
     queryKey: ['movies', 'now-showing'],
-    queryFn: fetchNowShowingMovies,
+    queryFn: () => fetchNowShowingMovies(1, 5000),
     staleTime: 5 * 60 * 1000,
     retry: 1,
   })

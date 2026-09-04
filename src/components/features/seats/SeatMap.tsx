@@ -1,46 +1,21 @@
-import { useMemo } from 'react'
 import type { SeatItem } from '../../../types'
 import { cn } from '../../../lib/utils'
 import { useTheme } from '../../../context/ThemeContext'
+import SeatLegend from './SeatLegend'
 
 interface SeatMapProps {
   selectedSeats: Set<string>
   onToggle: (key: string) => void
   seats?: SeatItem[]
   isLoading?: boolean
+  onRetry?: () => void
 }
 
 export default function SeatMap({ selectedSeats, onToggle, seats, isLoading }: SeatMapProps) {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
-  const safeSeats = useMemo(() => (Array.isArray(seats) ? seats : []), [seats])
-
-  // Group seats by row_label
-  const rowMap = useMemo(() => {
-    const map = new Map<string, SeatItem[]>()
-    safeSeats.forEach((seat) => {
-      const row = seat.row_label
-      if (!map.has(row)) map.set(row, [])
-      map.get(row)!.push(seat)
-    })
-    return map
-  }, [safeSeats])
-
-  // Sort rows alphabetically
-  const rows = useMemo(() => Array.from(rowMap.keys()).sort(), [rowMap])
-
-  // Determine unique active seat types present in this specific room
-  const seatTypesPresent = useMemo(() => {
-    const types = new Set<string>()
-    safeSeats.forEach((s) => {
-      const t = (s.seat_type || 'standard').toLowerCase()
-      types.add(t)
-    })
-    return types
-  }, [safeSeats])
-
-  if (isLoading || seats === undefined) {
+  if (isLoading) {
     return (
       <div className={`py-20 text-center text-xs font-mono-data ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'} animate-pulse`}>
         ⏳ Đang cập nhật sơ đồ ghế từ hệ thống...
@@ -48,55 +23,27 @@ export default function SeatMap({ selectedSeats, onToggle, seats, isLoading }: S
     )
   }
 
-  if (safeSeats.length === 0) {
+  if (!seats || seats.length === 0) {
     return (
       <div className="py-16 text-center text-xs font-mono-data text-[#e07060] bg-[rgba(192,57,43,0.1)] border border-[rgba(192,57,43,0.2)] rounded-xl my-6">
-        ⚠ Không tìm thấy danh sách ghế cho suất chiếu này. Vui lòng chọn lại suất chiếu khác hoặc tải lại trang.
+        ⚠ Không thể tải sơ đồ ghế cho suất chiếu này. Vui lòng chọn lại suất chiếu khác hoặc tải lại trang.
       </div>
     )
   }
 
+  // Group seats by row_label
+  const rowMap = new Map<string, SeatItem[]>()
+  seats.forEach((seat) => {
+    const row = seat.row_label
+    if (!rowMap.has(row)) rowMap.set(row, [])
+    rowMap.get(row)!.push(seat)
+  })
+
+  // Sort rows alphabetically
+  const rows = Array.from(rowMap.keys()).sort()
+
   return (
     <div>
-      {/* Dynamic Room-Type-Aware Seat Legend */}
-      <div className={cn(
-        'flex flex-wrap items-center justify-center gap-3 sm:gap-6 py-2.5 px-4 rounded-xl text-[11px] font-medium border mb-8 max-w-2xl mx-auto',
-        isDark ? 'bg-[#111118]/80 border-white/10 text-[#a09e9a]' : 'bg-slate-50 border-slate-200 text-slate-700 shadow-xs'
-      )}>
-        {seatTypesPresent.has('standard') && (
-          <div className="flex items-center gap-1.5">
-            <span className={cn('w-4 h-4 rounded border flex items-center justify-center text-[8px] font-mono-data', isDark ? 'bg-[#2a2a3a] border-white/30 text-[#c0bdb8]' : 'bg-slate-100 border-slate-300 text-slate-700')}>1</span>
-            <span>Ghế thường</span>
-          </div>
-        )}
-        {seatTypesPresent.has('vip') && (
-          <div className="flex items-center gap-1.5">
-            <span className={cn('w-4 h-4 rounded border flex items-center justify-center text-[8px] font-mono-data font-bold', isDark ? 'bg-[#e8b84b]/15 border-[#e8b84b]/50 text-[#e8b84b]' : 'bg-amber-100 border-amber-400 text-amber-900')}>1</span>
-            <span className="font-bold text-amber-600 dark:text-amber-400">Ghế VIP</span>
-          </div>
-        )}
-        {seatTypesPresent.has('couple') && (
-          <div className="flex items-center gap-1.5">
-            <span className={cn('w-7 h-4 rounded border flex items-center justify-center text-[8px] font-mono-data font-bold', isDark ? 'bg-pink-950/40 border-pink-500/60 text-pink-300' : 'bg-pink-100 border-pink-400 text-pink-900')}>💑</span>
-            <span className="font-bold text-pink-600 dark:text-pink-400">Ghế đôi</span>
-          </div>
-        )}
-        {seatTypesPresent.has('kids') && (
-          <div className="flex items-center gap-1.5">
-            <span className={cn('w-4 h-4 rounded border flex items-center justify-center text-[8px] font-mono-data font-bold', isDark ? 'bg-teal-950/40 border-teal-500/60 text-teal-300' : 'bg-teal-100 border-teal-400 text-teal-900')}>🎈</span>
-            <span className="font-bold text-teal-600 dark:text-teal-400">Ghế trẻ em</span>
-          </div>
-        )}
-        <div className="flex items-center gap-1.5">
-          <span className="w-4 h-4 rounded bg-[#e8b84b] border-2 border-[#e8b84b] text-[#09090e] font-bold flex items-center justify-center text-[8px]">✓</span>
-          <span className="font-bold text-amber-600 dark:text-[#e8b84b]">Đang chọn</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className={cn('w-4 h-4 rounded border opacity-60 flex items-center justify-center text-[8px]', isDark ? 'bg-[#2e1f1f] border-[#3a2a2a] text-[#5a3a3a]' : 'bg-slate-200 border-slate-300 text-slate-400')}>✕</span>
-          <span>Đã bán</span>
-        </div>
-      </div>
-
       {/* Screen indicator */}
       <div className="text-center mb-9">
         <div
@@ -178,6 +125,9 @@ export default function SeatMap({ selectedSeats, onToggle, seats, isLoading }: S
           )
         })}
       </div>
+
+      {/* Seat Legend (Filtered dynamically by room's seats) */}
+      <SeatLegend seats={seats} />
     </div>
   )
 }

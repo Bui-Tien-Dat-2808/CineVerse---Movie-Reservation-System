@@ -1,6 +1,21 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
+  Star,
+  Pencil,
+  Trash2,
+  Calendar,
+  CheckCircle2,
+  Film,
+  AlertCircle,
+  X,
+  MessageSquare,
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
+} from 'lucide-react'
+import {
   fetchMovieReviewsAPI,
   fetchMyReviewAPI,
   submitReviewAPI,
@@ -9,6 +24,7 @@ import {
 } from '../../../api/reviews'
 import { useAuth } from '../../../context/AuthContext'
 import { useTheme } from '../../../context/ThemeContext'
+import { cn } from '../../../lib/utils'
 
 interface MovieReviewsSectionProps {
   movieId: number
@@ -115,22 +131,28 @@ export default function MovieReviewsSection({ movieId, movieTitle }: MovieReview
     return items
   }, [reviewsData?.items, myReview, page])
 
+  const totalPages = Math.ceil(total / 10) || 1
+
   return (
-    <div className={`mt-10 p-6 sm:p-8 rounded-3xl border transition-colors ${
-      isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-sm'
-    }`}>
-      {/* Section Title */}
-      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b ${
+    <section aria-label="Đánh giá từ khán giả" className={cn(
+      'mt-10 p-6 sm:p-8 rounded-3xl border transition-colors shadow-xl',
+      isDark ? 'bg-[#0e0e16]/95 border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+    )}>
+      {/* Section Header */}
+      <div className={cn(
+        'flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b',
         isDark ? 'border-white/10' : 'border-slate-200'
-      }`}>
+      )}>
         <div>
-          <h3 className={`font-display font-black text-xl flex items-center gap-2.5 ${
-            isDark ? 'text-[#f0ede8]' : 'text-slate-900'
-          }`}>
-            <span className="text-amber-500">⭐</span>
-            <span>Đánh Giá & Nhận Xét Từ Khán Giả</span>
-          </h3>
-          <p className={`text-xs mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <Star className="w-4 h-4 fill-amber-400" />
+            </div>
+            <h3 className={cn('font-display font-black text-xl tracking-tight', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+              Đánh Giá & Nhận Xét Từ Khán Giả
+            </h3>
+          </div>
+          <p className={cn('text-xs', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
             Được đóng góp và chia sẻ bởi cộng đồng người xem tại CineVerse
           </p>
         </div>
@@ -138,55 +160,65 @@ export default function MovieReviewsSection({ movieId, movieTitle }: MovieReview
         <button
           type="button"
           onClick={handleOpenWriteModal}
-          className="px-5 py-3 rounded-2xl bg-[#e8b84b] hover:bg-[#d8a83b] text-[#09090e] text-xs font-black transition-all cursor-pointer shadow-lg shadow-amber-500/15 uppercase tracking-wider flex items-center justify-center gap-2 self-start sm:self-auto"
+          className="px-5 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition-all cursor-pointer shadow-lg shadow-amber-500/20 uppercase tracking-wider flex items-center justify-center gap-2 self-start sm:self-auto hover:-translate-y-0.5 active:translate-y-0"
         >
-          <span>✍️</span>
+          <Pencil className="w-3.5 h-3.5" />
           <span>{myReview ? 'Sửa Đánh Giá Của Bạn' : 'Viết Đánh Giá'}</span>
         </button>
       </div>
 
       {/* Stats Breakdown Card */}
-      <div className={`mt-6 p-6 rounded-2xl border grid grid-cols-1 md:grid-cols-12 gap-6 items-center transition-colors ${
-        isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-50 border-slate-200'
-      }`}>
+      <div className={cn(
+        'mt-6 p-6 rounded-2xl border grid grid-cols-1 md:grid-cols-12 gap-6 items-center transition-colors shadow-xs',
+        isDark ? 'bg-[#12121a] border-white/5' : 'bg-slate-50 border-slate-200'
+      )}>
         {/* Left: Big Score */}
-        <div className={`md:col-span-4 text-center md:border-r md:pr-6 space-y-1 ${
+        <div className={cn(
+          'md:col-span-4 text-center md:border-r md:pr-6 space-y-1.5',
           isDark ? 'border-white/10' : 'border-slate-200'
-        }`}>
-          <div className="text-4xl font-display font-black text-[#e8b84b] flex items-center justify-center gap-1.5">
+        )}>
+          <div className="text-5xl font-display font-black text-amber-400 flex items-center justify-center gap-2">
             <span>{summary.average_rating > 0 ? summary.average_rating.toFixed(1) : 'Chưa có'}</span>
-            <span className="text-2xl text-amber-400">⭐</span>
+            <Star className="w-8 h-8 fill-amber-400 text-amber-400" />
           </div>
-          <div className={`text-xs font-semibold ${
-            isDark ? 'text-[#f0ede8]' : 'text-slate-700'
-          }`}>
-            {total > 0 ? `Dựa trên ${total} lượt đánh giá` : 'Hãy là người đầu tiên đánh giá!'}
+          <div className={cn('text-xs font-semibold', isDark ? 'text-[#f0ede8]' : 'text-slate-700')}>
+            {total > 0 ? `Dựa trên ${total} lượt đánh giá thực tế` : 'Hãy là người đầu tiên đánh giá bộ phim!'}
           </div>
+          {summary.verified_reviews_count > 0 && (
+            <div className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>{summary.verified_reviews_count} người xem đã mua vé</span>
+            </div>
+          )}
         </div>
 
         {/* Center: Rating Distribution Bars */}
-        <div className="md:col-span-8 space-y-1.5">
+        <div className="md:col-span-8 space-y-2">
           {[5, 4, 3, 2, 1].map((star) => {
             const count = summary.rating_distribution[star] || 0
             const pct = total > 0 ? Math.round((count / total) * 100) : 0
             return (
               <div key={star} className="flex items-center gap-3 text-xs">
-                <span className={`w-8 font-mono-data font-bold flex items-center justify-end gap-0.5 shrink-0 ${
+                <span className={cn(
+                  'w-10 font-mono-data font-bold flex items-center justify-end gap-1 shrink-0',
                   isDark ? 'text-[#f0ede8]' : 'text-slate-800'
-                }`}>
-                  {star} <span className="text-amber-400">★</span>
+                )}>
+                  <span>{star}</span>
+                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                 </span>
-                <div className={`flex-1 h-2 rounded-full overflow-hidden ${
+                <div className={cn(
+                  'flex-1 h-2 rounded-full overflow-hidden',
                   isDark ? 'bg-white/10' : 'bg-slate-200'
-                }`}>
+                )}>
                   <div
                     className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all duration-500"
                     style={{ width: `${pct}%` }}
                   />
                 </div>
-                <span className={`w-14 text-right text-[11px] font-mono-data shrink-0 ${
+                <span className={cn(
+                  'w-16 text-right text-[11px] font-mono-data shrink-0',
                   isDark ? 'text-[#a09e9a]' : 'text-slate-600 font-medium'
-                }`}>
+                )}>
                   {count} ({pct}%)
                 </span>
               </div>
@@ -198,19 +230,20 @@ export default function MovieReviewsSection({ movieId, movieTitle }: MovieReview
       {/* Reviews List */}
       <div className="mt-8 space-y-4">
         {isLoading ? (
-          <div className={`text-center py-12 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-            <div className="text-2xl animate-spin inline-block">⏳</div>
-            <p className="text-xs mt-2">Đang tải đánh giá...</p>
+          <div className={cn('text-center py-14 font-mono-data text-xs space-y-3 animate-pulse', isDark ? 'text-amber-400' : 'text-amber-700')}>
+            <div className="w-8 h-8 rounded-full border-2 border-amber-400 border-t-transparent animate-spin mx-auto" />
+            <p>Đang tải danh sách đánh giá từ khán giả...</p>
           </div>
         ) : displayReviews.length === 0 ? (
-          <div className={`text-center py-12 border border-dashed rounded-2xl text-xs space-y-2 ${
+          <div className={cn(
+            'text-center py-14 border border-dashed rounded-2xl text-xs space-y-3',
             isDark ? 'border-white/10 text-[#a09e9a]' : 'border-slate-300 text-slate-500'
-          }`}>
-            <div className="text-3xl">🎬</div>
-            <p className={`font-semibold ${isDark ? 'text-[#f0ede8]' : 'text-slate-800'}`}>
+          )}>
+            <Film className="w-10 h-10 mx-auto text-amber-500 opacity-40" />
+            <p className={cn('font-bold text-sm', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>
               Chưa có bình luận nào cho bộ phim này.
             </p>
-            <p className="text-[11px] opacity-75">Hãy là người đầu tiên chia sẻ cảm nhận của bạn sau khi xem phim!</p>
+            <p className="text-[11px] opacity-75">Hãy là người đầu tiên chia sẻ cảm nhận của bạn sau khi thưởng thức phim!</p>
           </div>
         ) : (
           displayReviews.map((rev: ReviewItem) => {
@@ -224,59 +257,67 @@ export default function MovieReviewsSection({ movieId, movieTitle }: MovieReview
             return (
               <div
                 key={rev.id}
-                className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+                className={cn(
+                  'p-4 sm:p-5 rounded-2xl border transition-all text-xs',
                   isMine
                     ? isDark
-                      ? 'bg-amber-500/[0.04] border-amber-500/40 shadow-sm'
-                      : 'bg-amber-50/70 border-amber-300 shadow-xs'
+                      ? 'bg-amber-500/[0.06] border-amber-500/40 shadow-sm'
+                      : 'bg-amber-50/80 border-amber-300 shadow-xs'
                     : isDark
-                    ? 'bg-[#09090e] border-white/5 hover:border-white/10'
-                    : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
-                }`}
+                    ? 'bg-[#12121a] border-white/5 hover:border-white/15'
+                    : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
+                )}
               >
                 <div className="flex items-center justify-between gap-3 mb-2.5">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 text-[#09090e] font-black text-sm flex items-center justify-center shadow-sm shrink-0">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-slate-950 font-black text-sm flex items-center justify-center shadow-xs shrink-0">
                       {initial}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className={`font-bold text-xs ${
-                          isDark ? 'text-[#f0ede8]' : 'text-slate-900'
-                        }`}>
+                        <span className={cn('font-bold text-xs', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
                           {rev.user?.full_name || 'Khán giả CineVerse'}
                         </span>
                         {isMine && (
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          <span className={cn(
+                            'px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 border',
                             isDark
-                              ? 'bg-amber-500/20 text-[#e8b84b] border border-[#e8b84b]/40'
-                              : 'bg-amber-100 text-amber-900 border border-amber-300'
-                          }`}>
-                            Đánh giá của bạn
+                              ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                              : 'bg-amber-100 text-amber-900 border-amber-300'
+                          )}>
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Đánh giá của bạn</span>
                           </span>
                         )}
                       </div>
-                      <div className={`text-[11px] font-mono-data ${
-                        isDark ? 'text-[#a09e9a]' : 'text-slate-500'
-                      }`}>
-                        {formattedDate}
+                      <div className={cn('text-[11px] font-mono-data flex items-center gap-1 mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                        <Calendar className="w-3 h-3 text-amber-500 inline" />
+                        <span>{formattedDate}</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Stars Only (No duplicate edit button) */}
-                  <div className="flex items-center gap-1 text-amber-400 text-sm">
+                  {/* Star Rating Badge */}
+                  <div className="flex items-center gap-1">
                     {[1, 2, 3, 4, 5].map((s) => (
-                      <span key={s}>{s <= rev.rating ? '★' : '☆'}</span>
+                      <Star
+                        key={s}
+                        className={cn(
+                          'w-3.5 h-3.5',
+                          s <= rev.rating
+                            ? 'fill-amber-400 text-amber-400'
+                            : isDark
+                            ? 'text-white/20'
+                            : 'text-slate-300'
+                        )}
+                      />
                     ))}
                   </div>
                 </div>
 
                 {rev.comment && (
-                  <p className={`text-xs leading-relaxed pl-12 ${
-                    isDark ? 'text-[#f0ede8]' : 'text-slate-700'
-                  }`}>
-                    {rev.comment}
+                  <p className={cn('text-xs leading-relaxed pl-12 pt-1 font-normal', isDark ? 'text-[#f0ede8]/90' : 'text-slate-700')}>
+                    "{rev.comment}"
                   </p>
                 )}
               </div>
@@ -285,43 +326,88 @@ export default function MovieReviewsSection({ movieId, movieTitle }: MovieReview
         )}
       </div>
 
-      {/* Write/Edit Review Modal */}
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-6 mt-6 border-t border-white/10">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className={cn(
+              'px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1',
+              page <= 1
+                ? 'opacity-40 cursor-not-allowed border-transparent'
+                : isDark
+                ? 'border-white/10 bg-white/5 hover:bg-white/10 text-[#f0ede8]'
+                : 'border-slate-200 bg-white hover:bg-slate-100 text-slate-800'
+            )}
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            <span>Trước</span>
+          </button>
+          <span className="font-mono-data text-xs px-3 font-bold text-amber-400">
+            Trang {page} / {totalPages}
+          </span>
+          <button
+            type="button"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className={cn(
+              'px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1',
+              page >= totalPages
+                ? 'opacity-40 cursor-not-allowed border-transparent'
+                : isDark
+                ? 'border-white/10 bg-white/5 hover:bg-white/10 text-[#f0ede8]'
+                : 'border-slate-200 bg-white hover:bg-slate-100 text-slate-800'
+            )}
+          >
+            <span>Sau</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Write / Edit Review Modal */}
       {isWriteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className={`w-full max-w-md rounded-3xl border shadow-2xl p-6 space-y-5 transition-colors ${
-            isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
-          }`}>
-            <div className={`flex items-center justify-between border-b pb-4 ${
-              isDark ? 'border-white/10' : 'border-slate-200'
-            }`}>
-              <div>
-                <h4 className="font-display font-bold text-base">
-                  {myReview ? 'Chỉnh Sửa Đánh Giá' : 'Đánh Giá Phim'}
-                </h4>
-                <p className={`text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                  {movieTitle}
-                </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className={cn(
+            'w-full max-w-md rounded-3xl border shadow-2xl p-6 space-y-5 transition-colors',
+            isDark ? 'bg-[#111118] border-white/15 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+          )}>
+            <div className={cn('flex items-center justify-between border-b pb-4', isDark ? 'border-white/10' : 'border-slate-200')}>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <Star className="w-4 h-4 fill-amber-400" />
+                </div>
+                <div>
+                  <h4 className="font-display font-bold text-base">
+                    {myReview ? 'Chỉnh Sửa Đánh Giá' : 'Đánh Giá Phim'}
+                  </h4>
+                  <p className={cn('text-xs line-clamp-1', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                    {movieTitle}
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsWriteModalOpen(false)}
-                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold cursor-pointer transition-colors ${
+                className={cn(
+                  'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold cursor-pointer transition-colors',
                   isDark ? 'bg-white/5 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                }`}
+                )}
+                aria-label="Đóng"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleSubmitReview} className="space-y-4">
               {/* Star Rating Picker */}
-              <div className="text-center space-y-2 py-2">
-                <label className={`text-xs font-bold uppercase tracking-wider ${
-                  isDark ? 'text-[#e8b84b]' : 'text-amber-700'
-                }`}>
+              <div className="text-center space-y-2.5 py-2">
+                <label className={cn('text-xs font-bold uppercase tracking-wider block', isDark ? 'text-amber-400' : 'text-amber-800')}>
                   Chọn số sao đánh giá:
                 </label>
-                <div className="flex items-center justify-center gap-2 text-3xl">
+                <div className="flex items-center justify-center gap-2.5 text-3xl">
                   {[1, 2, 3, 4, 5].map((star) => {
                     const isFilled = (hoverRating || rating) >= star
                     return (
@@ -331,33 +417,38 @@ export default function MovieReviewsSection({ movieId, movieTitle }: MovieReview
                         onMouseEnter={() => setHoverRating(star)}
                         onMouseLeave={() => setHoverRating(0)}
                         onClick={() => setRating(star)}
-                        className={`transition-transform hover:scale-125 cursor-pointer ${
-                          isFilled
-                            ? 'text-amber-400'
-                            : isDark
-                            ? 'text-white/20'
-                            : 'text-slate-300 hover:text-slate-400'
-                        }`}
+                        className="transition-transform hover:scale-125 cursor-pointer p-1"
+                        aria-label={`Đánh giá ${star} sao`}
                       >
-                        ★
+                        <Star
+                          className={cn(
+                            'w-8 h-8 transition-colors',
+                            isFilled
+                              ? 'fill-amber-400 text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]'
+                              : isDark
+                              ? 'text-white/20'
+                              : 'text-slate-300 hover:text-slate-400'
+                          )}
+                        />
                       </button>
                     )
                   })}
                 </div>
-                <div className={`text-xs font-mono-data font-bold ${
-                  isDark ? 'text-amber-400' : 'text-amber-800'
-                }`}>
-                  {rating === 5 ? '⭐ 5.0 - Cực phẩm đỉnh cao' :
-                   rating === 4 ? '⭐ 4.0 - Rất hay, đáng xem' :
-                   rating === 3 ? '⭐ 3.0 - Bình thường, tạm ổn' :
-                   rating === 2 ? '⭐ 2.0 - Dưới trung bình' : '⭐ 1.0 - Không đáng xem'}
+                <div className={cn('text-xs font-mono-data font-bold py-1 px-3 rounded-full inline-block border',
+                  isDark ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'bg-amber-50 text-amber-900 border-amber-200'
+                )}>
+                  {rating === 5 ? '5.0 ★ Cực phẩm đỉnh cao' :
+                   rating === 4 ? '4.0 ★ Rất hay, đáng xem' :
+                   rating === 3 ? '3.0 ★ Bình thường, tạm ổn' :
+                   rating === 2 ? '2.0 ★ Dưới trung bình' : '1.0 ★ Không đáng xem'}
                 </div>
               </div>
 
               {/* Comment Text Area */}
               <div className="space-y-1.5">
-                <label className={`text-xs font-bold ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>
-                  Nhận xét của bạn (Tùy chọn):
+                <label className={cn('text-xs font-bold flex items-center gap-1.5', isDark ? 'text-[#a09e9a]' : 'text-slate-700')}>
+                  <MessageSquare className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Nhận xét của bạn (Tùy chọn):</span>
                 </label>
                 <textarea
                   rows={4}
@@ -365,21 +456,23 @@ export default function MovieReviewsSection({ movieId, movieTitle }: MovieReview
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   maxLength={2000}
-                  className={`w-full p-3 rounded-2xl border text-xs outline-none transition-all resize-none ${
+                  className={cn(
+                    'w-full p-3.5 rounded-2xl border text-xs outline-none transition-all resize-none leading-relaxed',
                     isDark
-                      ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
+                      ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-amber-400'
                       : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500'
-                  }`}
+                  )}
                 />
-                <div className={`text-right text-[10px] ${isDark ? 'text-[#a09e9a]' : 'text-slate-400'}`}>
+                <div className={cn('text-right text-[10px] font-mono-data', isDark ? 'text-[#a09e9a]' : 'text-slate-400')}>
                   {comment.length}/2000 ký tự
                 </div>
               </div>
 
               {errorMsg && (
-                <p className="text-rose-400 text-xs flex items-center gap-1">
-                  <span>⚠️</span> {errorMsg}
-                </p>
+                <div className="flex items-center gap-2 bg-rose-950/30 border border-rose-500/40 text-rose-300 p-3 rounded-xl text-xs font-medium">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{errorMsg}</span>
+                </div>
               )}
 
               <div className="flex gap-2.5 pt-2">
@@ -392,39 +485,42 @@ export default function MovieReviewsSection({ movieId, movieTitle }: MovieReview
                         deleteMutation.mutate()
                       }
                     }}
-                    className={`px-4 py-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                    className={cn(
+                      'px-4 py-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0',
                       isDark
                         ? 'border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400'
                         : 'border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700'
-                    }`}
+                    )}
                   >
-                    <span>🗑️</span>
+                    <Trash2 className="w-3.5 h-3.5" />
                     <span>{deleteMutation.isPending ? 'Đang xóa...' : 'Xóa'}</span>
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => setIsWriteModalOpen(false)}
-                  className={`flex-1 py-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                  className={cn(
+                    'flex-1 py-3 rounded-xl border text-xs font-bold transition-all cursor-pointer',
                     isDark
                       ? 'border-white/10 bg-white/5 hover:bg-white/10 text-[#a09e9a]'
                       : 'border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700'
-                  }`}
+                  )}
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={submitMutation.isPending || deleteMutation.isPending}
-                  className="flex-1 py-3 rounded-xl bg-[#e8b84b] hover:bg-[#d8a83b] text-[#09090e] text-xs font-black transition-all cursor-pointer shadow-lg shadow-amber-500/20 disabled:opacity-50"
+                  className="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition-all cursor-pointer shadow-lg shadow-amber-500/20 disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
                 >
-                  {submitMutation.isPending ? 'Đang lưu...' : myReview ? 'Cập Nhật' : 'Gửi Đánh Giá'}
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{submitMutation.isPending ? 'Đang lưu...' : myReview ? 'Cập Nhật' : 'Gửi Đánh Giá'}</span>
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-    </div>
+    </section>
   )
 }

@@ -1,4 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  ArrowRight,
+  Sparkles,
+} from 'lucide-react'
 import { useTheme } from '../../../context/ThemeContext'
 import type { Movie } from '../../../types'
 import { cn } from '../../../lib/utils'
@@ -187,13 +193,14 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
                 type="button"
                 onClick={() => onBookNow(movie)}
                 className={cn(
-                  'rounded-lg px-8 py-3.5 text-sm font-bold cursor-pointer tracking-wide transition-all duration-150 hover:-translate-y-px',
+                  'rounded-xl px-8 py-3.5 text-sm font-black cursor-pointer tracking-wide transition-all duration-200 hover:-translate-y-0.5 shadow-lg flex items-center gap-2',
                   isLight
-                    ? 'bg-amber-500 text-white hover:bg-amber-600 shadow-md shadow-amber-500/25'
+                    ? 'bg-amber-500 text-white hover:bg-amber-600 shadow-amber-500/25'
                     : 'bg-[#e8b84b] text-[#09090e] hover:shadow-[0_8px_24px_rgba(232,184,75,0.4)]',
                 )}
               >
-                Đặt vé ngay →
+                <span>Đặt vé ngay</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -242,7 +249,7 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
                       : 'bg-white/10 hover:bg-white/25 text-white/80 border-white/10',
                   )}
                 >
-                  ‹
+                  <ChevronLeft className="w-4 h-4" />
                 </button>
 
                 <div className="flex items-center justify-center gap-1.5 flex-1 overflow-hidden px-1">
@@ -280,7 +287,7 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
                       : 'bg-white/10 hover:bg-white/25 text-white/80 border-white/10',
                   )}
                 >
-                  ›
+                  <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             )}
@@ -302,7 +309,7 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
                 : 'bg-white/10 hover:bg-white/25 text-white/80 border-white/10',
             )}
           >
-            ‹
+            <ChevronLeft className="w-4 h-4" />
           </button>
 
           <div className="flex items-center justify-center gap-1.5 overflow-x-auto max-w-[200px] scrollbar-none py-1">
@@ -340,7 +347,7 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
                 : 'bg-white/10 hover:bg-white/25 text-white/80 border-white/10',
             )}
           >
-            ›
+            <ChevronRight className="w-4 h-4" />
           </button>
         </div>
       )}

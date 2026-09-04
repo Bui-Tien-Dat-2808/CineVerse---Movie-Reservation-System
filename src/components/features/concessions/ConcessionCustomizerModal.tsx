@@ -1,4 +1,17 @@
 import { useState, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
+import {
+  Popcorn,
+  CupSoda,
+  UtensilsCrossed,
+  Cookie,
+  X,
+  Check,
+  Plus,
+  Minus,
+  SlidersHorizontal,
+  Scale,
+} from 'lucide-react'
 import type { Concession } from '../../../api/concessions'
 import { useTheme } from '../../../context/ThemeContext'
 import { fmt } from '../../../lib/utils'
@@ -391,10 +404,10 @@ export default function ConcessionCustomizerModal({
     onClose()
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+  return createPortal(
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
       <div
-        className={`w-full max-w-xl rounded-3xl border shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-colors ${
+        className={`w-full max-w-xl rounded-3xl border shadow-2xl overflow-hidden flex flex-col max-h-[85vh] transition-colors my-auto ${
           isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
         }`}
       >
@@ -405,10 +418,10 @@ export default function ConcessionCustomizerModal({
           }`}
         >
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xl shrink-0 border ${
+            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
               isDark ? 'bg-[#e8b84b]/15 border-[#e8b84b]/30 text-[#e8b84b]' : 'bg-amber-100 border-amber-300 text-amber-800'
             }`}>
-              🍿
+              <Popcorn className="w-5 h-5" />
             </div>
             <div>
               <h3 className={`font-display font-black text-base sm:text-lg leading-tight ${
@@ -434,7 +447,7 @@ export default function ConcessionCustomizerModal({
                 : 'bg-slate-200/80 hover:bg-slate-300 text-slate-600 hover:text-slate-900'
             }`}
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -458,22 +471,22 @@ export default function ConcessionCustomizerModal({
                       <label className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${
                         isDark ? 'text-[#e8b84b]' : 'text-amber-700'
                       }`}>
-                        <span>🍿</span>
+                        <Popcorn className="w-3.5 h-3.5" />
                         <span>
                           {popcornCount > 1
-                            ? `Chọn Vị Cho Bắp Rang Thứ ${pIdx + 1}:`
+                            ? `Bắp Rang Thứ ${pIdx + 1}:`
                             : 'Chọn Vị Bắp Rang:'}
                         </span>
                       </label>
                       <span className={`text-[11px] font-bold ${
-                        isDark ? 'text-amber-400' : 'text-amber-800'
+                        isDark ? 'text-[#e8b84b]' : 'text-amber-800'
                       }`}>
                         Size {popItem.size}
                       </span>
                     </div>
 
                     {/* Flavor Cards */}
-                    <div className="grid grid-cols-2 gap-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       {systemPopcorns.map((f) => {
                         const isSelected = popItem.flavorId === f.id
                         return (
@@ -514,7 +527,7 @@ export default function ConcessionCustomizerModal({
                             </div>
                             {isSelected && (
                               <div className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center text-xs font-black shrink-0">
-                                ✓
+                                <Check className="w-3 h-3 stroke-[3]" />
                               </div>
                             )}
                           </button>
@@ -549,7 +562,7 @@ export default function ConcessionCustomizerModal({
                                   : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
                               }`}
                             >
-                              {s.size} {s.size === 'L' ? '(+5k)' : ''}
+                              {s.size}
                             </button>
                           )
                         })}
@@ -570,7 +583,7 @@ export default function ConcessionCustomizerModal({
                     <label className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${
                       isDark ? 'text-[#e8b84b]' : 'text-amber-700'
                     }`}>
-                      <span>🥤</span>
+                      <CupSoda className="w-3.5 h-3.5" />
                       <span>
                         {comboDrinks.length > 1
                           ? `Nước Uống Thứ ${idx + 1}:`
@@ -618,8 +631,8 @@ export default function ConcessionCustomizerModal({
                             {d.name}
                           </span>
                           {isSelected && (
-                            <span className="text-[9px] bg-blue-500 text-white px-1.5 py-0.2 rounded-full font-bold">
-                              ✓ Đã chọn
+                            <span className="text-[9px] bg-blue-500 text-white px-1.5 py-0.2 rounded-full font-bold inline-flex items-center gap-0.5">
+                              <Check className="w-2.5 h-2.5" /> Đã chọn
                             </span>
                           )}
                         </button>
@@ -654,7 +667,7 @@ export default function ConcessionCustomizerModal({
                                 : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
                             }`}
                           >
-                            {s.size} {s.size === 'L' ? '(+5k)' : ''}
+                            {s.size}
                           </button>
                         )
                       })}
@@ -669,7 +682,7 @@ export default function ConcessionCustomizerModal({
                   <label className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${
                     isDark ? 'text-[#e8b84b]' : 'text-amber-700'
                   }`}>
-                    <span>🍽️</span>
+                    <UtensilsCrossed className="w-3.5 h-3.5" />
                     <span>Thêm Món Ăn Kèm (Tùy Chọn):</span>
                   </label>
                   <span className={`text-[11px] ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
@@ -692,7 +705,7 @@ export default function ConcessionCustomizerModal({
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-base">🍟</span>
+                      <Cookie className="w-4 h-4 text-emerald-400" />
                       <span className="text-xs font-bold">Thêm Snack</span>
                     </div>
                     <span
@@ -700,7 +713,7 @@ export default function ConcessionCustomizerModal({
                         includeSnack ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-black/20 dark:border-white/20'
                       }`}
                     >
-                      {includeSnack ? '✓' : ''}
+                      {includeSnack ? <Check className="w-3 h-3 stroke-[3]" /> : ''}
                     </span>
                   </button>
 
@@ -718,7 +731,7 @@ export default function ConcessionCustomizerModal({
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-base">🌭</span>
+                      <UtensilsCrossed className="w-4 h-4 text-orange-400" />
                       <span className="text-xs font-bold">Thêm Đồ Ăn</span>
                     </div>
                     <span
@@ -726,7 +739,7 @@ export default function ConcessionCustomizerModal({
                         includeFood ? 'bg-orange-500 border-orange-500 text-white' : 'border-black/20 dark:border-white/20'
                       }`}
                     >
-                      {includeFood ? '✓' : ''}
+                      {includeFood ? <Check className="w-3 h-3 stroke-[3]" /> : ''}
                     </span>
                   </button>
                 </div>
@@ -771,7 +784,7 @@ export default function ConcessionCustomizerModal({
                                 +{fmt(Number(snk.price))}
                               </div>
                             </div>
-                            {isSelected && <span className="text-emerald-600 font-black text-xs">✓</span>}
+                            {isSelected && <Check className="w-3.5 h-3.5 text-emerald-500 stroke-[3]" />}
                           </button>
                         )
                       })}
@@ -819,7 +832,7 @@ export default function ConcessionCustomizerModal({
                                 +{fmt(Number(fd.price))}
                               </div>
                             </div>
-                            {isSelected && <span className="text-orange-600 font-black text-xs">✓</span>}
+                            {isSelected && <Check className="w-3.5 h-3.5 text-orange-500 stroke-[3]" />}
                           </button>
                         )
                       })}
@@ -868,7 +881,7 @@ export default function ConcessionCustomizerModal({
                   <label className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${
                     isDark ? 'text-[#e8b84b]' : 'text-amber-700'
                   }`}>
-                    <span>📏</span>
+                    <Scale className="w-3.5 h-3.5" />
                     <span>Chọn Kích Cỡ Có Sẵn Tại Rạp:</span>
                   </label>
                   <div className={`grid gap-2.5 ${availableVariants.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
@@ -928,7 +941,7 @@ export default function ConcessionCustomizerModal({
                   isDark ? 'bg-white/10 hover:bg-white/20 text-[#e8b84b]' : 'bg-white hover:bg-slate-200 text-slate-800 shadow-xs'
                 }`}
               >
-                −
+                <Minus className="w-3.5 h-3.5" />
               </button>
               <span className={`font-mono-data font-bold text-sm min-w-[24px] text-center ${
                 isDark ? 'text-[#e8b84b]' : 'text-amber-800'
@@ -943,7 +956,7 @@ export default function ConcessionCustomizerModal({
                   isDark ? 'bg-white/10 hover:bg-white/20 text-[#e8b84b]' : 'bg-white hover:bg-slate-200 text-slate-800 shadow-xs'
                 }`}
               >
-                +
+                <Plus className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -971,11 +984,12 @@ export default function ConcessionCustomizerModal({
             onClick={handleSave}
             className="flex-1 max-w-[260px] bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black py-3 px-4 rounded-2xl text-xs cursor-pointer shadow-lg shadow-amber-500/20 transition-all uppercase tracking-wider flex items-center justify-center gap-2"
           >
-            <span>✓</span>
+            <Check className="w-4 h-4 stroke-[3]" />
             <span>Thêm vào đơn đặt vé</span>
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

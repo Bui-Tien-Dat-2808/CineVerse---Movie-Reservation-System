@@ -1,5 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import {
+  Check,
+  Banknote,
+  CreditCard,
+  AlertTriangle,
+  RotateCcw,
+  Home,
+  Compass,
+  Ticket,
+  Film,
+  Building2,
+  Armchair,
+} from 'lucide-react'
 import { useTheme } from '../context/ThemeContext'
 import { useBooking } from '../context/BookingContext'
 import { fetchReservationDetailAPI, ReservationItem } from '../api/showtimes'
@@ -46,6 +59,11 @@ export default function PaymentResultView() {
     }
   }, [isShowReceipt, resIdParam])
 
+  const isCash =
+    isCashPending ||
+    (reservation as any)?.payment_method === 'cash' ||
+    (typeof reservation?.notes === 'string' && reservation.notes.toLowerCase().includes('tiền mặt'))
+
   return (
     <div className="max-w-[640px] mx-auto px-4 sm:px-6 py-12 pb-24">
       {isShowReceipt ? (
@@ -53,7 +71,7 @@ export default function PaymentResultView() {
         <div
           className={cn(
             'border rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 transition-all',
-            isCashPending
+            isCash
               ? isDark
                 ? 'bg-[#111118] border-amber-500/40 text-[#f0ede8]'
                 : 'bg-white border-amber-300 text-slate-900 shadow-xl'
@@ -66,18 +84,18 @@ export default function PaymentResultView() {
           <div className="text-center space-y-2">
             <div
               className={cn(
-                'w-16 h-16 border rounded-full flex items-center justify-center text-3xl mx-auto mb-2 animate-bounce',
-                isCashPending
+                'w-16 h-16 border rounded-full flex items-center justify-center mx-auto mb-2 animate-bounce',
+                isCash
                   ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
                   : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
               )}
             >
-              {isCashPending ? '💵' : '✓'}
+              {isCash ? <Banknote className="w-8 h-8" /> : <Check className="w-8 h-8 stroke-[3]" />}
             </div>
             <span
               className={cn(
                 'text-xs font-mono-data font-black uppercase tracking-widest px-3 py-1 rounded-full border inline-block',
-                isCashPending
+                isCash
                   ? isDark
                     ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
                     : 'bg-amber-100 border-amber-400 text-amber-950'
@@ -86,13 +104,13 @@ export default function PaymentResultView() {
                     : 'bg-emerald-100 border-emerald-400 text-emerald-950'
               )}
             >
-              {isCashPending ? 'Đặt Giữ Chỗ Thành Công · Thanh Toán Tại Quầy' : 'Giao Dịch Thành Công'}
+              {isCash ? 'Đặt Giữ Chỗ Thành Công · Thanh Toán Tại Quầy' : 'Giao Dịch Thành Công'}
             </span>
             <h1 className={cn('font-display font-black text-2xl sm:text-3xl', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
-              {isCashPending ? 'Đặt Giữ Chỗ Thành Công!' : 'Xác Nhận Đặt Vé Thành Công!'}
+              {isCash ? 'Đặt Giữ Chỗ Thành Công!' : 'Xác Nhận Đặt Vé Thành Công!'}
             </h1>
             <p className={cn('text-xs sm:text-sm font-medium', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
-              {isCashPending
+              {isCash
                 ? 'Đơn giữ chỗ của bạn đã được ghi nhận. Vui lòng thanh toán tiền mặt tại quầy vé CineVerse trước giờ chiếu ít nhất 15 phút để nhận vé.'
                 : 'Cảm ơn bạn đã đặt vé tại CineVerse. Thông tin vé điện tử của bạn đã được ghi nhận.'}
             </p>
@@ -151,8 +169,18 @@ export default function PaymentResultView() {
 
                 <div className="flex justify-between items-center">
                   <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-600'}>Thanh toán:</span>
-                  <strong className="text-[#e8b84b] font-bold">
-                    {(reservation as any).payment_method === 'cash' ? '💵 Tiền mặt (Tại rạp)' : '💳 VNPay / ATM / Ví điện tử'}
+                  <strong className="text-[#e8b84b] font-bold inline-flex items-center gap-1.5">
+                    {isCash ? (
+                      <>
+                        <Banknote className="w-3.5 h-3.5" />
+                        <span>Tiền mặt (Thanh toán tại quầy)</span>
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>VNPay / ATM / Ví điện tử</span>
+                      </>
+                    )}
                   </strong>
                 </div>
 
@@ -170,14 +198,15 @@ export default function PaymentResultView() {
               <button
                 type="button"
                 onClick={() => navigate('/profile?tab=history')}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg transition-all cursor-pointer shadow-sm"
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-sm inline-flex items-center gap-1.5"
               >
-                🎟️ Xem vé trong Lịch sử đặt vé
+                <Ticket className="w-3.5 h-3.5" />
+                <span>Xem vé trong Lịch sử đặt vé</span>
               </button>
             </div>
           ) : (
             <div className="text-center py-4 text-xs text-amber-500">
-              Đơn đặt vé #{resIdParam} đã được thanh toán thành công!
+              Đơn đặt vé #{resIdParam} đã được ghi nhận thành công!
             </div>
           )}
 
@@ -187,14 +216,14 @@ export default function PaymentResultView() {
               type="button"
               onClick={() => navigate('/rap-chieu')}
               className={cn(
-                'w-full py-3.5 rounded-xl text-xs font-black transition-all cursor-pointer border shadow-sm',
+                'w-full py-3.5 rounded-xl text-xs font-black transition-all cursor-pointer border shadow-sm flex items-center justify-center gap-1.5',
                 isDark
                   ? 'bg-white/5 hover:bg-white/10 text-[#f0ede8] border-white/10'
                   : 'bg-slate-200 hover:bg-slate-300 text-slate-900 border-slate-300 font-bold'
               )}
             >
-              <span>🏛️</span>
-              <span className="ml-1">Khám phá rạp khác</span>
+              <Compass className="w-3.5 h-3.5" />
+              <span>Khám phá rạp khác</span>
             </button>
 
             <button
@@ -202,7 +231,7 @@ export default function PaymentResultView() {
               onClick={() => navigate('/')}
               className="w-full py-3.5 rounded-xl text-xs font-black transition-all cursor-pointer bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-500 shadow-md flex items-center justify-center gap-1.5"
             >
-              <span>🏠</span>
+              <Home className="w-3.5 h-3.5" />
               <span>Quay lại</span>
             </button>
           </div>
@@ -217,8 +246,8 @@ export default function PaymentResultView() {
               : 'bg-red-50/90 border-red-300 text-slate-900 shadow-xl'
           )}
         >
-          <div className="w-16 h-16 bg-red-500/20 text-red-400 border border-red-500/40 rounded-full flex items-center justify-center text-3xl mx-auto mb-2">
-            ⚠️
+          <div className="w-16 h-16 bg-red-500/20 text-red-400 border border-red-500/40 rounded-full flex items-center justify-center mx-auto mb-2">
+            <AlertTriangle className="w-8 h-8" />
           </div>
           <span
             className={cn(
@@ -249,25 +278,26 @@ export default function PaymentResultView() {
               type="button"
               onClick={() => navigate('/')}
               className={cn(
-                'w-full py-3.5 rounded-xl text-xs font-black transition-all cursor-pointer border shadow-sm',
+                'w-full py-3.5 rounded-xl text-xs font-black transition-all cursor-pointer border shadow-sm flex items-center justify-center gap-1.5',
                 isDark
                   ? 'bg-white/5 hover:bg-white/10 text-[#f0ede8] border-white/10'
                   : 'bg-slate-200 hover:bg-slate-300 text-slate-900 border-slate-300 font-bold'
               )}
             >
-              <span>🏠</span>
+              <Home className="w-3.5 h-3.5" />
               <span>Quay lại</span>
             </button>
 
             <button
               type="button"
               onClick={() => {
-                const movieId = reservation?.showtime?.movie?.id
-                navigate(movieId ? `/movie/${movieId}` : '/rap-chieu')
+                const savedMovieId = sessionStorage.getItem('last_booking_movie_id')
+                const targetId = savedMovieId || reservation?.showtime?.movie?.id || (reservation?.showtime as any)?.movie_id
+                navigate(targetId ? `/movie/${targetId}` : '/')
               }}
               className="w-full py-3.5 rounded-xl text-xs font-black transition-all cursor-pointer bg-red-600 hover:bg-red-700 text-white border-red-600 shadow-md flex items-center justify-center gap-1.5"
             >
-              <span>🔄</span>
+              <RotateCcw className="w-3.5 h-3.5" />
               <span>Thử đặt lại vé</span>
             </button>
           </div>

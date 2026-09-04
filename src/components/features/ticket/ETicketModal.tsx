@@ -1,6 +1,26 @@
-import React from 'react'
+import { useState } from 'react'
+import {
+  Ticket,
+  Building2,
+  Clock,
+  Armchair,
+  User,
+  CreditCard,
+  Banknote,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  Printer,
+  Copy,
+  Check,
+  Popcorn,
+  Sparkles,
+  QrCode,
+  ShieldCheck,
+} from 'lucide-react'
 import type { ReservationItem, ReservationSeatItem } from '../../../api/showtimes'
 import { BarcodeWidget } from '../../common/BarcodeWidget'
+import { cn } from '../../../lib/utils'
 
 interface ETicketModalProps {
   isOpen: boolean
@@ -48,6 +68,8 @@ export function getDeterministicBarcodeBars(ticketCode: string, count: number = 
 }
 
 export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicketModalProps) {
+  const [copied, setCopied] = useState(false)
+
   if (!isOpen || !reservation) return null
 
   const ticketCode = reservation.ticket_code || `CVN-${reservation.id}`
@@ -83,24 +105,57 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
 
   const isUsed = reservation.is_used
   const isCancelled = reservation.status === 'cancelled'
+  const isCash =
+    reservation.payment_method === 'cash' ||
+    (typeof reservation.notes === 'string' && reservation.notes.toLowerCase().includes('tiền mặt'))
+
+  function handleCopyCode() {
+    navigator.clipboard.writeText(ticketCode)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  function handlePrint() {
+    window.print()
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in print:bg-white print:p-0">
-      <div className="relative w-full max-w-md max-h-[90vh] bg-[#111118] border border-white/15 rounded-3xl shadow-2xl overflow-hidden flex flex-col print:shadow-none print:border-0 print:w-full">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in print:bg-white print:p-0">
+      <div className="relative w-full max-w-md max-h-[92vh] bg-[#111118] border border-white/15 rounded-3xl shadow-2xl overflow-hidden flex flex-col print:shadow-none print:border-0 print:w-full print:max-w-none">
         {/* Top Header Controls */}
         <div className="flex justify-between items-center px-6 py-4 border-b border-white/10 bg-[#161622] shrink-0 print:hidden">
           <div className="flex items-center gap-2">
-            <span className="text-amber-400 text-lg">🎟️</span>
-            <span className="font-display font-bold text-sm text-[#f0ede8]">Vé Điện Tử CineVerse</span>
+            <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <Ticket className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-display font-bold text-sm text-[#f0ede8] block leading-tight">
+                Vé Xem Phim Điện Tử
+              </span>
+              <span className="text-[10px] font-mono-data text-[#a09e9a]">CineVerse Digital Pass</span>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-[#f0ede8] hover:text-white flex items-center justify-center text-sm font-bold border border-white/15 transition-colors cursor-pointer"
-            title="Đóng cửa sổ"
-          >
-            ✕
-          </button>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/15 text-xs font-semibold text-[#f0ede8] border border-white/10 transition-colors cursor-pointer flex items-center gap-1.5"
+              title="In vé xem phim"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>In vé</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-[#f0ede8] hover:text-white flex items-center justify-center text-sm font-bold border border-white/15 transition-colors cursor-pointer"
+              title="Đóng cửa sổ"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Cinema Ticket Content */}
@@ -108,76 +163,119 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
           {/* Ticket Header & Status */}
           <div className="flex justify-between items-center text-xs">
             <div>
-              <span className="font-display font-extrabold tracking-wider text-amber-400 block text-sm">
-                CINEVERSE CINEMA
-              </span>
-              <span className="text-[#a09e9a] font-mono-data text-[11px]">Rạp Chiếu Phim Đẳng Cấp</span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-display font-black tracking-wider text-amber-400 text-sm">
+                  CINEVERSE CINEMA
+                </span>
+                <span className="text-[9px] font-mono-data uppercase px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold">
+                  PREMIUM
+                </span>
+              </div>
+              <span className="text-[#a09e9a] font-mono-data text-[11px]">Hệ thống rạp chiếu chuẩn quốc tế</span>
             </div>
 
             <span
-              className={`px-3 py-1 rounded-full font-bold text-[10px] uppercase tracking-wider font-mono-data border ${
+              className={cn(
+                'px-3 py-1 rounded-full font-bold text-[10px] uppercase tracking-wider font-mono-data border inline-flex items-center gap-1.5',
                 isCancelled
                   ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
                   : isUsed
                   ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
                   : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-              }`}
+              )}
             >
-              {isCancelled ? '⚠️ Đã Hủy' : isUsed ? '✅ Đã Check-in' : '🟢 Vé Hợp Lệ'}
+              {isCancelled ? (
+                <>
+                  <AlertCircle className="w-3 h-3" />
+                  <span>Đã Hủy</span>
+                </>
+              ) : isUsed ? (
+                <>
+                  <ShieldCheck className="w-3 h-3" />
+                  <span>Đã Check-in</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>Vé Hợp Lệ</span>
+                </>
+              )}
             </span>
           </div>
 
-          {/* Movie Details Grid */}
-          <div className="flex gap-4 items-center bg-[#09090e] p-4 rounded-2xl border border-white/5">
+          {/* Movie Details Card */}
+          <div className="flex gap-4 items-center bg-[#09090e] p-4 rounded-2xl border border-white/5 shadow-inner">
             <img
               src={posterUrl}
               alt={movieTitle}
               className="w-20 h-28 object-cover rounded-xl border border-white/10 shadow-md shrink-0"
             />
-            <div className="space-y-1.5 min-w-0">
+            <div className="space-y-1.5 min-w-0 flex-1">
               <h3 className="font-display font-bold text-base text-[#f0ede8] truncate leading-tight">
                 {movieTitle}
               </h3>
               <div className="text-xs text-[#a09e9a] space-y-1 font-mono-data">
-                <p className="flex items-center gap-1.5 text-[#e8b84b] font-semibold">
-                  <span>🏛️</span>
-                  <span>{roomName}</span>
+                <p className="flex items-center gap-1.5 text-amber-400 font-semibold truncate">
+                  <Building2 className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                  <span className="truncate">{roomName}</span>
                 </p>
-                <p className="flex items-center gap-1.5">
-                  <span>🕒</span>
+                <p className="flex items-center gap-1.5 text-slate-300">
+                  <Clock className="w-3.5 h-3.5 shrink-0 text-slate-400" />
                   <span>{startTimeStr}</span>
                 </p>
                 <p className="flex items-center gap-1.5">
-                  <span>💺</span>
+                  <Armchair className="w-3.5 h-3.5 shrink-0 text-amber-400" />
                   <span className="text-[#f0ede8] font-bold truncate">{seatsList || 'Chưa chọn'}</span>
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Ticket Barcode Section (Matching Payment Result Barcode) */}
+          {/* Perforation Divider Notches */}
+          <div className="relative flex items-center justify-center my-2">
+            <div className="absolute -left-9 w-6 h-6 rounded-full bg-[#000000] border-r border-white/15" />
+            <div className="w-full border-b border-dashed border-white/20" />
+            <div className="absolute -right-9 w-6 h-6 rounded-full bg-[#000000] border-l border-white/15" />
+          </div>
+
+          {/* Ticket Barcode Section (Matching Code128 Barcode Widget) */}
           <div className="bg-white p-5 rounded-2xl text-center text-slate-900 space-y-3 shadow-inner">
-            <div className="text-[11px] font-mono-data font-bold text-slate-500 tracking-widest uppercase">
-              MÃ VÉ VÀO RẠP (TICKET CODE)
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono-data font-black text-slate-400 tracking-widest uppercase">
+                MÃ VÉ VÀO RẠP (TICKET CODE)
+              </span>
+
+              <button
+                type="button"
+                onClick={handleCopyCode}
+                className="text-[11px] font-mono-data font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+              >
+                {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                <span>{copied ? 'Đã chép' : 'Sao chép'}</span>
+              </button>
             </div>
-            <div className="font-mono-data font-black text-2xl tracking-widest text-amber-600 block">
+
+            <div className="font-mono-data font-black text-2xl sm:text-3xl tracking-widest text-slate-950 block">
               {ticketCode}
             </div>
 
             {/* Authentic Code128 Barcode visualization matching Email */}
-            <BarcodeWidget value={ticketCode} height={55} className="my-1" />
+            <div className="py-1">
+              <BarcodeWidget value={ticketCode} height={52} className="my-1" />
+            </div>
 
-            <div className="text-[11px] text-slate-500 font-medium pt-1">
-              🎟️ Đưa mã vạch này cho nhân viên tại rạp để soát vé vào phòng chiếu.
+            <div className="text-[11px] text-slate-500 font-medium pt-1 flex items-center justify-center gap-1.5 border-t border-slate-100">
+              <QrCode className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>Xuất trình mã vạch này cho nhân viên tại rạp để soát vé vào phòng.</span>
             </div>
           </div>
 
           {/* Concessions Section if any */}
           {Array.isArray((reservation as any)?.reservation_concessions) &&
             (reservation as any).reservation_concessions.length > 0 && (
-              <div className="p-3.5 rounded-2xl bg-[#09090e] border border-white/5 space-y-2 text-xs">
-                <div className="font-bold text-[#e8b84b] flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
-                  <span>🍿</span>
+              <div className="p-4 rounded-2xl bg-[#09090e] border border-white/5 space-y-2 text-xs">
+                <div className="font-bold text-amber-400 flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
+                  <Popcorn className="w-3.5 h-3.5 text-amber-400" />
                   <span>Bắp Nước & Combo Kèm Theo:</span>
                 </div>
                 <div className="space-y-1.5">
@@ -186,7 +284,10 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
                       <div className="min-w-0 flex-1">
                         <span className="font-semibold">{rc.concession_name || `Combo #${rc.concession_id}`}</span>
                         {rc.custom_options && (
-                          <p className="text-[10px] text-[#a09e9a] truncate">✨ {rc.custom_options}</p>
+                          <p className="text-[10px] text-[#a09e9a] truncate flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                            <span>{rc.custom_options}</span>
+                          </p>
                         )}
                       </div>
                       <span className="font-mono-data font-bold text-amber-400 shrink-0 ml-2">
@@ -201,20 +302,26 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
           {/* Customer & Price Footer */}
           <div className="flex justify-between items-center pt-2 border-t border-dashed border-white/15 text-xs font-mono-data">
             <div>
-              <span className="text-[#a09e9a] block text-[10px]">Khách hàng</span>
+              <span className="text-[#a09e9a] block text-[10px] flex items-center gap-1">
+                <User className="w-2.5 h-2.5" />
+                <span>Khách hàng</span>
+              </span>
               <span className="font-semibold text-[#f0ede8]">{userName || 'Khách Hàng CineVerse'}</span>
             </div>
 
             <div className="text-center">
-              <span className="text-[#a09e9a] block text-[10px]">Thanh toán</span>
+              <span className="text-[#a09e9a] block text-[10px] flex items-center justify-center gap-1">
+                {isCash ? <Banknote className="w-2.5 h-2.5" /> : <CreditCard className="w-2.5 h-2.5" />}
+                <span>Thanh toán</span>
+              </span>
               <span className="font-semibold text-amber-400">
-                {(reservation as any)?.payment_method === 'cash' ? 'Tiền mặt' : 'VNPay / ATM'}
+                {isCash ? 'Tiền mặt tại rạp' : 'VNPay / ATM'}
               </span>
             </div>
 
             <div className="text-right">
-              <span className="text-[#a09e9a] block text-[10px]">Tổng tiền</span>
-              <span className="font-bold text-base text-[#e8b84b]">{fmt(totalPriceNum)}</span>
+              <span className="text-[#a09e9a] block text-[10px]">Tổng thanh toán</span>
+              <span className="font-bold text-base text-emerald-400">{fmt(totalPriceNum)}</span>
             </div>
           </div>
         </div>
