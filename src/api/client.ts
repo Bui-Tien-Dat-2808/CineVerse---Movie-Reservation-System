@@ -41,7 +41,7 @@ function buildApiUrl(path: string): string {
 export const apiClient = axios.create({
   baseURL: API_BASE_URL || undefined,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 10000,
+  timeout: 30000,
 })
 
 // Automatically attach JWT access_token & Virtual Queue Pass Token to every request

@@ -1,9 +1,47 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import {
+  Film,
+  Clock,
+  Building2,
+  Ticket,
+  Popcorn,
+  Sparkles,
+  RotateCcw,
+  MessageSquare,
+  BarChart3,
+  Users,
+  Search,
+  RefreshCw,
+  Plus,
+  Eye,
+  Trash2,
+  Calendar,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  PlayCircle,
+  Archive,
+  Filter,
+  SlidersHorizontal,
+  ShieldCheck,
+  QrCode,
+  Layers,
+  ArrowUpDown,
+  Clapperboard,
+  Armchair,
+  AlertTriangle,
+  CheckSquare,
+  Square,
+  ShieldAlert,
+  Check,
+  CalendarClock,
+  Pencil,
+} from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { apiClient } from '../api/client'
-import { fmt } from '../lib/utils'
+import { fmt, cn, normalizeInternationalName } from '../lib/utils'
 import { adjustUserPoints, fetchLoyaltyUsers, type LoyaltyTransaction } from '../api/loyalty'
 import ReviewManageTab from '../components/admin/ReviewManageTab'
 import MovieDetailModal from '../components/admin/MovieDetailModal'
@@ -38,6 +76,63 @@ function buildTrailerEmbedUrl(url: string): string {
     const separator = url.includes('?') ? '&' : '?'
     return `${url}${separator}autoplay=1&rel=0`
   }
+}
+
+function renderAgeRatingBadge(rating?: string, isDark: boolean = true) {
+  if (!rating) {
+    return (
+      <span className={cn(
+        'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono-data font-semibold border',
+        isDark ? 'bg-white/5 text-[#a09e9a] border-white/10' : 'bg-slate-100 text-slate-500 border-slate-200'
+      )}>
+        Chưa phân loại
+      </span>
+    )
+  }
+  const r = rating.toUpperCase().trim()
+  if (r.includes('18') || r === 'T18' || r === 'C18' || r === 'R' || r === 'NC-17') {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-black tracking-tight bg-rose-500/15 text-rose-500 border border-rose-500/30">
+        T18
+      </span>
+    )
+  }
+  if (r.includes('16') || r === 'T16' || r === 'C16') {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-black tracking-tight bg-orange-500/15 text-orange-500 border border-orange-500/30">
+        T16
+      </span>
+    )
+  }
+  if (r.includes('13') || r === 'T13' || r === 'C13' || r === 'PG-13') {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-black tracking-tight bg-amber-500/15 text-amber-500 border border-amber-500/30">
+        T13
+      </span>
+    )
+  }
+  if (r === 'K' || r.includes('PG')) {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-black tracking-tight bg-sky-500/15 text-sky-500 border border-sky-500/30">
+        K
+      </span>
+    )
+  }
+  if (r === 'P' || r === 'G') {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-black tracking-tight bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
+        P
+      </span>
+    )
+  }
+  return (
+    <span className={cn(
+      'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold border',
+      isDark ? 'bg-white/5 text-[#f0ede8] border-white/15' : 'bg-slate-100 text-slate-700 border-slate-200'
+    )}>
+      {rating}
+    </span>
+  )
 }
 
 interface SeatItemAdmin {
@@ -2068,11 +2163,57 @@ export default function AdminView() {
   // ─────────────────────────────────────────
   const [movies, setMovies] = useState<MovieItem[]>([])
   const [detailMovieModal, setDetailMovieModal] = useState<MovieItem | null>(null)
+  const [movieSearchQuery, setMovieSearchQuery] = useState('')
+  const [movieGenreFilter, setMovieGenreFilter] = useState('all')
   const [showtimes, setShowtimes] = useState<ShowtimeItem[]>([])
 
   useEffect(() => {
     setMoviePage(1)
-  }, [movieSubTab])
+  }, [movieSubTab, movieSearchQuery, movieGenreFilter])
+
+  // Computed metrics and filters for Movies tab
+  const allMovieGenres = useMemo(() => {
+    const set = new Set<string>()
+    movies.forEach((m) => {
+      m.genres?.forEach((g) => {
+        if (g?.name) set.add(g.name.replace(/^Phim\s+/i, '').trim())
+      })
+    })
+    return Array.from(set).sort()
+  }, [movies])
+
+  const movieMetrics = useMemo(() => {
+    const total = movies.length
+    const nowShowing = movies.filter((m) => m.status === 'now_showing').length
+    const comingSoon = movies.filter((m) => m.status === 'coming_soon').length
+    const ended = movies.filter((m) => m.status === 'ended').length
+    return { total, nowShowing, comingSoon, ended }
+  }, [movies])
+
+  const filteredMovies = useMemo(() => {
+    return movies.filter((m) => {
+      if (movieSubTab === 'now_showing' && m.status !== 'now_showing') return false
+      if (movieSubTab === 'coming_soon' && m.status !== 'coming_soon') return false
+      if (movieSubTab === 'ended' && m.status !== 'ended') return false
+
+      if (movieSearchQuery.trim()) {
+        const q = movieSearchQuery.toLowerCase().trim()
+        const titleMatch = m.title.toLowerCase().includes(q)
+        const directorMatch = m.director?.toLowerCase().includes(q)
+        const idMatch = String(m.id).includes(q)
+        if (!titleMatch && !directorMatch && !idMatch) return false
+      }
+
+      if (movieGenreFilter !== 'all') {
+        const genreMatch = m.genres?.some(
+          (g) => g?.name && g.name.replace(/^Phim\s+/i, '').trim().toLowerCase() === movieGenreFilter.toLowerCase()
+        )
+        if (!genreMatch) return false
+      }
+
+      return true
+    })
+  }, [movies, movieSubTab, movieSearchQuery, movieGenreFilter])
 
   useEffect(() => {
     if (detailMovieModal) {
@@ -2088,10 +2229,17 @@ export default function AdminView() {
   const [vouchers, setVouchers] = useState<VoucherAdminItem[]>([])
   const [loading, setLoading] = useState(false)
   const [actionMsg, setActionMsg] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null)
+  const [autoModalError, setAutoModalError] = useState<string | null>(null)
+  const notifyTimeoutRef = useRef<any>(null)
 
   const notify = (type: 'success' | 'error' | 'warning', text: string) => {
+    if (notifyTimeoutRef.current) {
+      clearTimeout(notifyTimeoutRef.current)
+    }
     setActionMsg({ type, text })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    notifyTimeoutRef.current = setTimeout(() => {
+      setActionMsg(null)
+    }, type === 'error' ? 8000 : 5000)
   }
 
   // Create Voucher Form State
@@ -2125,6 +2273,7 @@ export default function AdminView() {
   const [stFilterMovieId, setStFilterMovieId] = useState<number | 'all'>('all')
   const [stFilterRoomId, setStFilterRoomId] = useState<number | 'all'>('all')
   const [stTimeFilter, setStTimeFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming')
+  const [stSearchQuery, setStSearchQuery] = useState('')
 
   // Dedicated Showtime Cancellation State
   const [cancelMode, setCancelMode] = useState<'single' | 'movie' | 'all'>('single')
@@ -2229,16 +2378,34 @@ export default function AdminView() {
     return maxNum + 1
   }, [safeRooms, rType])
 
-  const { upcomingShowtimesCount, pastShowtimesCount } = useMemo(() => {
+  const { upcomingShowtimesCount, pastShowtimesCount, showtimeMetrics } = useMemo(() => {
     const nowMs = Date.now()
     let upcoming = 0
     let past = 0
+    const activeMovieIds = new Set<number>()
+    const activeRoomIds = new Set<number>()
+
     showtimes.forEach((st) => {
       const isPast = new Date(st.end_time || st.start_time).getTime() < nowMs || st.status === 'completed'
-      if (isPast) past++
-      else upcoming++
+      if (isPast) {
+        past++
+      } else {
+        upcoming++
+        if (st.movie_id) activeMovieIds.add(st.movie_id)
+        if (st.room_id) activeRoomIds.add(st.room_id)
+      }
     })
-    return { upcomingShowtimesCount: upcoming, pastShowtimesCount: past }
+    return {
+      upcomingShowtimesCount: upcoming,
+      pastShowtimesCount: past,
+      showtimeMetrics: {
+        total: showtimes.length,
+        upcoming,
+        past,
+        activeMoviesCount: activeMovieIds.size,
+        activeRoomsCount: activeRoomIds.size,
+      },
+    }
   }, [showtimes])
 
   // Showtimes matching active time filter tab (upcoming / past / all)
@@ -2295,6 +2462,7 @@ export default function AdminView() {
 
   const filteredShowtimes = useMemo(() => {
     const nowMs = Date.now()
+    const query = stSearchQuery.trim().toLowerCase()
     return showtimes.filter((st) => {
       if (stFilterMovieId !== 'all' && st.movie_id !== stFilterMovieId) return false
       if (stFilterRoomId !== 'all' && st.room_id !== stFilterRoomId) return false
@@ -2303,9 +2471,18 @@ export default function AdminView() {
       if (stTimeFilter === 'upcoming' && isPast) return false
       if (stTimeFilter === 'past' && !isPast) return false
 
+      if (query) {
+        const mTitle = (st.movie?.title || '').toLowerCase()
+        const rName = (st.room?.name || '').toLowerCase()
+        const idStr = String(st.id)
+        if (!mTitle.includes(query) && !rName.includes(query) && !idStr.includes(query)) {
+          return false
+        }
+      }
+
       return true
     })
-  }, [showtimes, stFilterMovieId, stFilterRoomId, stTimeFilter])
+  }, [showtimes, stFilterMovieId, stFilterRoomId, stTimeFilter, stSearchQuery])
 
   // Auto-Schedule Modal State
   const [autoModalOpen, setAutoModalOpen] = useState(false)
@@ -2689,24 +2866,39 @@ export default function AdminView() {
     }
 
     setAutoGenerating(true)
+    setAutoModalError(null)
     try {
-      const res = await apiClient.post('/api/v1/showtimes/admin/auto-schedule/preview', {
-        start_date: autoStartDate,
-        end_date: autoEndDate,
-        movie_ids: autoMovieSelectionMode === 'custom' ? autoSelectedMovieIds : null,
-        room_ids: autoRoomSelectionMode === 'custom' ? autoSelectedRoomIds : null,
-        start_time_str: autoStartTimeStr,
-        end_time_str: autoEndTimeStr,
-        buffer_minutes: autoBufferMins,
-        base_price: autoBasePrice,
-        vip_price: autoVipPrice,
-        replace_existing: autoReplaceExisting,
-        smart_genre_matching: autoSmartGenre,
-        auto_pricing_by_room_type: autoPricingByRoom,
-      })
+      const res = await apiClient.post(
+        '/api/v1/showtimes/admin/auto-schedule/preview',
+        {
+          start_date: autoStartDate,
+          end_date: autoEndDate,
+          movie_ids: autoMovieSelectionMode === 'custom' ? autoSelectedMovieIds : null,
+          room_ids: autoRoomSelectionMode === 'custom' ? autoSelectedRoomIds : null,
+          start_time_str: autoStartTimeStr,
+          end_time_str: autoEndTimeStr,
+          buffer_minutes: autoBufferMins,
+          base_price: autoBasePrice,
+          vip_price: autoVipPrice,
+          replace_existing: autoReplaceExisting,
+          smart_genre_matching: autoSmartGenre,
+          auto_pricing_by_room_type: autoPricingByRoom,
+        },
+        {
+          timeout: 60000,
+        }
+      )
       setAutoPreviewList(res.data)
+      setAutoModalError(null)
     } catch (err: any) {
-      notify('error', typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Không thể tạo bản xem trước')
+      let errMsg = 'Không thể tạo bản xem trước'
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        errMsg = 'Yêu cầu tạo bản xem trước bị quá thời gian (timeout). Vui lòng thử lại.'
+      } else if (typeof err.response?.data?.detail === 'string') {
+        errMsg = err.response.data.detail
+      }
+      setAutoModalError(errMsg)
+      notify('error', errMsg)
     } finally {
       setAutoGenerating(false)
     }
@@ -2715,11 +2907,18 @@ export default function AdminView() {
   async function handleConfirmAutoSchedule() {
     if (!autoPreviewList || autoPreviewList.length === 0) return
     setAutoConfirming(true)
+    setAutoModalError(null)
     try {
-      const res = await apiClient.post('/api/v1/showtimes/admin/auto-schedule/confirm', {
-        showtimes: autoPreviewList,
-        replace_existing: autoReplaceExisting,
-      })
+      const res = await apiClient.post(
+        '/api/v1/showtimes/admin/auto-schedule/confirm',
+        {
+          showtimes: autoPreviewList,
+          replace_existing: autoReplaceExisting,
+        },
+        {
+          timeout: 180000, // 3 minutes timeout for bulk database operations
+        }
+      )
 
       // Extract unique movie titles from autoPreviewList
       const movieTitlesSet = new Set<string>()
@@ -2752,11 +2951,21 @@ export default function AdminView() {
       } else {
         notify('success', `Đã xếp thành công ${count} suất chiếu cho phim ${movieStr}`)
       }
+      setAutoModalError(null)
       setAutoModalOpen(false)
       setAutoPreviewList(null)
       loadAllData()
     } catch (err: any) {
-      notify('error', typeof err.response?.data?.detail === 'string' ? err.response.data.detail : 'Không thể lưu suất chiếu tự động')
+      let errMsg = 'Không thể lưu suất chiếu tự động'
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        errMsg = 'Yêu cầu lưu suất chiếu bị quá thời gian (timeout). Vui lòng kiểm tra lại.'
+      } else if (typeof err.response?.data?.detail === 'string') {
+        errMsg = err.response.data.detail
+      } else if (Array.isArray(err.response?.data?.detail)) {
+        errMsg = err.response.data.detail.map((d: any) => d.msg || JSON.stringify(d)).join('; ')
+      }
+      setAutoModalError(errMsg)
+      notify('error', errMsg)
     } finally {
       setAutoConfirming(false)
     }
@@ -3120,28 +3329,45 @@ export default function AdminView() {
         </div>
       )}
 
-      {/* Action Status Banner */}
+      {/* Floating Action Status Toast - Always floats on top of all modals (z-[99999]) */}
       {actionMsg && (
-        <div
-          className={`p-4 rounded-xl mb-6 text-xs flex items-center justify-between ${
-            actionMsg.type === 'success'
-              ? 'bg-[rgba(46,204,113,0.15)] border border-[rgba(46,204,113,0.3)] text-[#2ecc71]'
-              : actionMsg.type === 'warning'
-              ? 'bg-[rgba(232,184,75,0.15)] border border-[rgba(232,184,75,0.3)] text-[#e8b84b]'
-              : 'bg-[rgba(192,57,43,0.15)] border border-[rgba(192,57,43,0.3)] text-[#e07060]'
-          }`}
+        <aside
+          role="alert"
+          aria-live="assertive"
+          className="fixed top-6 right-4 sm:right-8 z-[99999] max-w-lg w-[calc(100%-2rem)] transition-all duration-300 pointer-events-auto shadow-2xl drop-shadow-2xl animate-in fade-in slide-in-from-top-4"
         >
-          <div className="flex items-center gap-2 whitespace-pre-line">
-            <span>{actionMsg.type === 'success' ? '✓' : '⚠️'}</span>
-            <span>{actionMsg.text}</span>
-          </div>
-          <button
-            onClick={() => setActionMsg(null)}
-            className="text-xs font-bold opacity-70 hover:opacity-100 bg-transparent border-0 cursor-pointer"
+          <div
+            className={`p-4 rounded-2xl border shadow-2xl backdrop-blur-xl flex items-start justify-between gap-3 text-xs ${
+              actionMsg.type === 'success'
+                ? 'bg-[#0f281e]/95 border-emerald-500/60 text-emerald-200 shadow-emerald-950/60'
+                : actionMsg.type === 'warning'
+                ? 'bg-[#2a1d08]/95 border-amber-500/60 text-amber-200 shadow-amber-950/60'
+                : 'bg-[#2b1114]/95 border-rose-500/60 text-rose-200 shadow-rose-950/60'
+            }`}
           >
-            ✕
-          </button>
-        </div>
+            <div className="flex items-start gap-3 min-w-0 flex-1">
+              <span className="text-base shrink-0 mt-0.5">
+                {actionMsg.type === 'success' ? '✓' : actionMsg.type === 'warning' ? '⚠️' : '✕'}
+              </span>
+              <div className="space-y-1 min-w-0">
+                <div className="font-bold text-xs uppercase tracking-wider">
+                  {actionMsg.type === 'success' ? 'Thành công' : actionMsg.type === 'warning' ? 'Cảnh báo' : 'Thông báo lỗi'}
+                </div>
+                <div className="whitespace-pre-line leading-relaxed break-words font-medium">
+                  {actionMsg.text}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActionMsg(null)}
+              className="p-1.5 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer shrink-0 font-bold"
+              aria-label="Đóng thông báo"
+            >
+              ✕
+            </button>
+          </div>
+        </aside>
       )}
 
 
@@ -3149,211 +3375,526 @@ export default function AdminView() {
       {/* TAB 1: MOVIE MANAGEMENT */}
       {activeTab === 'movies' && (
         <div className="space-y-6">
-          {/* Header Action Bar */}
-          <div className={`border rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-center gap-4 ${
-            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-sm'
-          }`}>
-            <div>
-              <h3 className={`font-display font-bold text-lg ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Danh Sách Phim Trong Hệ Thống</h3>
-              <p className={`text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Quản lý phim theo từng mục Đang chiếu / Sắp ra mắt / Đã ngừng chiếu.</p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <select
-                value={syncLimit}
-                onChange={(e) => setSyncLimit(Number(e.target.value))}
-                className={`border rounded-xl px-3 py-2.5 text-xs font-bold focus:border-[#e8b84b] outline-none cursor-pointer ${
-                  isDark ? 'bg-[#161622] text-[#f0ede8] border-white/10' : 'bg-slate-50 text-slate-900 border-slate-300'
-                }`}
-                title="Chọn số lượng phim cần quét mỗi loại từ TMDB"
-              >
-                <option value={6}>6 phim / mục</option>
-                <option value={12}>12 phim / mục</option>
-                <option value={20}>20 phim / mục</option>
-                <option value={30}>30 phim / mục</option>
-              </select>
-
-              <button
-                type="button"
-                disabled={autoSyncLoading}
-                onClick={handleAutoSyncTmdb}
-                className="bg-[#e8b84b] text-[#09090e] border-0 rounded-xl px-4 py-2.5 text-xs font-bold cursor-pointer hover:shadow-[0_4px_16px_rgba(232,184,75,0.35)] transition-all flex items-center gap-2 disabled:opacity-50"
-              >
-                <span>🚀</span>
-                <span>{autoSyncLoading ? 'Đang quét TMDB...' : 'Tự Động Lấy Phim Từ TMDB'}</span>
-              </button>
-
-              <button
-                type="button"
-                disabled={backfillLoading}
-                onClick={handleBackfillTrailers}
-                className="bg-[#3498db]/20 text-[#3498db] border border-[#3498db]/40 hover:bg-[#3498db]/30 rounded-xl px-4 py-2.5 text-xs font-bold cursor-pointer transition-all flex items-center gap-2 disabled:opacity-50"
-                title="Bổ sung trailer HD, thông tin đạo diễn, diễn viên và độ tuổi cho các phim còn thiếu từ TMDB"
-              >
-                <span>🔄</span>
-                <span>{backfillLoading ? 'Đang bổ sung...' : 'Backfill Trailer/Đạo diễn/Diễn viên'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Sub-tab Category Switcher */}
-          <div className={`flex items-center justify-between border rounded-xl p-3 ${
-            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-sm'
-          }`}>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => { setMovieSubTab('now_showing'); setMoviePage(1); }}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
-                  movieSubTab === 'now_showing'
-                    ? 'bg-[#2ecc71]/15 text-[#2ecc71] border-[#2ecc71]/40 shadow-sm'
-                    : isDark
-                    ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
-                    : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span>▶</span>
-                <span>Phim Đang Chiếu ({movies.filter((m) => m.status === 'now_showing').length})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setMovieSubTab('coming_soon'); setMoviePage(1); }}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
-                  movieSubTab === 'coming_soon'
-                    ? 'bg-[#e8b84b]/15 text-[#e8b84b] border-[#e8b84b]/40 shadow-sm'
-                    : isDark
-                    ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
-                    : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span>📅</span>
-                <span>Phim Sắp Ra Mắt ({movies.filter((m) => m.status === 'coming_soon').length})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setMovieSubTab('ended'); setMoviePage(1); }}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
-                  movieSubTab === 'ended'
-                    ? 'bg-rose-500/15 text-rose-400 border-rose-500/40 shadow-sm'
-                    : isDark
-                    ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
-                    : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span>⏹</span>
-                <span>Phim Ngừng Chiếu ({movies.filter((m) => m.status === 'ended').length})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setMovieSubTab('all'); setMoviePage(1); }}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
-                  movieSubTab === 'all'
-                    ? isDark
-                      ? 'bg-white/15 text-[#f0ede8] border-white/30 shadow-sm'
-                      : 'bg-amber-100 text-amber-900 border-amber-300 shadow-sm'
-                    : isDark
-                    ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
-                    : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span>Tất Cả ({movies.length})</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Movies List Table */}
-          <div className={`border rounded-2xl overflow-hidden shadow-xl ${
+          {/* Top Header & TMDB Synchronizer Card */}
+          <div className={cn(
+            'border rounded-2xl p-5 sm:p-6 transition-all shadow-xs',
             isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
-          }`}>
+          )}>
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className={cn(
+                    'p-2 rounded-xl text-amber-500',
+                    isDark ? 'bg-amber-500/10' : 'bg-amber-50'
+                  )}>
+                    <Film className="w-5 h-5 stroke-[2]" />
+                  </span>
+                  <h3 className={cn('font-display font-black text-xl tracking-tight', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                    Quản Lý Danh Mục Phim Chiếu Rạp
+                  </h3>
+                </div>
+                <p className={cn('text-xs pl-9 leading-relaxed', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                  Kiểm soát danh mục phim, phân loại độ tuổi kiểm duyệt, trạng thái phát hành và đồng bộ dữ liệu chuẩn quốc tế từ TMDB.
+                </p>
+              </div>
+
+              {/* TMDB Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2.5 sm:self-auto">
+                <div className={cn(
+                  'flex items-center gap-2 border rounded-xl px-3 py-1.5 text-xs',
+                  isDark ? 'bg-[#161622] border-white/10 text-[#a09e9a]' : 'bg-slate-50 border-slate-200 text-slate-600'
+                )}>
+                  <span className="text-[11px] font-medium shrink-0">Lấy:</span>
+                  <select
+                    value={syncLimit}
+                    onChange={(e) => setSyncLimit(Number(e.target.value))}
+                    className={cn(
+                      'bg-transparent font-bold outline-none cursor-pointer text-xs',
+                      isDark ? 'text-[#f0ede8]' : 'text-slate-900'
+                    )}
+                    title="Chọn số lượng phim cần quét mỗi loại từ TMDB"
+                  >
+                    <option value={6} className={isDark ? 'bg-[#161622] text-[#f0ede8]' : 'bg-white text-slate-900'}>6 phim / mục</option>
+                    <option value={12} className={isDark ? 'bg-[#161622] text-[#f0ede8]' : 'bg-white text-slate-900'}>12 phim / mục</option>
+                    <option value={20} className={isDark ? 'bg-[#161622] text-[#f0ede8]' : 'bg-white text-slate-900'}>20 phim / mục</option>
+                    <option value={30} className={isDark ? 'bg-[#161622] text-[#f0ede8]' : 'bg-white text-slate-900'}>30 phim / mục</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={autoSyncLoading}
+                  onClick={handleAutoSyncTmdb}
+                  className="bg-[#e8b84b] hover:bg-[#d9a738] text-[#09090e] border-0 rounded-xl px-4 py-2 text-xs font-bold cursor-pointer transition-all shadow-sm hover:shadow flex items-center gap-2 disabled:opacity-50 active:scale-95"
+                >
+                  <RefreshCw className={cn('w-3.5 h-3.5 stroke-[2.2]', autoSyncLoading && 'animate-spin')} />
+                  <span>{autoSyncLoading ? 'Đang quét TMDB...' : 'Đồng Bộ TMDB'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={backfillLoading}
+                  onClick={handleBackfillTrailers}
+                  className={cn(
+                    'border rounded-xl px-3.5 py-2 text-xs font-semibold cursor-pointer transition-all flex items-center gap-2 disabled:opacity-50 active:scale-95',
+                    isDark
+                      ? 'bg-white/5 hover:bg-white/10 border-white/15 text-[#f0ede8]'
+                      : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                  )}
+                  title="Cập nhật bổ sung trailer HD, thông tin đạo diễn, dàn diễn viên và độ tuổi cho các phim còn thiếu"
+                >
+                  <Layers className={cn('w-3.5 h-3.5 stroke-[2.2]', backfillLoading && 'animate-spin text-amber-500')} />
+                  <span>{backfillLoading ? 'Đang cập nhật...' : 'Bổ Sung Dữ Liệu TMDB'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 4 Mini KPI Metric Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+            {/* Card 1: Tổng Phim */}
+            <button
+              type="button"
+              onClick={() => { setMovieSubTab('all'); setMoviePage(1); }}
+              className={cn(
+                'p-4 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden group',
+                movieSubTab === 'all'
+                  ? isDark
+                    ? 'bg-white/10 border-[#e8b84b] ring-1 ring-[#e8b84b]/50'
+                    : 'bg-amber-50/80 border-amber-400 ring-1 ring-amber-400/50 shadow-xs'
+                  : isDark
+                  ? 'bg-[#111118] border-white/10 hover:border-white/20'
+                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className={cn('text-[11px] font-bold uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                  Tổng Phim
+                </span>
+                <span className={cn('p-1.5 rounded-lg', isDark ? 'bg-white/5 text-[#f0ede8]' : 'bg-slate-100 text-slate-700')}>
+                  <Film className="w-3.5 h-3.5" />
+                </span>
+              </div>
+              <div className={cn('font-display font-black text-2xl mt-2', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                {movieMetrics.total}
+              </div>
+              <div className={cn('text-[11px] mt-1', isDark ? 'text-[#6e6c68]' : 'text-slate-400')}>
+                Toàn bộ danh mục
+              </div>
+            </button>
+
+            {/* Card 2: Đang Chiếu */}
+            <button
+              type="button"
+              onClick={() => { setMovieSubTab('now_showing'); setMoviePage(1); }}
+              className={cn(
+                'p-4 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden group',
+                movieSubTab === 'now_showing'
+                  ? isDark
+                    ? 'bg-emerald-950/20 border-emerald-500 ring-1 ring-emerald-500/50'
+                    : 'bg-emerald-50/80 border-emerald-500 ring-1 ring-emerald-500/50 shadow-xs'
+                  : isDark
+                  ? 'bg-[#111118] border-white/10 hover:border-white/20'
+                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className={cn('text-[11px] font-bold uppercase tracking-wider', isDark ? 'text-emerald-400' : 'text-emerald-700')}>
+                  Đang Chiếu
+                </span>
+                <span className={cn('p-1.5 rounded-lg', isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600')}>
+                  <PlayCircle className="w-3.5 h-3.5" />
+                </span>
+              </div>
+              <div className={cn('font-display font-black text-2xl mt-2 flex items-center gap-2', isDark ? 'text-emerald-400' : 'text-emerald-600')}>
+                {movieMetrics.nowShowing}
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              </div>
+              <div className={cn('text-[11px] mt-1', isDark ? 'text-[#6e6c68]' : 'text-slate-400')}>
+                Có suất chiếu tại rạp
+              </div>
+            </button>
+
+            {/* Card 3: Sắp Ra Mắt */}
+            <button
+              type="button"
+              onClick={() => { setMovieSubTab('coming_soon'); setMoviePage(1); }}
+              className={cn(
+                'p-4 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden group',
+                movieSubTab === 'coming_soon'
+                  ? isDark
+                    ? 'bg-amber-950/20 border-amber-500 ring-1 ring-amber-500/50'
+                    : 'bg-amber-50/80 border-amber-500 ring-1 ring-amber-500/50 shadow-xs'
+                  : isDark
+                  ? 'bg-[#111118] border-white/10 hover:border-white/20'
+                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className={cn('text-[11px] font-bold uppercase tracking-wider', isDark ? 'text-amber-400' : 'text-amber-700')}>
+                  Sắp Ra Mắt
+                </span>
+                <span className={cn('p-1.5 rounded-lg', isDark ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-50 text-amber-600')}>
+                  <Calendar className="w-3.5 h-3.5" />
+                </span>
+              </div>
+              <div className={cn('font-display font-black text-2xl mt-2', isDark ? 'text-amber-400' : 'text-amber-600')}>
+                {movieMetrics.comingSoon}
+              </div>
+              <div className={cn('text-[11px] mt-1', isDark ? 'text-[#6e6c68]' : 'text-slate-400')}>
+                Dự kiến phát hành
+              </div>
+            </button>
+
+            {/* Card 4: Ngừng Chiếu */}
+            <button
+              type="button"
+              onClick={() => { setMovieSubTab('ended'); setMoviePage(1); }}
+              className={cn(
+                'p-4 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden group',
+                movieSubTab === 'ended'
+                  ? isDark
+                    ? 'bg-white/10 border-slate-400 ring-1 ring-slate-400/50'
+                    : 'bg-slate-100 border-slate-400 ring-1 ring-slate-400/50 shadow-xs'
+                  : isDark
+                  ? 'bg-[#111118] border-white/10 hover:border-white/20'
+                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className={cn('text-[11px] font-bold uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                  Ngừng Chiếu
+                </span>
+                <span className={cn('p-1.5 rounded-lg', isDark ? 'bg-white/5 text-[#a09e9a]' : 'bg-slate-100 text-slate-500')}>
+                  <Archive className="w-3.5 h-3.5" />
+                </span>
+              </div>
+              <div className={cn('font-display font-black text-2xl mt-2', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                {movieMetrics.ended}
+              </div>
+              <div className={cn('text-[11px] mt-1', isDark ? 'text-[#6e6c68]' : 'text-slate-400')}>
+                Lưu trữ lịch sử
+              </div>
+            </button>
+          </div>
+
+          {/* Search, Filter & Segment Toolbar */}
+          <div className={cn(
+            'border rounded-2xl p-3.5 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 shadow-xs',
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+          )}>
+            {/* Search Input */}
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className={cn('absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4', isDark ? 'text-[#6e6c68]' : 'text-slate-400')} />
+              <input
+                type="text"
+                value={movieSearchQuery}
+                onChange={(e) => setMovieSearchQuery(e.target.value)}
+                placeholder="Tìm phim theo tên, đạo diễn, ID..."
+                className={cn(
+                  'w-full pl-9 pr-8 py-2 rounded-xl text-xs outline-none border transition-colors',
+                  isDark
+                    ? 'bg-[#161622] border-white/10 text-[#f0ede8] placeholder-[#6e6c68] focus:border-amber-500/50'
+                    : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-amber-500'
+                )}
+              />
+              {movieSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setMovieSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  aria-label="Xoá tìm kiếm"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Genre Filter Dropdown */}
+            <div className="flex items-center gap-2">
+              <div className={cn(
+                'flex items-center gap-2 border rounded-xl px-3 py-2 text-xs',
+                isDark ? 'bg-[#161622] border-white/10 text-[#a09e9a]' : 'bg-slate-50 border-slate-200 text-slate-600'
+              )}>
+                <Filter className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                <select
+                  value={movieGenreFilter}
+                  onChange={(e) => setMovieGenreFilter(e.target.value)}
+                  className={cn(
+                    'bg-transparent font-medium outline-none cursor-pointer text-xs max-w-[140px] truncate',
+                    isDark ? 'text-[#f0ede8]' : 'text-slate-900'
+                  )}
+                >
+                  <option value="all" className={isDark ? 'bg-[#161622] text-[#f0ede8]' : 'bg-white text-slate-900'}>
+                    Tất cả thể loại
+                  </option>
+                  {allMovieGenres.map((genre) => (
+                    <option key={genre} value={genre} className={isDark ? 'bg-[#161622] text-[#f0ede8]' : 'bg-white text-slate-900'}>
+                      {genre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Clear Filters Button (If filtered) */}
+              {(movieSearchQuery || movieGenreFilter !== 'all' || movieSubTab !== 'all') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMovieSearchQuery('')
+                    setMovieGenreFilter('all')
+                    setMovieSubTab('all')
+                    setMoviePage(1)
+                  }}
+                  className={cn(
+                    'px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5',
+                    isDark
+                      ? 'border-white/10 text-[#a09e9a] hover:text-[#f0ede8] hover:bg-white/5'
+                      : 'border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  )}
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Đặt lại bộ lọc</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Movies Enterprise Data Table */}
+          <div className={cn(
+            'border rounded-2xl overflow-hidden shadow-sm transition-all',
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+          )}>
             {(() => {
-              const filtered = movies.filter((m) => {
-                if (movieSubTab === 'now_showing') return m.status === 'now_showing'
-                if (movieSubTab === 'coming_soon') return m.status === 'coming_soon'
-                if (movieSubTab === 'ended') return m.status === 'ended'
-                return true
-              })
-              const paginated = filtered.slice((moviePage - 1) * PAGE_SIZE, moviePage * PAGE_SIZE)
+              const paginated = filteredMovies.slice((moviePage - 1) * PAGE_SIZE, moviePage * PAGE_SIZE)
+
+              if (filteredMovies.length === 0) {
+                return (
+                  <div className="py-16 px-4 text-center space-y-3">
+                    <div className={cn(
+                      'w-14 h-14 mx-auto rounded-2xl flex items-center justify-center',
+                      isDark ? 'bg-white/5 text-[#6e6c68]' : 'bg-slate-100 text-slate-400'
+                    )}>
+                      <Film className="w-7 h-7 stroke-[1.5]" />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className={cn('font-bold text-sm', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>
+                        Không tìm thấy bộ phim nào phù hợp
+                      </h4>
+                      <p className={cn('text-xs max-w-sm mx-auto', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                        Vui lòng kiểm tra lại từ khóa tìm kiếm hoặc bỏ chọn các bộ lọc trạng thái và thể loại.
+                      </p>
+                    </div>
+                    {(movieSearchQuery || movieGenreFilter !== 'all' || movieSubTab !== 'now_showing') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMovieSearchQuery('')
+                          setMovieGenreFilter('all')
+                          setMovieSubTab('now_showing')
+                        }}
+                        className="px-4 py-2 rounded-xl text-xs font-bold bg-[#e8b84b] text-[#09090e] hover:brightness-110 transition-all cursor-pointer"
+                      >
+                        Đặt lại bộ lọc
+                      </button>
+                    )}
+                  </div>
+                )
+              }
+
               return (
                 <>
                   <div className="overflow-x-auto">
-                    <table className={`w-full text-left text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-                      <thead className={`font-mono-data uppercase border-b ${
-                        isDark ? 'bg-[#161622] text-[#f0ede8] border-white/10' : 'bg-slate-50 text-slate-800 border-slate-200'
-                      }`}>
+                    <table className={cn('w-full text-left text-xs', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      <thead className={cn(
+                        'uppercase border-b text-[11px] font-mono-data tracking-wider select-none',
+                        isDark ? 'bg-[#161622] text-[#f0ede8] border-white/10' : 'bg-slate-50 text-slate-700 border-slate-200'
+                      )}>
                         <tr>
-                          <th className="p-4">Phim</th>
-                          <th className="p-4">Trạng Thái</th>
-                          <th className="p-4">Thời Lượng</th>
-                          <th className="p-4">Ngày Khởi Chiếu</th>
-                          <th className="p-4 text-right">Thao Tác</th>
+                          <th className="py-3.5 px-4 font-bold">Phim & Đạo Diễn</th>
+                          <th className="py-3.5 px-4 font-bold">Độ Tuổi & Thể Loại</th>
+                          <th className="py-3.5 px-4 font-bold">Trạng Thái</th>
+                          <th className="py-3.5 px-4 font-bold">Thời Lượng / Ra Mắt</th>
+                          <th className="py-3.5 px-4 font-bold text-right">Thao Tác</th>
                         </tr>
                       </thead>
-                      <tbody className={isDark ? 'divide-y divide-white/5' : 'divide-y divide-slate-200'}>
+                      <tbody className={isDark ? 'divide-y divide-white/5' : 'divide-y divide-slate-100'}>
                         {paginated.map((m) => (
-                          <tr key={m.id} className="hover:bg-white/[0.02] transition-colors">
-                            <td className="p-4 flex items-center gap-3">
-                              <img
-                                src={
-                                  m.poster_url ??
-                                  'https://images.unsplash.com/photo-1534996858221-380b92700493?w=100'
-                                }
-                                alt={m.title}
-                                className="w-10 h-14 object-cover rounded-lg border border-white/10 shrink-0"
-                              />
-                              <div>
-                                <p className="font-display font-bold text-sm text-[#f0ede8]">{m.title}</p>
-                                <span className="text-[10px] font-mono-data text-[#6e6c68]">ID: #{m.id}</span>
+                          <tr
+                            key={m.id}
+                            className={cn(
+                              'transition-colors group',
+                              isDark ? 'hover:bg-white/[0.025]' : 'hover:bg-slate-50/80'
+                            )}
+                          >
+                            {/* Phim & Đạo diễn */}
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={m.poster_url || 'https://images.unsplash.com/photo-1534996858221-380b92700493?w=100'}
+                                  alt={m.title}
+                                  loading="lazy"
+                                  className={cn(
+                                    'w-11 h-16 object-cover rounded-lg border shrink-0 transition-transform group-hover:scale-105 shadow-xs',
+                                    isDark ? 'border-white/10 bg-[#161622]' : 'border-slate-200 bg-slate-100'
+                                  )}
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1534996858221-380b92700493?w=100'
+                                  }}
+                                />
+                                <div className="min-w-0 space-y-1">
+                                  <p className={cn(
+                                    'font-display font-bold text-sm truncate max-w-[280px] sm:max-w-xs transition-colors',
+                                    isDark ? 'text-[#f0ede8] group-hover:text-amber-400' : 'text-slate-900 group-hover:text-amber-600'
+                                  )}>
+                                    {m.title}
+                                  </p>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={cn(
+                                      'text-[10px] font-mono-data px-1.5 py-0.5 rounded border',
+                                      isDark ? 'bg-white/5 border-white/10 text-[#a09e9a]' : 'bg-slate-100 border-slate-200 text-slate-500'
+                                    )}>
+                                      ID: #{m.id}
+                                    </span>
+                                    {m.tmdb_id && (
+                                      <span className="text-[10px] font-mono-data px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                                        TMDB: {m.tmdb_id}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {m.director && (
+                                    <div className={cn('text-[11px] flex items-center gap-1.5 truncate max-w-[240px]', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                                      <Clapperboard className="w-3 h-3 text-amber-500 shrink-0" />
+                                      <span className="truncate">ĐD: <strong className={isDark ? 'text-[#f0ede8]' : 'text-slate-700'}>{normalizeInternationalName(m.director)}</strong></span>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </td>
 
-                            <td className="p-4">
+                            {/* Độ tuổi & Thể loại */}
+                            <td className="py-3.5 px-4">
+                              <div className="space-y-1.5">
+                                <div>
+                                  {renderAgeRatingBadge(m.rating, isDark)}
+                                </div>
+                                <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                  {m.genres && m.genres.length > 0 ? (
+                                    <>
+                                      {m.genres.slice(0, 2).map((g, idx) => (
+                                        <span
+                                          key={idx}
+                                          className={cn(
+                                            'text-[10px] px-1.5 py-0.5 rounded border',
+                                            isDark ? 'bg-white/5 border-white/10 text-[#a09e9a]' : 'bg-slate-100 border-slate-200 text-slate-600'
+                                          )}
+                                        >
+                                          {g.name?.replace(/^Phim\s+/i, '').trim()}
+                                        </span>
+                                      ))}
+                                      {m.genres.length > 2 && (
+                                        <span className={cn(
+                                          'text-[10px] px-1 py-0.5 rounded',
+                                          isDark ? 'text-[#6e6c68]' : 'text-slate-400'
+                                        )}>
+                                          +{m.genres.length - 2}
+                                        </span>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <span className={cn('text-[10px]', isDark ? 'text-[#6e6c68]' : 'text-slate-400')}>
+                                      Chưa rõ
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Trạng thái (Pill with dot) */}
+                            <td className="py-3.5 px-4">
                               <button
                                 type="button"
                                 onClick={() => handleToggleMovieStatus(m)}
-                                title="Bấm để đổi thủ công (Hệ thống tự động chuyển sang 'Đã chiếu xong' khi hết suất chiếu)"
-                                className={`px-3 py-1 rounded-full text-[10px] font-bold font-mono-data uppercase border cursor-pointer transition-all ${
+                                title="Bấm để đổi thủ công trạng thái phát hành của phim"
+                                className={cn(
+                                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border cursor-pointer transition-all active:scale-95',
                                   m.status === 'now_showing'
-                                    ? 'bg-[rgba(46,204,113,0.15)] text-[#2ecc71] border-[rgba(46,204,113,0.3)] hover:bg-[rgba(46,204,113,0.3)]'
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
                                     : m.status === 'coming_soon'
-                                    ? 'bg-[rgba(232,184,75,0.15)] text-[#e8b84b] border-[rgba(232,184,75,0.3)] hover:bg-[rgba(232,184,75,0.3)]'
-                                    : 'bg-white/5 text-[#6e6c68] border-white/10'
-                                }`}
+                                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
+                                    : isDark
+                                    ? 'bg-white/5 text-[#a09e9a] border-white/10 hover:bg-white/10 hover:text-[#f0ede8]'
+                                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                                )}
                               >
-                                {m.status === 'now_showing'
-                                  ? '▶ Đang chiếu'
-                                  : m.status === 'coming_soon'
-                                  ? '📅 Sắp ra mắt'
-                                  : '⏹ Ngừng chiếu'}
+                                <span
+                                  className={cn(
+                                    'w-1.5 h-1.5 rounded-full shrink-0',
+                                    m.status === 'now_showing'
+                                      ? 'bg-emerald-400 animate-pulse'
+                                      : m.status === 'coming_soon'
+                                      ? 'bg-amber-400'
+                                      : 'bg-slate-400'
+                                  )}
+                                />
+                                <span>
+                                  {m.status === 'now_showing'
+                                    ? 'Đang chiếu'
+                                    : m.status === 'coming_soon'
+                                    ? 'Sắp ra mắt'
+                                    : 'Ngừng chiếu'}
+                                </span>
                               </button>
                             </td>
 
-                            <td className="p-4 font-mono-data">
-                              {m.duration_minutes ? `${m.duration_minutes} phút` : 'N/A'}
+                            {/* Thời lượng / Ngày ra mắt */}
+                            <td className="py-3.5 px-4 font-mono-data">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1.5 text-[11px]">
+                                  <Clock className="w-3 h-3 text-amber-500 shrink-0" />
+                                  <span className={cn('font-semibold', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>
+                                    {m.duration_minutes ? `${m.duration_minutes} phút` : 'N/A'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-[10px]">
+                                  <Calendar className={cn('w-3 h-3 shrink-0', isDark ? 'text-[#6e6c68]' : 'text-slate-400')} />
+                                  <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-500'}>
+                                    {m.release_date || 'Chưa cập nhật'}
+                                  </span>
+                                </div>
+                              </div>
                             </td>
 
-                            <td className="p-4 font-mono-data">
-                              {m.release_date || 'Chưa cập nhật'}
-                            </td>
-
-                            <td className="p-4 text-right">
-                              <div className="flex items-center justify-end gap-2">
+                            {/* Thao tác */}
+                            <td className="py-3.5 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <button
                                   type="button"
                                   onClick={() => handleViewMovieDetail(m)}
-                                  className="bg-amber-500/15 hover:bg-amber-500/25 text-[#e8b84b] border border-amber-500/30 rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                                  className={cn(
+                                    'px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95',
+                                    isDark
+                                      ? 'bg-amber-500/10 hover:bg-amber-500/20 text-[#e8b84b] border-amber-500/30'
+                                      : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                                  )}
+                                  title="Xem chi tiết, dàn diễn viên và trailer phim"
                                 >
-                                  <span>👁️</span>
-                                  <span>Xem chi tiết</span>
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>Chi tiết</span>
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteMovie(m.id, m.title)}
-                                  className="bg-white/5 hover:bg-[rgba(192,57,43,0.2)] text-[#a09e9a] hover:text-[#e07060] border border-white/10 hover:border-[rgba(192,57,43,0.4)] rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all cursor-pointer"
+                                  className={cn(
+                                    'px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 active:scale-95',
+                                    isDark
+                                      ? 'bg-white/5 hover:bg-rose-950/40 text-[#a09e9a] hover:text-rose-400 border-white/10 hover:border-rose-500/30'
+                                      : 'bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border-slate-200 hover:border-rose-200'
+                                  )}
+                                  title="Xóa bộ phim khỏi cơ sở dữ liệu"
                                 >
-                                  Xóa phim
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Xóa</span>
                                 </button>
                               </div>
                             </td>
@@ -3363,10 +3904,10 @@ export default function AdminView() {
                     </table>
                   </div>
 
-                  {/* Pagination Control for Movies */}
+                  {/* Pagination Control */}
                   <PaginationControl
                     currentPage={moviePage}
-                    totalItems={filtered.length}
+                    totalItems={filteredMovies.length}
                     pageSize={PAGE_SIZE}
                     onPageChange={setMoviePage}
                   />
@@ -3379,338 +3920,342 @@ export default function AdminView() {
 
       {/* TAB 2: SHOWTIMES MANAGEMENT */}
       {activeTab === 'showtimes' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Column Left: AI Auto Schedule Engine & Showtime Cancel Section */}
-          <div className="lg:col-span-5 space-y-6">
-            {/* Auto Schedule Card */}
-            <div className={`p-6 rounded-2xl border space-y-5 shadow-xl transition-colors ${
-              isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
-            }`}>
-              <div className="space-y-1.5">
-                <h3 className={`font-display font-bold text-2xl ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Xếp Lịch Chiếu Tự Động</h3>
-                <p className={`text-xs leading-relaxed ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-                  Hệ thống tự động phân bổ lịch chiếu theo danh sách phòng, thời lượng từng bộ phim, giờ hoạt động của rạp và đảm bảo chống trùng lặp suất chiếu.
+        <div className="space-y-6">
+          {/* Top Header Card */}
+          <div className={cn(
+            'border rounded-2xl p-5 sm:p-6 transition-all shadow-xs',
+            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+          )}>
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2.5">
+                  <span className={cn(
+                    'p-2 rounded-xl text-amber-500',
+                    isDark ? 'bg-amber-500/10' : 'bg-amber-50'
+                  )}>
+                    <CalendarClock className="w-5 h-5 stroke-[2]" />
+                  </span>
+                  <h3 className={cn('font-display font-black text-xl tracking-tight', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                    Quản Lý Lịch Chiếu & Suất Chiếu
+                  </h3>
+                </div>
+                <p className={cn('text-xs pl-9 leading-relaxed', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                  Điều phối khung giờ chiếu, phân bổ phòng chiếu và quản lý hủy suất chiếu an toàn theo tiêu chuẩn rạp.
                 </p>
               </div>
 
-              {/* Launch Modal Action Button */}
-              <button
-                type="button"
-                onClick={() => setAutoModalOpen(true)}
-                className="w-full bg-gradient-to-r from-[#e8b84b] via-[#f0c868] to-[#e8b84b] text-[#09090e] border-0 rounded-xl py-4 font-bold text-sm cursor-pointer hover:shadow-[0_4px_24px_rgba(232,184,75,0.4)] transition-all flex items-center justify-center gap-2 uppercase tracking-wider shadow-lg"
-              >
-                <span>⚡</span>
-                <span>Lập Lịch Tự Động</span>
-              </button>
+              {/* Header Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2.5 sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => loadAllData()}
+                  className={cn(
+                    'border rounded-xl px-3.5 py-2 text-xs font-semibold cursor-pointer transition-all flex items-center gap-2 active:scale-95',
+                    isDark
+                      ? 'bg-white/5 hover:bg-white/10 border-white/15 text-[#f0ede8]'
+                      : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                  )}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Làm Mới</span>
+                </button>
+              </div>
             </div>
+          </div>
 
-            {/* Dedicated Showtime Cancellation Section */}
-            <div className={`p-6 rounded-2xl border space-y-4 shadow-xl transition-colors ${
-              isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
-            }`}>
-              <div className={`border-b pb-3 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
-                <h3 className={`font-display font-bold text-lg flex items-center gap-2 ${
-                  isDark ? 'text-[#f0ede8]' : 'text-slate-900'
-                }`}>
-                  <span className="text-rose-500">🗑️</span>
-                  <span>Hủy Suất Chiếu</span>
-                </h3>
-                <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                  Chọn 1 trong 3 mục: Hủy 1 hoặc nhiều suất cụ thể, hủy toàn bộ suất của phim hoặc hủy tất cả suất sắp chiếu.
-                </p>
+          {/* 4 Mini KPI Metric Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+            {/* Card 1: Tổng Suất Chiếu */}
+            <button
+              type="button"
+              onClick={() => { setStTimeFilter('all'); setShowtimePage(1); }}
+              className={cn(
+                'p-4 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden group',
+                stTimeFilter === 'all'
+                  ? isDark
+                    ? 'bg-white/10 border-[#e8b84b] ring-1 ring-[#e8b84b]/50'
+                    : 'bg-amber-50/80 border-amber-400 ring-1 ring-amber-400/50 shadow-xs'
+                  : isDark
+                  ? 'bg-[#111118] border-white/10 hover:border-white/20'
+                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className={cn('text-[11px] font-bold uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                  Tổng Suất Chiếu
+                </span>
+                <span className={cn('p-1.5 rounded-lg', isDark ? 'bg-white/5 text-[#f0ede8]' : 'bg-slate-100 text-slate-700')}>
+                  <CalendarClock className="w-3.5 h-3.5" />
+                </span>
+              </div>
+              <div className={cn('font-display font-black text-2xl mt-2', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                {showtimeMetrics.total}
+              </div>
+              <div className={cn('text-[11px] mt-1', isDark ? 'text-[#6e6c68]' : 'text-slate-400')}>
+                Toàn bộ lịch rạp
+              </div>
+            </button>
+
+            {/* Card 2: Sắp Chiếu */}
+            <button
+              type="button"
+              onClick={() => { setStTimeFilter('upcoming'); setShowtimePage(1); }}
+              className={cn(
+                'p-4 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden group',
+                stTimeFilter === 'upcoming'
+                  ? isDark
+                    ? 'bg-emerald-500/10 border-emerald-500 ring-1 ring-emerald-500/50'
+                    : 'bg-emerald-50/80 border-emerald-400 ring-1 ring-emerald-400/50 shadow-xs'
+                  : isDark
+                  ? 'bg-[#111118] border-white/10 hover:border-white/20'
+                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className={cn('text-[11px] font-bold uppercase tracking-wider', isDark ? 'text-emerald-400' : 'text-emerald-600')}>
+                  Sắp Chiếu
+                </span>
+                <span className={cn('p-1.5 rounded-lg', isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-100 text-emerald-700')}>
+                  <Clock className="w-3.5 h-3.5" />
+                </span>
+              </div>
+              <div className={cn('font-display font-black text-2xl mt-2', isDark ? 'text-emerald-400' : 'text-emerald-600')}>
+                {showtimeMetrics.upcoming}
+              </div>
+              <div className={cn('text-[11px] mt-1', isDark ? 'text-[#6e6c68]' : 'text-slate-400')}>
+                Sẵn sàng đón khách
+              </div>
+            </button>
+
+            {/* Card 3: Đã Chiếu */}
+            <button
+              type="button"
+              onClick={() => { setStTimeFilter('past'); setShowtimePage(1); }}
+              className={cn(
+                'p-4 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden group',
+                stTimeFilter === 'past'
+                  ? isDark
+                    ? 'bg-white/10 border-slate-400 ring-1 ring-slate-400/50'
+                    : 'bg-slate-100 border-slate-400 ring-1 ring-slate-400/50 shadow-xs'
+                  : isDark
+                  ? 'bg-[#111118] border-white/10 hover:border-white/20'
+                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className={cn('text-[11px] font-bold uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                  Đã Chiếu
+                </span>
+                <span className={cn('p-1.5 rounded-lg', isDark ? 'bg-white/5 text-[#a09e9a]' : 'bg-slate-100 text-slate-600')}>
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                </span>
+              </div>
+              <div className={cn('font-display font-black text-2xl mt-2', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                {showtimeMetrics.past}
+              </div>
+              <div className={cn('text-[11px] mt-1', isDark ? 'text-[#6e6c68]' : 'text-slate-400')}>
+                Suất đã kết thúc
+              </div>
+            </button>
+
+            {/* Card 4: Hoạt Động Rạp */}
+            <div
+              className={cn(
+                'p-4 rounded-2xl border text-left relative overflow-hidden',
+                isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-xs'
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className={cn('text-[11px] font-bold uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                  Rạp Hoạt Động
+                </span>
+                <span className={cn('p-1.5 rounded-lg', isDark ? 'bg-white/5 text-amber-400' : 'bg-amber-50 text-amber-600')}>
+                  <Building2 className="w-3.5 h-3.5" />
+                </span>
+              </div>
+              <div className={cn('font-display font-black text-2xl mt-2', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                {showtimeMetrics.activeRoomsCount}/{safeRooms.length} <span className="text-xs font-normal text-muted-foreground">phòng</span>
+              </div>
+              <div className={cn('text-[11px] mt-1 truncate', isDark ? 'text-[#6e6c68]' : 'text-slate-400')}>
+                {showtimeMetrics.activeMoviesCount} phim đang chiếu
+              </div>
+            </div>
+          </div>
+
+          {/* Main 2 Columns Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Column Left: AI Auto Schedule Card & Dedicated Cancellation Card */}
+            <div className="lg:col-span-5 space-y-6">
+              {/* Auto Schedule Card */}
+              <div className={cn(
+                'p-5 sm:p-6 rounded-2xl border space-y-4 shadow-xs transition-colors',
+                isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+              )}>
+                <div className="flex items-start gap-3">
+                  <span className={cn(
+                    'p-2 rounded-xl shrink-0 mt-0.5',
+                    isDark ? 'bg-amber-500/10 text-[#e8b84b]' : 'bg-amber-50 text-amber-600'
+                  )}>
+                    <Sparkles className="w-5 h-5 stroke-[2]" />
+                  </span>
+                  <div className="space-y-1 min-w-0">
+                    <h3 className={cn('font-display font-bold text-lg', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                      Xếp Lịch Chiếu Tự Động
+                    </h3>
+                    <p className={cn('text-xs leading-relaxed', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      Thuật toán phân bổ lịch chiếu thông minh theo danh sách phòng, thời lượng từng bộ phim và khung giờ mở cửa rạp.
+                    </p>
+                  </div>
+                </div>
+
+                <div className={cn(
+                  'p-3 rounded-xl border flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]',
+                  isDark ? 'bg-[#09090e] border-white/5 text-[#a09e9a]' : 'bg-slate-50 border-slate-200 text-slate-600'
+                )}>
+                  <span className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> Chống trùng lịch
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> Thời gian dọn phòng
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> Giá vé Thường / VIP
+                  </span>
+                </div>
+
+                {/* Launch Modal Action Button */}
+                <button
+                  type="button"
+                  onClick={() => setAutoModalOpen(true)}
+                  className="w-full bg-[#e8b84b] hover:bg-[#d9a738] text-[#09090e] border-0 rounded-xl py-3.5 font-bold text-xs cursor-pointer transition-all shadow-sm hover:shadow flex items-center justify-center gap-2 uppercase tracking-wider active:scale-[0.99]"
+                >
+                  <Sparkles className="w-4 h-4 stroke-[2.2]" />
+                  <span>Cấu Hình & Lập Lịch Tự Động</span>
+                </button>
               </div>
 
-              {/* Sub-tab selector for Cancel methods */}
-              <div className={`flex rounded-xl p-1 border text-xs gap-1 ${
-                isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-100 border-slate-200'
-              }`}>
-                <button
-                  type="button"
-                  onClick={() => setCancelMode('single')}
-                  className={`flex-1 py-2 px-2 rounded-lg font-bold transition-all cursor-pointer text-center ${
-                    cancelMode === 'single'
-                      ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 shadow-sm'
-                      : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  🎯 Suất Cụ Thể
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCancelMode('movie')}
-                  className={`flex-1 py-2 px-2 rounded-lg font-bold transition-all cursor-pointer text-center ${
-                    cancelMode === 'movie'
-                      ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 shadow-sm'
-                      : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  🎬 Theo Phim
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCancelMode('all')}
-                  className={`flex-1 py-2 px-2 rounded-lg font-bold transition-all cursor-pointer text-center ${
-                    cancelMode === 'all'
-                      ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 shadow-sm'
-                      : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  💥 Tất Cả Suất
-                </button>
-              </div>
+              {/* Dedicated Showtime Cancellation Section */}
+              <div className={cn(
+                'p-5 sm:p-6 rounded-2xl border space-y-4 shadow-xs transition-colors',
+                isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+              )}>
+                <div className={cn('border-b pb-3.5', isDark ? 'border-white/10' : 'border-slate-200')}>
+                  <div className="flex items-center gap-2.5">
+                    <span className={cn(
+                      'p-2 rounded-xl shrink-0',
+                      isDark ? 'bg-rose-500/10 text-rose-400' : 'bg-rose-50 text-rose-600'
+                    )}>
+                      <Trash2 className="w-4 h-4 stroke-[2]" />
+                    </span>
+                    <div>
+                      <h3 className={cn('font-display font-bold text-base', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                        Quản Lý Hủy Suất Chiếu
+                      </h3>
+                      <p className={cn('text-xs mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                        Hủy suất chọn lọc, theo phim hoặc hủy an toàn toàn bộ suất sắp chiếu.
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-              {/* Method 1: Cancel Single/Multiple Specific Showtimes */}
-              {cancelMode === 'single' && (
-                <div className="space-y-3 pt-1">
-                  {(() => {
-                    const upcomingSts = showtimes.filter(
-                      (st) => new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed' && st.status !== 'cancelled'
-                    )
-                    const selectedCount = selectedStIds.length
+                {/* Sub-tab selector for Cancel methods */}
+                <div className={cn(
+                  'flex rounded-xl p-1 border text-xs gap-1',
+                  isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-100 border-slate-200'
+                )}>
+                  <button
+                    type="button"
+                    onClick={() => setCancelMode('single')}
+                    className={cn(
+                      'flex-1 py-2 px-2 rounded-lg font-bold transition-all cursor-pointer text-center flex items-center justify-center gap-1.5',
+                      cancelMode === 'single'
+                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 shadow-xs'
+                        : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
+                    )}
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>Suất Cụ Thể</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCancelMode('movie')}
+                    className={cn(
+                      'flex-1 py-2 px-2 rounded-lg font-bold transition-all cursor-pointer text-center flex items-center justify-center gap-1.5',
+                      cancelMode === 'movie'
+                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 shadow-xs'
+                        : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
+                    )}
+                  >
+                    <Film className="w-3.5 h-3.5" />
+                    <span>Theo Phim</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCancelMode('all')}
+                    className={cn(
+                      'flex-1 py-2 px-2 rounded-lg font-bold transition-all cursor-pointer text-center flex items-center justify-center gap-1.5',
+                      cancelMode === 'all'
+                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 shadow-xs'
+                        : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
+                    )}
+                  >
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    <span>Toàn Bộ Suất</span>
+                  </button>
+                </div>
 
-                    return (
-                      <>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-[#a09e9a]">Tích chọn suất chiếu muốn hủy:</span>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedStIds(upcomingSts.map((st) => st.id))}
-                              className="text-[11px] text-amber-400 hover:underline cursor-pointer"
-                            >
-                              Tích tất cả ({upcomingSts.length})
-                            </button>
-                            {selectedCount > 0 && (
+                {/* Method 1: Cancel Single/Multiple Specific Showtimes */}
+                {cancelMode === 'single' && (
+                  <div className="space-y-3 pt-1">
+                    {(() => {
+                      const upcomingSts = showtimes.filter(
+                        (st) => new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed' && st.status !== 'cancelled'
+                      )
+                      const selectedCount = selectedStIds.length
+
+                      return (
+                        <>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className={cn('font-medium', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                              Chọn suất chiếu muốn hủy:
+                            </span>
+                            <div className="flex items-center gap-2">
                               <button
                                 type="button"
-                                onClick={() => setSelectedStIds([])}
-                                className="text-[11px] text-[#a09e9a] hover:underline cursor-pointer"
+                                onClick={() => setSelectedStIds(upcomingSts.map((st) => st.id))}
+                                className="text-[11px] text-amber-500 hover:underline font-semibold cursor-pointer"
                               >
-                                Bỏ chọn
+                                Chọn tất cả ({upcomingSts.length})
                               </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Checklist Container */}
-                        <div className="max-h-56 overflow-y-auto space-y-1.5 p-2 bg-[#09090e] border border-white/10 rounded-xl">
-                          {upcomingSts.length === 0 ? (
-                            <p className="text-xs text-[#a09e9a] p-3 text-center italic">
-                              Hiện không có suất chiếu sắp chiếu nào.
-                            </p>
-                          ) : (
-                            upcomingSts.map((st) => {
-                              const isChecked = selectedStIds.includes(st.id)
-                              const mTitle = st.movie?.title || `Phim #${st.movie_id}`
-                              const rName = st.room?.name || `Phòng #${st.room_id}`
-                              const timeFmt = new Date(st.start_time).toLocaleString('vi-VN', {
-                                weekday: 'short',
-                                day: '2-digit',
-                                month: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                              return (
-                                <label
-                                  key={st.id}
-                                  className={`flex items-center gap-2.5 p-2 rounded-lg text-xs cursor-pointer border transition-colors ${
-                                    isChecked
-                                      ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
-                                      : 'bg-white/5 border-transparent text-[#a09e9a] hover:text-[#f0ede8] hover:bg-white/10'
-                                  }`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => handleToggleSelectSt(st.id)}
-                                    className="accent-rose-500 w-4 h-4 rounded cursor-pointer"
-                                  />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="font-bold truncate text-[#f0ede8]">{mTitle}</p>
-                                    <p className="text-[10px] text-[#a09e9a]">
-                                      #{st.id} - {rName} | {timeFmt}
-                                    </p>
-                                  </div>
-                                </label>
-                              )
-                            })
-                          )}
-                        </div>
-
-                        <button
-                          type="button"
-                          disabled={selectedCount === 0}
-                          onClick={() => handleBulkCancelSelectedShowtimes()}
-                          className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
-                        >
-                          🗑️ Hủy {selectedCount > 0 ? `${selectedCount} Suất Chiếu Đã Chọn` : 'Suất Chiếu Đã Chọn'}
-                        </button>
-                      </>
-                    )
-                  })()}
-                </div>
-              )}
-
-              {/* Method 2: Cancel Showtimes By Movie */}
-              {cancelMode === 'movie' && (() => {
-                const moviesWithUpcomingShowtimes = movies
-                  .map((m) => {
-                    const upcomingCount = showtimes.filter(
-                      (st) =>
-                        st.movie_id === m.id &&
-                        new Date(st.end_time || st.start_time).getTime() >= Date.now() &&
-                        st.status !== 'completed' &&
-                        st.status !== 'cancelled'
-                    ).length
-                    return { ...m, upcomingCount }
-                  })
-                  .filter((m) => m.upcomingCount > 0)
-
-                const upcomingMovieSts = showtimes.filter(
-                  (st) =>
-                    cancelMovieIds.includes(st.movie_id) &&
-                    new Date(st.end_time || st.start_time).getTime() >= Date.now() &&
-                    st.status !== 'completed' &&
-                    st.status !== 'cancelled'
-                )
-
-                const selectedMovieStIds = selectedStIds.filter((id) =>
-                  upcomingMovieSts.some((st) => st.id === id)
-                )
-
-                return (
-                  <div className="space-y-3 pt-1">
-                    {moviesWithUpcomingShowtimes.length === 0 ? (
-                      <div className={`p-6 rounded-xl border border-dashed text-center text-xs space-y-1 ${
-                        isDark ? 'border-white/10 text-[#a09e9a]' : 'border-slate-300 text-slate-500'
-                      }`}>
-                        <div className="text-xl">🎬</div>
-                        <div className="font-semibold">Không có phim nào đang có suất chiếu sắp diễn ra</div>
-                        <div className="text-[11px] opacity-75">Tất cả các suất chiếu hiện tại đã hoàn thành hoặc chưa được xếp lịch.</div>
-                      </div>
-                    ) : (
-                      <>
-                        {/* Header & Quick Action Buttons */}
-                        <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
-                          <label className={`font-bold flex items-center gap-1.5 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                            <span>🎬</span>
-                            <span>
-                              Chọn các bộ phim cần hủy suất{' '}
-                              <span className="text-[#e8b84b] font-mono-data font-bold">
-                                ({cancelMovieIds.length}/{moviesWithUpcomingShowtimes.length} phim)
-                              </span>:
-                            </span>
-                          </label>
-                          <div className="flex items-center gap-2 text-[11px]">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const allIds = moviesWithUpcomingShowtimes.map((m) => m.id)
-                                setCancelMovieIds(allIds)
-                                setSelectedStIds([])
-                              }}
-                              className="text-amber-400 hover:underline font-semibold cursor-pointer"
-                            >
-                              ✓ Chọn tất cả ({moviesWithUpcomingShowtimes.length})
-                            </button>
-                            {cancelMovieIds.length > 0 && (
-                              <>
-                                <span className={isDark ? 'text-white/20' : 'text-slate-300'}>|</span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCancelMovieIds([])
-                                    setSelectedStIds([])
-                                  }}
-                                  className={isDark ? 'text-[#a09e9a] hover:text-[#f0ede8] hover:underline cursor-pointer' : 'text-slate-500 hover:text-slate-800 hover:underline cursor-pointer'}
-                                >
-                                  ✕ Bỏ chọn
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Selectable Movie Grid / Chips */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                          {moviesWithUpcomingShowtimes.map((m) => {
-                            const isSelected = cancelMovieIds.includes(m.id)
-                            return (
-                              <label
-                                key={m.id}
-                                className={`flex items-center justify-between gap-2 p-2.5 rounded-xl border transition-all cursor-pointer select-none text-xs ${
-                                  isSelected
-                                    ? isDark
-                                      ? 'bg-rose-500/15 border-rose-500/40 text-[#f0ede8] shadow-sm shadow-rose-500/5'
-                                      : 'bg-rose-50 border-rose-400 text-rose-900 font-semibold'
-                                    : isDark
-                                      ? 'bg-[#09090e] border-white/10 text-[#a09e9a] hover:border-white/20'
-                                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 shadow-sm'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setCancelMovieIds([...cancelMovieIds, m.id])
-                                      } else {
-                                        setCancelMovieIds(cancelMovieIds.filter((id) => id !== m.id))
-                                      }
-                                      setSelectedStIds([])
-                                    }}
-                                    className="accent-rose-500 w-4 h-4 rounded cursor-pointer shrink-0"
-                                  />
-                                  <span className="truncate font-medium">{m.title}</span>
-                                </div>
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono-data font-bold shrink-0 ${
-                                  isSelected
-                                    ? 'bg-rose-500/20 text-rose-400'
-                                    : isDark
-                                      ? 'bg-white/5 text-[#a09e9a]'
-                                      : 'bg-slate-100 text-slate-600'
-                                }`}>
-                                  {m.upcomingCount} suất
-                                </span>
-                              </label>
-                            )
-                          })}
-                        </div>
-
-                        {/* Detail Showtimes for Selected Movies */}
-                        {cancelMovieIds.length > 0 && (
-                          <div className={`space-y-3 pt-3 border-t ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
-                            <div className="flex items-center justify-between text-xs">
-                              <span className={`font-semibold ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>
-                                Danh sách suất sắp chiếu ({upcomingMovieSts.length}):
-                              </span>
-                              <div className="flex gap-2 text-[11px]">
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedStIds(upcomingMovieSts.map((st) => st.id))}
-                                  className="text-amber-400 hover:underline cursor-pointer"
-                                >
-                                  Tích tất cả {upcomingMovieSts.length} suất
-                                </button>
-                                {selectedMovieStIds.length > 0 && (
+                              {selectedCount > 0 && (
+                                <>
+                                  <span className={isDark ? 'text-white/20' : 'text-slate-300'}>|</span>
                                   <button
                                     type="button"
                                     onClick={() => setSelectedStIds([])}
-                                    className={isDark ? 'text-[#a09e9a] hover:text-[#f0ede8] hover:underline cursor-pointer' : 'text-slate-500 hover:text-slate-800 hover:underline cursor-pointer'}
+                                    className={cn('text-[11px] hover:underline cursor-pointer', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}
                                   >
-                                    Bỏ chọn suất
+                                    Bỏ chọn
                                   </button>
-                                )}
-                              </div>
+                                </>
+                              )}
                             </div>
+                          </div>
 
-                            <div className={`max-h-48 overflow-y-auto space-y-1.5 p-2 rounded-xl border ${
-                              isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-50 border-slate-200'
-                            }`}>
-                              {upcomingMovieSts.map((st) => {
+                          {/* Checklist Container */}
+                          <div className={cn(
+                            'max-h-60 overflow-y-auto space-y-1.5 p-2 rounded-xl border',
+                            isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-50 border-slate-200'
+                          )}>
+                            {upcomingSts.length === 0 ? (
+                              <div className={cn('text-xs p-6 text-center italic space-y-1', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                                <Calendar className="w-6 h-6 mx-auto opacity-40 mb-1" />
+                                <p>Hiện không có suất chiếu sắp chiếu nào.</p>
+                              </div>
+                            ) : (
+                              upcomingSts.map((st) => {
                                 const isChecked = selectedStIds.includes(st.id)
-                                const movieObj = movies.find((m) => m.id === st.movie_id)
+                                const mTitle = st.movie?.title || `Phim #${st.movie_id}`
                                 const rName = st.room?.name || `Phòng #${st.room_id}`
                                 const timeFmt = new Date(st.start_time).toLocaleString('vi-VN', {
                                   weekday: 'short',
@@ -3722,13 +4267,16 @@ export default function AdminView() {
                                 return (
                                   <label
                                     key={st.id}
-                                    className={`flex items-center gap-2.5 p-2 rounded-lg text-xs cursor-pointer border transition-colors ${
+                                    className={cn(
+                                      'flex items-center gap-2.5 p-2.5 rounded-xl text-xs cursor-pointer border transition-all select-none',
                                       isChecked
-                                        ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+                                        ? isDark
+                                          ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+                                          : 'bg-rose-50 border-rose-300 text-rose-900 font-medium'
                                         : isDark
-                                          ? 'bg-white/5 border-transparent text-[#a09e9a] hover:text-[#f0ede8] hover:bg-white/10'
-                                          : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
-                                    }`}
+                                        ? 'bg-white/5 border-transparent text-[#a09e9a] hover:text-[#f0ede8] hover:bg-white/10'
+                                        : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 shadow-2xs'
+                                    )}
                                   >
                                     <input
                                       type="checkbox"
@@ -3736,292 +4284,595 @@ export default function AdminView() {
                                       onChange={() => handleToggleSelectSt(st.id)}
                                       className="accent-rose-500 w-4 h-4 rounded cursor-pointer shrink-0"
                                     />
-                                    <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
-                                      <span className={`truncate font-bold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                                        {movieObj?.title || `Phim #${st.movie_id}`}
-                                      </span>
-                                      <span className={`font-mono-data text-[11px] shrink-0 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                                        #{st.id} • {rName} • {timeFmt}
-                                      </span>
+                                    <div className="flex-1 min-w-0">
+                                      <p className={cn('font-bold truncate', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>{mTitle}</p>
+                                      <div className="flex items-center gap-2 mt-0.5 text-[11px] font-mono-data">
+                                        <span className={cn('px-1.5 py-0.2 rounded text-[10px] font-semibold', isDark ? 'bg-white/10 text-amber-400' : 'bg-amber-100 text-amber-800')}>
+                                          {rName}
+                                        </span>
+                                        <span className={cn(isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>{timeFmt}</span>
+                                        <span className={cn('text-[10px]', isDark ? 'text-[#6e6c68]' : 'text-slate-400')}>#{st.id}</span>
+                                      </div>
                                     </div>
                                   </label>
                                 )
-                              })}
-                            </div>
-
-                            <button
-                              type="button"
-                              disabled={upcomingMovieSts.length === 0}
-                              onClick={() => {
-                                if (selectedMovieStIds.length > 0) {
-                                  handleCancelByMovies(cancelMovieIds, selectedMovieStIds)
-                                } else {
-                                  handleCancelByMovies(cancelMovieIds)
-                                }
-                              }}
-                              className="w-full bg-rose-600 hover:bg-rose-700 text-white font-extrabold py-3 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 shadow-md uppercase tracking-wider flex items-center justify-center gap-2"
-                            >
-                              <span>🗑️</span>
-                              <span>
-                                {selectedMovieStIds.length > 0
-                                  ? `HỦY ${selectedMovieStIds.length} SUẤT CHIẾU ĐÃ CHỌN`
-                                  : `HỦY TẤT CẢ ${upcomingMovieSts.length} SUẤT SẮP CHIẾU CỦA ${cancelMovieIds.length} PHIM ĐÃ CHỌN`}
-                              </span>
-                            </button>
+                              })
+                            )}
                           </div>
-                        )}
-                      </>
-                    )}
+
+                          <button
+                            type="button"
+                            disabled={selectedCount === 0}
+                            onClick={() => handleBulkCancelSelectedShowtimes()}
+                            className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm flex items-center justify-center gap-2 active:scale-[0.99]"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Hủy {selectedCount > 0 ? `${selectedCount} Suất Chiếu Đã Chọn` : 'Suất Chiếu Đã Chọn'}</span>
+                          </button>
+                        </>
+                      )
+                    })()}
                   </div>
-                )
-              })()}
+                )}
 
-              {/* Method 3: Cancel All System Showtimes */}
-              {cancelMode === 'all' && (
-                <div className="space-y-3 pt-1">
-                  {(() => {
-                    const upcomingStsCount = showtimes.filter(
-                      (st) => new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed' && st.status !== 'cancelled'
-                    ).length
+                {/* Method 2: Cancel Showtimes By Movie */}
+                {cancelMode === 'movie' && (() => {
+                  const moviesWithUpcomingShowtimes = movies
+                    .map((m) => {
+                      const upcomingCount = showtimes.filter(
+                        (st) =>
+                          st.movie_id === m.id &&
+                          new Date(st.end_time || st.start_time).getTime() >= Date.now() &&
+                          st.status !== 'completed' &&
+                          st.status !== 'cancelled'
+                      ).length
+                      return { ...m, upcomingCount }
+                    })
+                    .filter((m) => m.upcomingCount > 0)
 
-                    return (
-                      <>
-                        <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl space-y-1.5">
-                          <p className="font-bold flex items-center gap-1">
-                            <span>🛡️ Hủy An Toàn Suất Sắp Chiếu:</span>
-                          </p>
-                          <p className="text-[11px] leading-relaxed opacity-90">
-                            Thao tác này chỉ xóa các <strong>{upcomingStsCount}</strong> suất chiếu sắp diễn ra. Các suất đã chiếu hoặc đang chiếu sẽ <strong>được giữ nguyên</strong>.
-                          </p>
+                  const upcomingMovieSts = showtimes.filter(
+                    (st) =>
+                      cancelMovieIds.includes(st.movie_id) &&
+                      new Date(st.end_time || st.start_time).getTime() >= Date.now() &&
+                      st.status !== 'completed' &&
+                      st.status !== 'cancelled'
+                  )
+
+                  const selectedMovieStIds = selectedStIds.filter((id) =>
+                    upcomingMovieSts.some((st) => st.id === id)
+                  )
+
+                  return (
+                    <div className="space-y-3 pt-1">
+                      {moviesWithUpcomingShowtimes.length === 0 ? (
+                        <div className={cn(
+                          'p-6 rounded-xl border border-dashed text-center text-xs space-y-1',
+                          isDark ? 'border-white/10 text-[#a09e9a]' : 'border-slate-300 text-slate-500'
+                        )}>
+                          <Film className="w-6 h-6 mx-auto opacity-40 mb-1" />
+                          <div className="font-semibold">Không có phim nào đang có suất chiếu sắp diễn ra</div>
+                          <div className="text-[11px] opacity-75">Tất cả các suất chiếu hiện tại đã hoàn thành hoặc chưa được xếp lịch.</div>
                         </div>
+                      ) : (
+                        <>
+                          {/* Header & Quick Action Buttons */}
+                          <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
+                            <label className={cn('font-bold flex items-center gap-1.5', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                              <Film className="w-3.5 h-3.5 text-amber-500" />
+                              <span>
+                                Chọn phim cần hủy suất{' '}
+                                <span className="text-amber-500 font-mono-data font-bold">
+                                  ({cancelMovieIds.length}/{moviesWithUpcomingShowtimes.length} phim)
+                                </span>:
+                              </span>
+                            </label>
+                            <div className="flex items-center gap-2 text-[11px]">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const allIds = moviesWithUpcomingShowtimes.map((m) => m.id)
+                                  setCancelMovieIds(allIds)
+                                  setSelectedStIds([])
+                                }}
+                                className="text-amber-500 hover:underline font-semibold cursor-pointer"
+                              >
+                                Chọn tất cả ({moviesWithUpcomingShowtimes.length})
+                              </button>
+                              {cancelMovieIds.length > 0 && (
+                                <>
+                                  <span className={isDark ? 'text-white/20' : 'text-slate-300'}>|</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCancelMovieIds([])
+                                      setSelectedStIds([])
+                                    }}
+                                    className={cn('hover:underline cursor-pointer', isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-500 hover:text-slate-800')}
+                                  >
+                                    Bỏ chọn
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
 
-                        <button
-                          type="button"
-                          disabled={upcomingStsCount === 0}
-                          onClick={handleCancelAllSystemShowtimes}
-                          className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md uppercase tracking-wider"
-                        >
-                          💥 Hủy Tất Cả {upcomingStsCount} Suất Sắp Chiếu Hệ Thống
-                        </button>
-                      </>
-                    )
-                  })()}
-                </div>
-              )}
-            </div>
-          </div>
+                          {/* Selectable Movie Grid / Chips */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                            {moviesWithUpcomingShowtimes.map((m) => {
+                              const isSelected = cancelMovieIds.includes(m.id)
+                              return (
+                                <label
+                                  key={m.id}
+                                  className={cn(
+                                    'flex items-center justify-between gap-2 p-2.5 rounded-xl border transition-all cursor-pointer select-none text-xs',
+                                    isSelected
+                                      ? isDark
+                                        ? 'bg-rose-500/15 border-rose-500/40 text-[#f0ede8] shadow-xs'
+                                        : 'bg-rose-50 border-rose-300 text-rose-900 font-semibold'
+                                      : isDark
+                                      ? 'bg-[#09090e] border-white/10 text-[#a09e9a] hover:border-white/20'
+                                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 shadow-2xs'
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setCancelMovieIds([...cancelMovieIds, m.id])
+                                        } else {
+                                          setCancelMovieIds(cancelMovieIds.filter((id) => id !== m.id))
+                                        }
+                                        setSelectedStIds([])
+                                      }}
+                                      className="accent-rose-500 w-4 h-4 rounded cursor-pointer shrink-0"
+                                    />
+                                    <span className="truncate font-medium">{m.title}</span>
+                                  </div>
+                                  <span className={cn(
+                                    'px-2 py-0.5 rounded-md text-[10px] font-mono-data font-bold shrink-0',
+                                    isSelected
+                                      ? 'bg-rose-500/20 text-rose-400'
+                                      : isDark
+                                      ? 'bg-white/5 text-[#a09e9a]'
+                                      : 'bg-slate-100 text-slate-600'
+                                  )}>
+                                    {m.upcomingCount} suất
+                                  </span>
+                                </label>
+                              )
+                            })}
+                          </div>
 
-          {/* Showtimes List Table */}
-          <div className={`lg:col-span-7 border rounded-2xl p-6 shadow-xl space-y-4 ${
-            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
-          }`}>
-            <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-4 ${
-              isDark ? 'border-white/10' : 'border-slate-200'
-            }`}>
-              <div>
-                <h3 className={`font-display font-bold text-lg ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                  Danh Sách Suất Chiếu Hiện Có{' '}
-                  <span className="text-sm font-mono-data font-normal text-[#e8b84b]">
-                    ({filteredShowtimes.length}{filteredShowtimes.length !== showtimes.length && `/${showtimes.length}`})
-                  </span>
-                </h3>
+                          {/* Detail Showtimes for Selected Movies */}
+                          {cancelMovieIds.length > 0 && (
+                            <div className={cn('space-y-3 pt-3 border-t', isDark ? 'border-white/10' : 'border-slate-200')}>
+                              <div className="flex items-center justify-between text-xs">
+                                <span className={cn('font-semibold', isDark ? 'text-[#a09e9a]' : 'text-slate-700')}>
+                                  Danh sách suất sắp chiếu ({upcomingMovieSts.length}):
+                                </span>
+                                <div className="flex items-center gap-2 text-[11px]">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedStIds(upcomingMovieSts.map((st) => st.id))}
+                                    className="text-amber-500 hover:underline font-semibold cursor-pointer"
+                                  >
+                                    Chọn tất cả {upcomingMovieSts.length} suất
+                                  </button>
+                                  {selectedMovieStIds.length > 0 && (
+                                    <>
+                                      <span className={isDark ? 'text-white/20' : 'text-slate-300'}>|</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setSelectedStIds([])}
+                                        className={cn('hover:underline cursor-pointer', isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-500 hover:text-slate-800')}
+                                      >
+                                        Bỏ chọn suất
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className={cn(
+                                'max-h-48 overflow-y-auto space-y-1.5 p-2 rounded-xl border',
+                                isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-50 border-slate-200'
+                              )}>
+                                {upcomingMovieSts.map((st) => {
+                                  const isChecked = selectedStIds.includes(st.id)
+                                  const movieObj = movies.find((m) => m.id === st.movie_id)
+                                  const rName = st.room?.name || `Phòng #${st.room_id}`
+                                  const timeFmt = new Date(st.start_time).toLocaleString('vi-VN', {
+                                    weekday: 'short',
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })
+                                  return (
+                                    <label
+                                      key={st.id}
+                                      className={cn(
+                                        'flex items-center gap-2.5 p-2 rounded-lg text-xs cursor-pointer border transition-colors',
+                                        isChecked
+                                          ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+                                          : isDark
+                                          ? 'bg-white/5 border-transparent text-[#a09e9a] hover:text-[#f0ede8] hover:bg-white/10'
+                                          : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                                      )}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => handleToggleSelectSt(st.id)}
+                                        className="accent-rose-500 w-4 h-4 rounded cursor-pointer shrink-0"
+                                      />
+                                      <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+                                        <span className={cn('truncate font-bold', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                                          {movieObj?.title || `Phim #${st.movie_id}`}
+                                        </span>
+                                        <span className={cn('font-mono-data text-[11px] shrink-0', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                                          #{st.id} • {rName} • {timeFmt}
+                                        </span>
+                                      </div>
+                                    </label>
+                                  )
+                                })}
+                              </div>
+
+                              <button
+                                type="button"
+                                disabled={upcomingMovieSts.length === 0}
+                                onClick={() => {
+                                  if (selectedMovieStIds.length > 0) {
+                                    handleCancelByMovies(cancelMovieIds, selectedMovieStIds)
+                                  } else {
+                                    handleCancelByMovies(cancelMovieIds)
+                                  }
+                                }}
+                                className="w-full bg-rose-600 hover:bg-rose-700 text-white font-extrabold py-3 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 shadow-sm uppercase tracking-wider flex items-center justify-center gap-2 active:scale-[0.99]"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                <span>
+                                  {selectedMovieStIds.length > 0
+                                    ? `Hủy ${selectedMovieStIds.length} Suất Chiếu Đã Chọn`
+                                    : `Hủy Toàn Bộ ${upcomingMovieSts.length} Suất Sắp Chiếu Của ${cancelMovieIds.length} Phim Đã Chọn`}
+                                </span>
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* Method 3: Cancel All System Showtimes */}
+                {cancelMode === 'all' && (
+                  <div className="space-y-3 pt-1">
+                    {(() => {
+                      const upcomingStsCount = showtimes.filter(
+                        (st) => new Date(st.end_time || st.start_time).getTime() >= Date.now() && st.status !== 'completed' && st.status !== 'cancelled'
+                      ).length
+
+                      return (
+                        <>
+                          <div className={cn(
+                            'p-4 rounded-xl border text-xs space-y-2',
+                            isDark ? 'bg-rose-500/10 border-rose-500/30 text-rose-300' : 'bg-rose-50 border-rose-300 text-rose-900'
+                          )}>
+                            <div className="flex items-center gap-2 font-bold text-rose-500">
+                              <ShieldAlert className="w-4 h-4 shrink-0" />
+                              <span>Hủy An Toàn Suất Sắp Chiếu Hệ Thống:</span>
+                            </div>
+                            <p className="text-[11px] leading-relaxed opacity-90">
+                              Thao tác này chỉ xóa các <strong>{upcomingStsCount}</strong> suất chiếu sắp diễn ra. Các suất đã chiếu hoặc đang chiếu sẽ <strong>được giữ nguyên an toàn</strong> trong cơ sở dữ liệu.
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={upcomingStsCount === 0}
+                            onClick={handleCancelAllSystemShowtimes}
+                            className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm uppercase tracking-wider flex items-center justify-center gap-2 active:scale-[0.99]"
+                          >
+                            <AlertTriangle className="w-4 h-4" />
+                            <span>Hủy Tất Cả {upcomingStsCount} Suất Sắp Chiếu Hệ Thống</span>
+                          </button>
+                        </>
+                      )
+                    })()}
+                  </div>
+                )}
               </div>
+            </div>
 
-              <div className="flex items-center gap-2">
-                {(stFilterMovieId !== 'all' || stFilterRoomId !== 'all') && (
+            {/* Column Right: Showtimes List Catalog */}
+            <div className={cn(
+              'lg:col-span-7 border rounded-2xl p-5 sm:p-6 shadow-xs space-y-4 transition-colors',
+              isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+            )}>
+              <div className={cn('flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-4', isDark ? 'border-white/10' : 'border-slate-200')}>
+                <div className="flex items-center gap-2.5">
+                  <span className={cn(
+                    'p-1.5 rounded-lg',
+                    isDark ? 'bg-white/5 text-amber-400' : 'bg-slate-100 text-slate-700'
+                  )}>
+                    <Clapperboard className="w-4 h-4" />
+                  </span>
+                  <h3 className={cn('font-display font-bold text-base sm:text-lg', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                    Danh Sách Suất Chiếu{' '}
+                    <span className="text-sm font-mono-data font-normal text-amber-500">
+                      ({filteredShowtimes.length}{filteredShowtimes.length !== showtimes.length && ` / ${showtimes.length}`})
+                    </span>
+                  </h3>
+                </div>
+
+                {(stFilterMovieId !== 'all' || stFilterRoomId !== 'all' || stSearchQuery || stTimeFilter !== 'upcoming') && (
                   <button
                     type="button"
                     onClick={() => {
                       setStFilterMovieId('all')
                       setStFilterRoomId('all')
+                      setStSearchQuery('')
+                      setStTimeFilter('upcoming')
                       setShowtimePage(1)
                     }}
-                    className={`text-xs cursor-pointer flex items-center gap-1 border px-2.5 py-1 rounded-lg ${
-                      isDark ? 'text-[#a09e9a] hover:text-[#f0ede8] border-white/10' : 'text-slate-600 hover:text-slate-900 border-slate-300 bg-slate-50'
-                    }`}
+                    className={cn(
+                      'text-xs cursor-pointer flex items-center gap-1.5 border px-2.5 py-1 rounded-lg transition-colors font-medium',
+                      isDark ? 'text-[#a09e9a] hover:text-[#f0ede8] border-white/10 bg-white/5' : 'text-slate-600 hover:text-slate-900 border-slate-300 bg-slate-100'
+                    )}
                   >
-                    ✕ Xóa bộ lọc
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Đặt lại bộ lọc</span>
                   </button>
                 )}
               </div>
-            </div>
 
-            {/* Time Filter Tabs (Approach 1) */}
-            <div className={`flex items-center gap-1 p-1 rounded-xl border text-xs ${
-              isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-100 border-slate-200'
-            }`}>
-              <button
-                type="button"
-                onClick={() => { setStTimeFilter('upcoming'); setShowtimePage(1) }}
-                className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  stTimeFilter === 'upcoming'
-                    ? 'bg-[#e8b84b] text-[#09090e] shadow-md'
-                    : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span>🟢 Sắp chiếu</span>
-                <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-black/20 font-mono-data">
-                  {upcomingShowtimesCount}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setStTimeFilter('past'); setShowtimePage(1) }}
-                className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  stTimeFilter === 'past'
-                    ? isDark ? 'bg-white/20 text-[#f0ede8] shadow-md' : 'bg-white text-slate-900 shadow-sm border border-slate-200'
-                    : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span>⚪ Đã chiếu</span>
-                <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-black/30 font-mono-data">
-                  {pastShowtimesCount}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setStTimeFilter('all'); setShowtimePage(1) }}
-                className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  stTimeFilter === 'all'
-                    ? isDark ? 'bg-white/20 text-[#f0ede8] shadow-md' : 'bg-white text-slate-900 shadow-sm border border-slate-200'
-                    : isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span>📋 Tất cả</span>
-                <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-black/30 font-mono-data">
-                  {showtimes.length}
-                </span>
-              </button>
-            </div>
-
-            {/* Filter Dropdowns */}
-            <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl border text-xs ${
-              isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-50 border-slate-200'
-            }`}>
-              <div>
-                <label className={`block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>🎬 Lọc Theo Phim</label>
-                <select
-                  value={stFilterMovieId}
-                  onChange={(e) => {
-                    setStFilterMovieId(e.target.value === 'all' ? 'all' : Number(e.target.value))
-                    setShowtimePage(1)
-                  }}
-                  className={`w-full px-2.5 py-1.5 border rounded-lg outline-none cursor-pointer ${
-                    isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-300 text-slate-900'
-                  }`}
-                >
-                  <option value="all">-- Tất cả phim ({moviesForShowtimeFilter.length}) --</option>
-                  {moviesForShowtimeFilter.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className={`block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>🏛️ Lọc Theo Phòng Chiếu</label>
-                <select
-                  value={stFilterRoomId}
-                  onChange={(e) => {
-                    setStFilterRoomId(e.target.value === 'all' ? 'all' : Number(e.target.value))
-                    setShowtimePage(1)
-                  }}
-                  className={`w-full px-2.5 py-1.5 border rounded-lg outline-none cursor-pointer ${
-                    isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-300 text-slate-900'
-                  }`}
-                >
-                  <option value="all">-- Tất cả phòng ({roomsForShowtimeFilter.length}) --</option>
-                  {roomsForShowtimeFilter.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name} ({r.room_type})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            
-            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-              {filteredShowtimes.length === 0 ? (
-                <div className={`py-12 text-center text-xs italic border rounded-xl ${
-                  isDark ? 'bg-[#09090e] border-white/5 text-[#a09e9a]' : 'bg-slate-50 border-slate-200 text-slate-500'
-                }`}>
-                  🍿 Không tìm thấy suất chiếu nào phù hợp với bộ lọc đã chọn.
+              {/* Search & Filter Controls */}
+              <div className={cn(
+                'p-3 rounded-xl border text-xs space-y-3',
+                isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-50 border-slate-200'
+              )}>
+                {/* Quick Search */}
+                <div className="relative">
+                  <Search className={cn('w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2', isDark ? 'text-white/40' : 'text-slate-400')} />
+                  <input
+                    type="text"
+                    value={stSearchQuery}
+                    onChange={(e) => { setStSearchQuery(e.target.value); setShowtimePage(1); }}
+                    placeholder="Tìm theo tên phim, phòng chiếu, mã suất..."
+                    className={cn(
+                      'w-full pl-9 pr-8 py-2 border rounded-xl outline-none text-xs transition-colors',
+                      isDark
+                        ? 'bg-[#161622] border-white/10 text-[#f0ede8] placeholder:text-[#6e6c68] focus:border-[#e8b84b]'
+                        : 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-amber-500 shadow-2xs'
+                    )}
+                  />
+                  {stSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => { setStSearchQuery(''); setShowtimePage(1); }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 p-0.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
-              ) : (
-                filteredShowtimes
-                  .slice((showtimePage - 1) * PAGE_SIZE, showtimePage * PAGE_SIZE)
-                  .map((st) => {
-                    const startTimeFmt = new Date(st.start_time).toLocaleString('vi-VN', {
-                      weekday: 'short',
-                      day: '2-digit',
-                      month: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })
 
-                    const isPast = new Date(st.end_time || st.start_time).getTime() < Date.now() || st.status === 'completed'
+                {/* Dropdowns Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="relative">
+                    <label className={cn('block mb-1 font-semibold text-[11px] flex items-center gap-1.5', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      <Film className="w-3 h-3 text-amber-500" />
+                      <span>Lọc Theo Phim</span>
+                    </label>
+                    <select
+                      value={stFilterMovieId}
+                      onChange={(e) => {
+                        setStFilterMovieId(e.target.value === 'all' ? 'all' : Number(e.target.value))
+                        setShowtimePage(1)
+                      }}
+                      className={cn(
+                        'w-full px-3 py-2 border rounded-xl outline-none cursor-pointer text-xs transition-colors',
+                        isDark ? 'bg-[#161622] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-300 text-slate-900 shadow-2xs'
+                      )}
+                    >
+                      <option value="all">Tất cả phim ({moviesForShowtimeFilter.length})</option>
+                      {moviesForShowtimeFilter.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                    return (
-                      <div
-                        key={st.id}
-                        className={`border rounded-xl p-4 flex justify-between items-center gap-4 transition-colors ${
-                          isPast
-                            ? isDark
-                              ? 'bg-[#09090e]/60 border-white/5 opacity-80'
-                              : 'bg-slate-100/70 border-slate-200 opacity-80'
-                            : isDark
-                            ? 'bg-[#09090e] border-white/10 hover:border-white/20'
-                            : 'bg-slate-50/60 border-slate-200 hover:border-slate-300 shadow-xs'
-                        }`}
+                  <div className="relative">
+                    <label className={cn('block mb-1 font-semibold text-[11px] flex items-center gap-1.5', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      <Building2 className="w-3 h-3 text-amber-500" />
+                      <span>Lọc Theo Phòng Chiếu</span>
+                    </label>
+                    <select
+                      value={stFilterRoomId}
+                      onChange={(e) => {
+                        setStFilterRoomId(e.target.value === 'all' ? 'all' : Number(e.target.value))
+                        setShowtimePage(1)
+                      }}
+                      className={cn(
+                        'w-full px-3 py-2 border rounded-xl outline-none cursor-pointer text-xs transition-colors',
+                        isDark ? 'bg-[#161622] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-300 text-slate-900 shadow-2xs'
+                      )}
+                    >
+                      <option value="all">Tất cả phòng ({roomsForShowtimeFilter.length})</option>
+                      {roomsForShowtimeFilter.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name} ({r.room_type?.toUpperCase() || 'STANDARD'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Showtime Items List */}
+              <div className="space-y-2.5 max-h-[620px] overflow-y-auto pr-1">
+                {filteredShowtimes.length === 0 ? (
+                  <div className={cn(
+                    'py-14 text-center text-xs border rounded-2xl p-6 space-y-2',
+                    isDark ? 'bg-[#09090e] border-white/5 text-[#a09e9a]' : 'bg-slate-50 border-slate-200 text-slate-500'
+                  )}>
+                    <Film className="w-8 h-8 mx-auto opacity-30 mb-2" />
+                    <p className="font-semibold">Không tìm thấy suất chiếu nào phù hợp</p>
+                    <p className="text-[11px] opacity-75">Thử thay đổi từ khóa tìm kiếm hoặc điều chỉnh bộ lọc thời gian, phòng chiếu.</p>
+                    {(stFilterMovieId !== 'all' || stFilterRoomId !== 'all' || stSearchQuery || stTimeFilter !== 'upcoming') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStFilterMovieId('all')
+                          setStFilterRoomId('all')
+                          setStSearchQuery('')
+                          setStTimeFilter('upcoming')
+                          setShowtimePage(1)
+                        }}
+                        className="mt-2 text-[11px] text-amber-500 hover:underline font-semibold cursor-pointer"
                       >
-                        <div>
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className="text-[10px] font-mono-data text-[#e8b84b] bg-[#e8b84b]/10 border border-[#e8b84b]/20 rounded px-2 py-0.5 uppercase font-semibold">
-                              {st.room?.name ?? `Phòng #${st.room_id}`}
-                            </span>
+                        Đặt lại tất cả bộ lọc
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  filteredShowtimes
+                    .slice((showtimePage - 1) * PAGE_SIZE, showtimePage * PAGE_SIZE)
+                    .map((st) => {
+                      const startDate = new Date(st.start_time)
+                      const timeStr = startDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+                      const dateStr = startDate.toLocaleDateString('vi-VN', {
+                        weekday: 'short',
+                        day: '2-digit',
+                        month: '2-digit',
+                      })
 
-                            {isPast ? (
-                              <span className="text-[10px] font-mono-data text-slate-400 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 font-bold">
-                                ⚪ Đã kết thúc
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-mono-data text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5 font-bold">
-                                🟢 Sắp chiếu
-                              </span>
-                            )}
+                      const isPast = new Date(st.end_time || st.start_time).getTime() < Date.now() || st.status === 'completed'
+                      const roomTypeStr = (st.room?.room_type || 'standard').toUpperCase()
+                      const totalSeats = st.total_seats || 0
+                      const availSeats = st.available_seats !== undefined ? st.available_seats : totalSeats
 
-                            <span className={`text-xs font-mono-data ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>🕒 {startTimeFmt}</span>
+                      return (
+                        <div
+                          key={st.id}
+                          className={cn(
+                            'border rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 transition-all',
+                            isPast
+                              ? isDark
+                                ? 'bg-[#09090e]/60 border-white/5 opacity-75'
+                                : 'bg-slate-100/70 border-slate-200 opacity-75'
+                              : isDark
+                              ? 'bg-[#161622] border-white/10 hover:border-white/20 hover:shadow-md'
+                              : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
+                          )}
+                        >
+                          {/* Left Column: Time & Date Badge */}
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={cn(
+                              'px-3 py-2 rounded-xl text-center shrink-0 border min-w-[76px]',
+                              isPast
+                                ? isDark ? 'bg-white/5 border-white/5 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-500'
+                                : isDark ? 'bg-[#e8b84b]/10 border-[#e8b84b]/25 text-[#e8b84b]' : 'bg-amber-50 border-amber-300 text-amber-900'
+                            )}>
+                              <div className="font-display font-black text-lg leading-tight">{timeStr}</div>
+                              <div className="text-[10px] font-semibold mt-0.5 opacity-90">{dateStr}</div>
+                            </div>
+
+                            {/* Middle Info */}
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={cn(
+                                  'text-[10px] font-mono-data px-2 py-0.5 rounded-md font-bold uppercase border',
+                                  roomTypeStr.includes('IMAX')
+                                    ? 'bg-purple-500/10 border-purple-500/30 text-purple-400'
+                                    : roomTypeStr.includes('VIP')
+                                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                                    : isDark ? 'bg-white/5 border-white/10 text-slate-300' : 'bg-slate-100 border-slate-300 text-slate-700'
+                                )}>
+                                  {st.room?.name ?? `Phòng #${st.room_id}`}
+                                </span>
+
+                                {isPast ? (
+                                  <span className={cn(
+                                    'text-[10px] font-mono-data px-2 py-0.5 rounded-md font-semibold border',
+                                    isDark ? 'bg-white/5 border-white/5 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-500'
+                                  )}>
+                                    Đã chiếu
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-mono-data px-2 py-0.5 rounded-md font-semibold bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    Sắp chiếu
+                                  </span>
+                                )}
+
+                                <span className={cn('text-[10px] font-mono-data', isDark ? 'text-white/30' : 'text-slate-400')}>
+                                  #{st.id}
+                                </span>
+                              </div>
+
+                              <h4 className={cn('font-display font-bold text-sm sm:text-base truncate', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                                {st.movie?.title ?? `Phim #${st.movie_id}`}
+                              </h4>
+
+                              <div className={cn('flex items-center gap-2 text-xs font-mono-data', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                                <span>Giá:</span>
+                                <strong className="text-amber-500 font-bold">{fmt(Number(st.base_price))}</strong>
+                                <span className="opacity-50">/</span>
+                                <span className="text-amber-500/80 font-semibold">{fmt(Number(st.vip_price ?? st.base_price))}</span>
+                                <span className="text-[10px] opacity-75">(VIP)</span>
+                              </div>
+                            </div>
                           </div>
 
-                          <h4 className={`font-display font-bold text-base ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                            {st.movie?.title ?? `Phim #${st.movie_id}`}
-                          </h4>
+                          {/* Right Column: Seats & Single Cancel Action */}
+                          <div className="flex sm:flex-col items-end justify-between sm:justify-center gap-2 shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0">
+                            <div className={cn(
+                              'flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono-data border',
+                              isDark ? 'bg-white/5 border-white/5 text-[#a09e9a]' : 'bg-slate-100 border-slate-200 text-slate-700'
+                            )}>
+                              <Armchair className="w-3.5 h-3.5 text-amber-500" />
+                              <span>
+                                <strong>{availSeats}</strong>/{totalSeats} <span className="text-[10px] opacity-80">ghế trống</span>
+                              </span>
+                            </div>
 
-                          <p className={`text-xs mt-1 font-mono-data ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-                            Giá vé: <strong className="text-[#e8b84b]">{fmt(Number(st.base_price))}</strong> (Thường) / <strong className="text-[#e8b84b]">{fmt(Number(st.vip_price ?? st.base_price))}</strong> (VIP)
-                          </p>
+                            {!isPast && (
+                              <button
+                                type="button"
+                                onClick={() => handleCancelSingleShowtime(st.id)}
+                                className={cn(
+                                  'p-1.5 rounded-lg border text-xs cursor-pointer transition-all flex items-center gap-1',
+                                  isDark
+                                    ? 'border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
+                                    : 'border-rose-200 text-rose-600 hover:bg-rose-50'
+                                )}
+                                title="Hủy suất chiếu này"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span className="text-[11px] font-semibold hidden sm:inline">Hủy suất</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
+                      )
+                    })
+                )}
+              </div>
 
-                        <div className="text-right flex flex-col items-end justify-center">
-                          <span className={`text-[11px] font-mono-data block ${isDark ? 'text-[#6e6c68]' : 'text-slate-500'}`}>
-                            Ghế trống: {st.available_seats ?? 'N/A'}/{st.total_seats ?? 'N/A'}
-                          </span>
-                        </div>
-                      </div>
-                    )
-                  })
-              )}
+              <PaginationControl
+                currentPage={showtimePage}
+                totalItems={filteredShowtimes.length}
+                pageSize={PAGE_SIZE}
+                onPageChange={setShowtimePage}
+              />
             </div>
-
-            <PaginationControl
-              currentPage={showtimePage}
-              totalItems={filteredShowtimes.length}
-              pageSize={PAGE_SIZE}
-              onPageChange={setShowtimePage}
-            />
           </div>
         </div>
       )}
@@ -5570,41 +6421,80 @@ export default function AdminView() {
         }}
       />
 
-      {/* AUTO-SCHEDULE MODAL (PHƯƠNG ÁN A) */}
+      {/* AUTO-SCHEDULE MODAL */}
       {autoModalOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
-          <div className={`rounded-2xl max-w-4xl w-full p-6 shadow-2xl max-h-[90vh] flex flex-col border transition-colors ${
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 backdrop-blur-md p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className={cn(
+            'rounded-2xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl max-h-[92vh] flex flex-col border transition-colors',
             isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
-          }`}>
+          )}>
             {/* Modal Header */}
-            <div className={`flex justify-between items-center border-b pb-4 shrink-0 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
-              <div>
-                <h3 className={`font-display font-bold text-xl flex items-center gap-2 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                  <span>Xếp Lịch Chiếu Tự Động</span>
-                </h3>
-                <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                  Tự động tìm khung giờ trống trong phòng chiếu và sắp xếp lịch chiếu tối ưu không bị trùng giờ.
-                </p>
+            <div className={cn('flex justify-between items-center border-b pb-4 shrink-0', isDark ? 'border-white/10' : 'border-slate-200')}>
+              <div className="flex items-center gap-3">
+                <span className={cn(
+                  'p-2.5 rounded-xl shrink-0',
+                  isDark ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                )}>
+                  <Sparkles className="w-5 h-5 stroke-[2.2]" />
+                </span>
+                <div>
+                  <h3 className={cn('font-display font-bold text-lg sm:text-xl flex items-center gap-2', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                    Cấu Hình & Lập Lịch Tự Động
+                  </h3>
+                  <p className={cn('text-xs mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                    Tự động tìm khung giờ trống, tối ưu thể loại phim theo phòng và bảo đảm không xung đột lịch.
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
+                disabled={autoConfirming}
                 onClick={() => {
                   setAutoModalOpen(false)
                   setAutoPreviewList(null)
+                  setAutoModalError(null)
                 }}
-                className={`text-lg p-2 rounded-lg cursor-pointer transition-colors ${
-                  isDark ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
-                }`}
+                className={cn(
+                  'p-2 rounded-xl border transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed',
+                  isDark
+                    ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-white hover:bg-white/10'
+                    : 'bg-slate-100 border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-200'
+                )}
+                aria-label="Đóng cửa sổ"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
+            {/* In-Modal Error Notification */}
+            {autoModalError && (
+              <div className={cn(
+                'mt-3 p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 shrink-0 shadow-sm animate-in fade-in',
+                isDark ? 'bg-rose-500/10 border-rose-500/30 text-rose-300' : 'bg-rose-50 border-rose-200 text-rose-800'
+              )}>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                  <span className="font-semibold whitespace-pre-line leading-relaxed">{autoModalError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAutoModalError(null)}
+                  className="p-1 rounded-md text-rose-400 hover:text-rose-600 cursor-pointer shrink-0 transition-colors"
+                  aria-label="Đóng thông báo lỗi"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Scrollable Modal Body */}
-            <div className={`flex-1 overflow-y-auto pr-2 space-y-4 font-sans my-4 ${isDark ? '[color-scheme:dark]' : '[color-scheme:light]'}`}>
+            <div className={cn('flex-1 overflow-y-auto pr-1 sm:pr-2 space-y-4 font-sans my-4', isDark ? '[color-scheme:dark]' : '[color-scheme:light]')}>
               {/* Date Preset Shortcuts */}
-              <div className={`flex flex-wrap items-center gap-2 text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-                <span className="font-medium">Bộ lọc chọn ngày:</span>
+              <div className={cn('flex flex-wrap items-center gap-2 text-xs', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                <span className="font-semibold flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Khoảng ngày nhanh:</span>
+                </span>
                 <button
                   type="button"
                   onClick={() => {
@@ -5613,11 +6503,12 @@ export default function AdminView() {
                     setAutoStartDate(toLocalYYYYMMDD(start))
                     setAutoEndDate(toLocalYYYYMMDD(end))
                   }}
-                  className={`px-2.5 py-1 rounded-lg border cursor-pointer font-semibold text-xs transition-all ${
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg border cursor-pointer font-semibold text-xs transition-all',
                     isDark
                       ? 'bg-white/5 hover:bg-white/10 text-[#e8b84b] border-white/10'
-                      : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-sm'
-                  }`}
+                      : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-xs'
+                  )}
                 >
                   + 7 Ngày
                 </button>
@@ -5629,11 +6520,12 @@ export default function AdminView() {
                     setAutoStartDate(toLocalYYYYMMDD(start))
                     setAutoEndDate(toLocalYYYYMMDD(end))
                   }}
-                  className={`px-2.5 py-1 rounded-lg border cursor-pointer font-semibold text-xs transition-all ${
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg border cursor-pointer font-semibold text-xs transition-all',
                     isDark
                       ? 'bg-white/5 hover:bg-white/10 text-[#e8b84b] border-white/10'
-                      : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-sm'
-                  }`}
+                      : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-xs'
+                  )}
                 >
                   + 14 Ngày
                 </button>
@@ -5645,45 +6537,54 @@ export default function AdminView() {
                     setAutoStartDate(toLocalYYYYMMDD(start))
                     setAutoEndDate(toLocalYYYYMMDD(end))
                   }}
-                  className={`px-2.5 py-1 rounded-lg border cursor-pointer font-semibold text-xs transition-all ${
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg border cursor-pointer font-semibold text-xs transition-all',
                     isDark
                       ? 'bg-white/5 hover:bg-white/10 text-[#e8b84b] border-white/10'
-                      : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-sm'
-                  }`}
+                      : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-xs'
+                  )}
                 >
                   Đến Cuối Tháng
                 </button>
               </div>
 
               {/* Clean Old Showtimes Checkbox Option */}
-              <div className={`p-3 rounded-xl border flex items-center justify-between transition-colors ${
-                isDark ? 'bg-[#09090e] border-[#e8b84b]/20 text-[#f0ede8]' : 'bg-amber-50/80 border-amber-300 text-slate-900 shadow-sm'
-              }`}>
-                <label className="flex items-center gap-2.5 cursor-pointer text-xs">
+              <div className={cn(
+                'p-3.5 rounded-xl border flex items-center justify-between transition-colors',
+                isDark ? 'bg-[#09090e] border-[#e8b84b]/20 text-[#f0ede8]' : 'bg-amber-50/70 border-amber-200 text-slate-900 shadow-xs'
+              )}>
+                <label className="flex items-center gap-2.5 cursor-pointer text-xs select-none">
                   <input
                     type="checkbox"
                     checked={autoReplaceExisting}
                     onChange={(e) => setAutoReplaceExisting(e.target.checked)}
                     className="w-4 h-4 rounded accent-[#e8b84b] cursor-pointer"
                   />
-                  <span className={`font-semibold ${isDark ? 'text-[#e8b84b]' : 'text-amber-900'}`}>
-                    🧹 Dọn dẹp suất chiếu cũ trong khoảng ngày trước khi xếp mới (Khuyên dùng)
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <Trash2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span className={cn('font-semibold', isDark ? 'text-[#e8b84b]' : 'text-amber-950')}>
+                      Dọn dẹp suất chiếu cũ (chưa có vé) trong khoảng ngày trước khi xếp mới (Khuyên dùng)
+                    </span>
+                  </div>
                 </label>
               </div>
 
               {/* Start > End Date Validation Warning */}
               {autoStartDate > autoEndDate && (
-                <div className="p-3 bg-[rgba(192,57,43,0.15)] border border-[rgba(192,57,43,0.3)] text-[#e07060] rounded-xl text-xs font-medium flex items-center gap-2">
-                  <span>⚠</span>
+                <div className={cn(
+                  'p-3 rounded-xl border text-xs font-medium flex items-center gap-2',
+                  isDark ? 'bg-rose-500/10 border-rose-500/30 text-rose-300' : 'bg-rose-50 border-rose-200 text-rose-800'
+                )}>
+                  <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
                   <span>Lỗi: Ngày bắt đầu ({formatVNFullDate(autoStartDate)}) không thể lớn hơn Ngày kết thúc ({formatVNFullDate(autoEndDate)}). Vui lòng chọn lại khoảng ngày hợp lệ.</span>
                 </div>
               )}
 
               {/* Input Controls Form */}
-              <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl border text-xs transition-colors ${
-                isDark ? 'bg-[#09090e] border-white/5 text-[#f0ede8]' : 'bg-slate-50 border-slate-200 text-slate-900 shadow-sm'
-              }`}>
+              <div className={cn(
+                'grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl border text-xs transition-colors',
+                isDark ? 'bg-[#09090e] border-white/5 text-[#f0ede8]' : 'bg-slate-50 border-slate-200 text-slate-900 shadow-xs'
+              )}>
                 <div>
                   <CleanDatePicker
                     label="Từ Ngày (Start Date)"
@@ -5703,109 +6604,133 @@ export default function AdminView() {
                 </div>
 
                 <div>
-                  <label className={`block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Thời Gian Dọn Phòng (Phút)</label>
+                  <label className={cn('block mb-1 font-semibold flex items-center gap-1.5', isDark ? 'text-[#a09e9a]' : 'text-slate-700')}>
+                    <Clock className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Thời Gian Dọn Phòng (Phút)</span>
+                  </label>
                   <input
                     type="number"
                     value={autoBufferMins}
                     onChange={(e) => setAutoBufferMins(Number(e.target.value))}
-                    className={`w-full px-3 py-2 border rounded-lg outline-none font-mono-data transition-colors ${
+                    className={cn(
+                      'w-full px-3 py-2 border rounded-lg outline-none font-mono-data transition-colors',
                       isDark
-                        ? 'bg-[#111118] border-white/10 text-[#f0ede8]'
-                        : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-sm font-semibold'
-                    }`}
+                        ? 'bg-[#111118] border-white/10 text-[#f0ede8] focus:border-amber-500/50'
+                        : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-xs font-semibold'
+                    )}
                   />
                 </div>
 
                 <div>
-                  <label className={`block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Giờ Rạp Mở Cửa (Giờ : Phút)</label>
+                  <label className={cn('block mb-1 font-semibold flex items-center gap-1.5', isDark ? 'text-[#a09e9a]' : 'text-slate-700')}>
+                    <Clock className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Giờ Rạp Mở Cửa (Giờ : Phút)</span>
+                  </label>
                   <input
                     type="time"
                     value={autoStartTimeStr}
                     onChange={(e) => setAutoStartTimeStr(e.target.value)}
                     onClick={(e) => e.currentTarget.showPicker?.()}
-                    className={`w-full px-3 py-2 border rounded-lg outline-none font-mono-data cursor-pointer transition-colors ${
+                    className={cn(
+                      'w-full px-3 py-2 border rounded-lg outline-none font-mono-data cursor-pointer transition-colors',
                       isDark
-                        ? 'bg-[#111118] border-white/10 text-[#f0ede8] [color-scheme:dark]'
-                        : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 [color-scheme:light] shadow-sm font-semibold'
-                    }`}
+                        ? 'bg-[#111118] border-white/10 text-[#f0ede8] [color-scheme:dark] focus:border-amber-500/50'
+                        : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 [color-scheme:light] shadow-xs font-semibold'
+                    )}
                   />
                 </div>
 
                 <div>
-                  <label className={`block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Giờ Rạp Đóng Cửa (Giờ : Phút)</label>
+                  <label className={cn('block mb-1 font-semibold flex items-center gap-1.5', isDark ? 'text-[#a09e9a]' : 'text-slate-700')}>
+                    <Clock className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Giờ Rạp Đóng Cửa (Giờ : Phút)</span>
+                  </label>
                   <input
                     type="time"
                     value={autoEndTimeStr}
                     onChange={(e) => setAutoEndTimeStr(e.target.value)}
                     onClick={(e) => e.currentTarget.showPicker?.()}
-                    className={`w-full px-3 py-2 border rounded-lg outline-none font-mono-data cursor-pointer transition-colors ${
+                    className={cn(
+                      'w-full px-3 py-2 border rounded-lg outline-none font-mono-data cursor-pointer transition-colors',
                       isDark
-                        ? 'bg-[#111118] border-white/10 text-[#f0ede8] [color-scheme:dark]'
-                        : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 [color-scheme:light] shadow-sm font-semibold'
-                    }`}
+                        ? 'bg-[#111118] border-white/10 text-[#f0ede8] [color-scheme:dark] focus:border-amber-500/50'
+                        : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 [color-scheme:light] shadow-xs font-semibold'
+                    )}
                   />
                 </div>
 
                 <div>
-                  <label className={`block mb-1 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Giá Vé Thường / VIP (VNĐ)</label>
+                  <label className={cn('block mb-1 font-semibold flex items-center gap-1.5', isDark ? 'text-[#a09e9a]' : 'text-slate-700')}>
+                    <Ticket className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Giá Vé Thường / VIP (VNĐ)</span>
+                  </label>
                   <div className="flex gap-2">
                     <input
                       type="number"
                       value={autoBasePrice}
                       onChange={(e) => setAutoBasePrice(Number(e.target.value))}
-                      className={`w-1/2 px-2 py-2 border rounded-lg outline-none font-mono-data transition-colors ${
+                      className={cn(
+                        'w-1/2 px-2.5 py-2 border rounded-lg outline-none font-mono-data transition-colors',
                         isDark
-                          ? 'bg-[#111118] border-white/10 text-[#f0ede8]'
-                          : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-sm font-semibold'
-                      }`}
+                          ? 'bg-[#111118] border-white/10 text-[#f0ede8] focus:border-amber-500/50'
+                          : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-xs font-semibold'
+                      )}
                     />
                     <input
                       type="number"
                       value={autoVipPrice}
                       onChange={(e) => setAutoVipPrice(Number(e.target.value))}
-                      className={`w-1/2 px-2 py-2 border rounded-lg outline-none font-mono-data transition-colors ${
+                      className={cn(
+                        'w-1/2 px-2.5 py-2 border rounded-lg outline-none font-mono-data transition-colors',
                         isDark
-                          ? 'bg-[#111118] border-white/10 text-[#f0ede8]'
-                          : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-sm font-semibold'
-                      }`}
+                          ? 'bg-[#111118] border-white/10 text-[#f0ede8] focus:border-amber-500/50'
+                          : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-xs font-semibold'
+                      )}
                     />
                   </div>
                 </div>
 
-                <div className={`md:col-span-3 pt-3 border-t flex flex-col sm:flex-row flex-wrap gap-4 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
-                  <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium ${isDark ? 'text-[#f0ede8]' : 'text-slate-800 font-semibold'}`}>
+                <div className={cn('md:col-span-3 pt-3 border-t flex flex-col sm:flex-row flex-wrap gap-4', isDark ? 'border-white/10' : 'border-slate-200')}>
+                  <label className={cn('flex items-center gap-2 cursor-pointer text-xs select-none', isDark ? 'text-[#f0ede8]' : 'text-slate-800 font-semibold')}>
                     <input
                       type="checkbox"
                       checked={autoSmartGenre}
                       onChange={(e) => setAutoSmartGenre(e.target.checked)}
                       className="accent-[#e8b84b] w-4 h-4 cursor-pointer"
                     />
-                    <span>🧠 Ưu tiên xếp phim theo thể loại vào đúng loại phòng</span>
+                    <div className="flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <span>Tối ưu thể loại phim theo phòng (Hành động/Khoa học vào IMAX, Hoạt hình vào Kids...)</span>
+                    </div>
                   </label>
 
-                  <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium ${isDark ? 'text-[#f0ede8]' : 'text-slate-800 font-semibold'}`}>
+                  <label className={cn('flex items-center gap-2 cursor-pointer text-xs select-none', isDark ? 'text-[#f0ede8]' : 'text-slate-800 font-semibold')}>
                     <input
                       type="checkbox"
                       checked={autoPricingByRoom}
                       onChange={(e) => setAutoPricingByRoom(e.target.checked)}
                       className="accent-[#e8b84b] w-4 h-4 cursor-pointer"
                     />
-                    <span>💰 Tính giá vé theo loại phòng (Standard 1.0x, IMAX 1.7x, VIP 1.8x, 3D 1.3x...)</span>
+                    <div className="flex items-center gap-1.5">
+                      <Ticket className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <span>Áp dụng hệ số giá theo phòng (Standard 1.0x, IMAX 1.7x, VIP 1.8x, 3D 1.3x...)</span>
+                    </div>
                   </label>
                 </div>
               </div>
 
               {/* Movie Selection Section */}
-              <div className={`p-4 rounded-xl border space-y-3 text-xs transition-colors ${
-                isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-50 border-slate-200 shadow-sm'
-              }`}>
-                <div className="flex justify-between items-center">
-                  <label className={`font-bold flex items-center gap-1.5 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                    <span>🎬</span>
+              <div className={cn(
+                'p-4 rounded-xl border space-y-3 text-xs transition-colors',
+                isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-50 border-slate-200 shadow-xs'
+              )}>
+                <div className="flex flex-wrap justify-between items-center gap-2">
+                  <label className={cn('font-bold flex items-center gap-2', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                    <Film className="w-4 h-4 text-amber-500" />
                     <span>Chọn Phim Áp Dụng Xếp Lịch</span>
                   </label>
                   <div className="flex items-center gap-4">
-                    <label className={`flex items-center gap-1.5 cursor-pointer ${isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900 font-medium'}`}>
+                    <label className={cn('flex items-center gap-1.5 cursor-pointer select-none', isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900 font-medium')}>
                       <input
                         type="radio"
                         name="movieSelectMode"
@@ -5815,7 +6740,7 @@ export default function AdminView() {
                       />
                       <span>Tất cả phim đang/sắp chiếu ({movies.length})</span>
                     </label>
-                    <label className={`flex items-center gap-1.5 cursor-pointer ${isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900 font-medium'}`}>
+                    <label className={cn('flex items-center gap-1.5 cursor-pointer select-none', isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900 font-medium')}>
                       <input
                         type="radio"
                         name="movieSelectMode"
@@ -5834,21 +6759,22 @@ export default function AdminView() {
                   const ended = movies.filter((m) => m.status !== 'now_showing' && m.status !== 'coming_soon')
 
                   const renderMovieGrid = (movieList: typeof movies) => (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                       {movieList.map((m) => {
                         const isChecked = autoSelectedMovieIds.includes(m.id)
                         return (
                           <label
                             key={m.id}
-                            className={`flex items-center gap-2 p-2 rounded-lg border transition-colors cursor-pointer select-none ${
+                            className={cn(
+                              'flex items-center gap-2 p-2.5 rounded-lg border transition-colors cursor-pointer select-none',
                               isChecked
                                 ? isDark
-                                  ? 'bg-[rgba(232,184,75,0.12)] border-[#e8b84b] text-[#f0ede8]'
-                                  : 'bg-amber-50 border-amber-500 text-amber-900 shadow-sm font-semibold'
+                                  ? 'bg-[#e8b84b]/12 border-[#e8b84b] text-[#f0ede8]'
+                                  : 'bg-amber-50 border-amber-500 text-amber-900 shadow-xs font-semibold'
                                 : isDark
                                   ? 'bg-[#111118] border-white/10 text-[#a09e9a] hover:border-white/20'
                                   : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
-                            }`}
+                            )}
                           >
                             <input
                               type="checkbox"
@@ -5860,9 +6786,9 @@ export default function AdminView() {
                                   setAutoSelectedMovieIds(autoSelectedMovieIds.filter((id) => id !== m.id))
                                 }
                               }}
-                              className="accent-[#e8b84b] cursor-pointer"
+                              className="accent-[#e8b84b] cursor-pointer shrink-0"
                             />
-                            <span className="truncate font-medium">{m.title}</span>
+                            <span className="truncate font-medium text-xs">{m.title}</span>
                           </label>
                         )
                       })}
@@ -5870,13 +6796,13 @@ export default function AdminView() {
                   )
 
                   return (
-                    <div className={`pt-3 border-t space-y-4 max-h-[280px] overflow-y-auto pr-1 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
+                    <div className={cn('pt-3 border-t space-y-4 max-h-[280px] overflow-y-auto pr-1', isDark ? 'border-white/10' : 'border-slate-200')}>
                       {/* Section 1: Phim Đang Chiếu */}
                       {nowShowing.length > 0 && (
                         <div className="space-y-2">
                           <div className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-emerald-400 flex items-center gap-1.5 font-mono-data">
-                              <span>▶</span>
+                            <span className="font-bold text-emerald-500 flex items-center gap-1.5 font-mono-data">
+                              <PlayCircle className="w-3.5 h-3.5 shrink-0" />
                               <span>PHIM ĐANG CHIẾU ({nowShowing.length})</span>
                             </span>
                             <div className="flex items-center gap-2 text-[11px]">
@@ -5887,9 +6813,10 @@ export default function AdminView() {
                                   const newSet = new Set([...autoSelectedMovieIds, ...nsIds])
                                   setAutoSelectedMovieIds(Array.from(newSet))
                                 }}
-                                className="text-emerald-400 hover:underline font-semibold cursor-pointer"
+                                className="text-emerald-500 hover:underline font-semibold cursor-pointer flex items-center gap-1"
                               >
-                                ✓ Chọn tất cả Đang chiếu
+                                <Check className="w-3 h-3" />
+                                <span>Chọn tất cả</span>
                               </button>
                               <span className={isDark ? 'text-white/20' : 'text-slate-300'}>|</span>
                               <button
@@ -5898,9 +6825,10 @@ export default function AdminView() {
                                   const nsIds = new Set(nowShowing.map((m) => m.id))
                                   setAutoSelectedMovieIds(autoSelectedMovieIds.filter((id) => !nsIds.has(id)))
                                 }}
-                                className={isDark ? 'text-[#a09e9a] hover:text-[#f0ede8] hover:underline cursor-pointer' : 'text-slate-500 hover:text-slate-800 hover:underline cursor-pointer'}
+                                className={cn('hover:underline cursor-pointer flex items-center gap-1', isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-500 hover:text-slate-800')}
                               >
-                                ✕ Bỏ chọn
+                                <X className="w-3 h-3" />
+                                <span>Bỏ chọn</span>
                               </button>
                             </div>
                           </div>
@@ -5910,10 +6838,10 @@ export default function AdminView() {
 
                       {/* Section 2: Phim Sắp Ra Mắt */}
                       {comingSoon.length > 0 && (
-                        <div className={`space-y-2 ${nowShowing.length > 0 ? 'pt-3 border-t ' + (isDark ? 'border-white/10' : 'border-slate-200') : ''}`}>
+                        <div className={cn('space-y-2', nowShowing.length > 0 && ('pt-3 border-t ' + (isDark ? 'border-white/10' : 'border-slate-200')))}>
                           <div className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-amber-400 flex items-center gap-1.5 font-mono-data">
-                              <span>📅</span>
+                            <span className="font-bold text-amber-500 flex items-center gap-1.5 font-mono-data">
+                              <Calendar className="w-3.5 h-3.5 shrink-0" />
                               <span>PHIM SẮP RA MẮT ({comingSoon.length})</span>
                             </span>
                             <div className="flex items-center gap-2 text-[11px]">
@@ -5924,9 +6852,10 @@ export default function AdminView() {
                                   const newSet = new Set([...autoSelectedMovieIds, ...csIds])
                                   setAutoSelectedMovieIds(Array.from(newSet))
                                 }}
-                                className="text-amber-400 hover:underline font-semibold cursor-pointer"
+                                className="text-amber-500 hover:underline font-semibold cursor-pointer flex items-center gap-1"
                               >
-                                ✓ Chọn tất cả Sắp chiếu
+                                <Check className="w-3 h-3" />
+                                <span>Chọn tất cả</span>
                               </button>
                               <span className={isDark ? 'text-white/20' : 'text-slate-300'}>|</span>
                               <button
@@ -5935,9 +6864,10 @@ export default function AdminView() {
                                   const csIds = new Set(comingSoon.map((m) => m.id))
                                   setAutoSelectedMovieIds(autoSelectedMovieIds.filter((id) => !csIds.has(id)))
                                 }}
-                                className={isDark ? 'text-[#a09e9a] hover:text-[#f0ede8] hover:underline cursor-pointer' : 'text-slate-500 hover:text-slate-800 hover:underline cursor-pointer'}
+                                className={cn('hover:underline cursor-pointer flex items-center gap-1', isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-500 hover:text-slate-800')}
                               >
-                                ✕ Bỏ chọn
+                                <X className="w-3 h-3" />
+                                <span>Bỏ chọn</span>
                               </button>
                             </div>
                           </div>
@@ -5945,12 +6875,12 @@ export default function AdminView() {
                         </div>
                       )}
 
-                      {/* Section 3: Phim Đã Kết Thúc (Nếu có) */}
+                      {/* Section 3: Phim Đã Kết Thúc */}
                       {ended.length > 0 && (
-                        <div className={`space-y-2 pt-3 border-t ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
+                        <div className={cn('space-y-2 pt-3 border-t', isDark ? 'border-white/10' : 'border-slate-200')}>
                           <div className="flex justify-between items-center text-xs">
                             <span className="font-bold text-slate-400 flex items-center gap-1.5 font-mono-data">
-                              <span>⏹</span>
+                              <Archive className="w-3.5 h-3.5 shrink-0" />
                               <span>PHIM ĐÃ KẾT THÚC ({ended.length})</span>
                             </span>
                           </div>
@@ -5963,16 +6893,17 @@ export default function AdminView() {
               </div>
 
               {/* Room Selection Section */}
-              <div className={`p-4 rounded-xl border space-y-3 text-xs transition-colors ${
-                isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-50 border-slate-200 shadow-sm'
-              }`}>
+              <div className={cn(
+                'p-4 rounded-xl border space-y-3 text-xs transition-colors',
+                isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-50 border-slate-200 shadow-xs'
+              )}>
                 <div className="flex flex-wrap justify-between items-center gap-2">
-                  <label className={`font-bold flex items-center gap-1.5 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                    <span>🏛️</span>
+                  <label className={cn('font-bold flex items-center gap-2', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                    <Building2 className="w-4 h-4 text-amber-500" />
                     <span>Chọn Phòng Chiếu Áp Dụng</span>
                   </label>
                   <div className="flex items-center gap-4">
-                    <label className={`flex items-center gap-1.5 cursor-pointer ${isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900 font-medium'}`}>
+                    <label className={cn('flex items-center gap-1.5 cursor-pointer select-none', isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900 font-medium')}>
                       <input
                         type="radio"
                         name="roomSelectMode"
@@ -5982,7 +6913,7 @@ export default function AdminView() {
                       />
                       <span>Tất cả phòng chiếu ({rooms.length})</span>
                     </label>
-                    <label className={`flex items-center gap-1.5 cursor-pointer ${isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900 font-medium'}`}>
+                    <label className={cn('flex items-center gap-1.5 cursor-pointer select-none', isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-600 hover:text-slate-900 font-medium')}>
                       <input
                         type="radio"
                         name="roomSelectMode"
@@ -5996,13 +6927,14 @@ export default function AdminView() {
                 </div>
 
                 {autoRoomSelectionMode === 'custom' && (
-                  <div className={`pt-3 border-t space-y-3 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
+                  <div className={cn('pt-3 border-t space-y-3', isDark ? 'border-white/10' : 'border-slate-200')}>
                     {/* Quick Category Action Bar */}
-                    <div className={`flex flex-wrap justify-between items-center gap-2 p-2.5 rounded-xl border ${
-                      isDark ? 'bg-[#111118] border-white/5' : 'bg-white border-slate-200 shadow-sm'
-                    }`}>
+                    <div className={cn(
+                      'flex flex-wrap justify-between items-center gap-2 p-2.5 rounded-xl border',
+                      isDark ? 'bg-[#111118] border-white/5' : 'bg-white border-slate-200 shadow-xs'
+                    )}>
                       <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                        <span className={`font-medium mr-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>Lọc loại phòng:</span>
+                        <span className={cn('font-medium mr-1', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>Lọc loại phòng:</span>
                         {['standard', 'vip', 'imax', '3d', '4d', 'kids'].map((typeKey) => {
                           const typeRooms = rooms.filter((r) => (r.room_type || 'standard') === typeKey)
                           if (typeRooms.length === 0) return null
@@ -6035,9 +6967,10 @@ export default function AdminView() {
                                   setAutoSelectedRoomIds(Array.from(newSet))
                                 }
                               }}
-                              className={`px-2.5 py-1 rounded-lg border transition-all cursor-pointer font-bold text-[11px] flex items-center gap-1 ${
+                              className={cn(
+                                'px-2.5 py-1 rounded-lg border transition-all cursor-pointer font-bold text-[11px] flex items-center gap-1',
                                 isAllSelected
-                                  ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
+                                  ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-xs'
                                   : selectedCount > 0
                                   ? isDark
                                     ? 'bg-[#e8b84b]/20 text-[#e8b84b] border-[#e8b84b]/40'
@@ -6045,9 +6978,9 @@ export default function AdminView() {
                                   : isDark
                                     ? 'bg-white/5 text-[#a09e9a] border-white/10 hover:text-[#f0ede8]'
                                     : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:text-slate-900'
-                              }`}
+                              )}
                             >
-                              <span>{isAllSelected ? '✓' : selectedCount > 0 ? '•' : '+'}</span>
+                              {isAllSelected && <Check className="w-3 h-3 stroke-[2.5]" />}
                               <span>{label}</span>
                               <span className="opacity-75">({selectedCount}/{typeRooms.length})</span>
                             </button>
@@ -6060,17 +6993,19 @@ export default function AdminView() {
                         <button
                           type="button"
                           onClick={() => setAutoSelectedRoomIds(rooms.map((r) => r.id))}
-                          className="text-[#e8b84b] hover:underline font-medium cursor-pointer"
+                          className="text-[#e8b84b] hover:underline font-semibold cursor-pointer flex items-center gap-1"
                         >
-                          ✓ Chọn tất cả
+                          <Check className="w-3 h-3" />
+                          <span>Chọn tất cả</span>
                         </button>
                         <span className={isDark ? 'text-white/20' : 'text-slate-300'}>|</span>
                         <button
                           type="button"
                           onClick={() => setAutoSelectedRoomIds([])}
-                          className={isDark ? 'text-[#a09e9a] hover:text-[#f0ede8] hover:underline cursor-pointer' : 'text-slate-500 hover:text-slate-800 hover:underline cursor-pointer'}
+                          className={cn('hover:underline cursor-pointer flex items-center gap-1', isDark ? 'text-[#a09e9a] hover:text-[#f0ede8]' : 'text-slate-500 hover:text-slate-800')}
                         >
-                          ✕ Bỏ chọn
+                          <X className="w-3 h-3" />
+                          <span>Bỏ chọn</span>
                         </button>
                       </div>
                     </div>
@@ -6098,15 +7033,16 @@ export default function AdminView() {
                         return (
                           <label
                             key={r.id}
-                            className={`p-2.5 rounded-xl border transition-all cursor-pointer select-none flex items-center justify-between gap-2.5 ${
+                            className={cn(
+                              'p-2.5 rounded-xl border transition-all cursor-pointer select-none flex items-center justify-between gap-2.5',
                               isChecked
                                 ? isDark
                                   ? 'bg-[#e8b84b]/15 border-[#e8b84b] text-[#f0ede8] shadow-md shadow-[#e8b84b]/5'
-                                  : 'bg-amber-50 border-amber-500 text-amber-900 shadow-sm font-semibold'
+                                  : 'bg-amber-50 border-amber-500 text-amber-900 shadow-xs font-semibold'
                                 : isDark
                                   ? 'bg-[#111118] border-white/10 text-[#a09e9a] hover:border-white/20'
-                                  : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 shadow-sm'
-                            }`}
+                                  : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 shadow-xs'
+                            )}
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
                               <input
@@ -6122,12 +7058,15 @@ export default function AdminView() {
                                 className="accent-[#e8b84b] w-4 h-4 cursor-pointer shrink-0"
                               />
                               <div className="min-w-0">
-                                <div className={`font-bold text-xs truncate ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{cleanName}</div>
-                                <div className={`text-[10px] flex items-center gap-1.5 mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                                  <span className={`px-1.5 py-0.2 rounded border text-[9px] font-mono-data font-bold ${typeBadgeStyle}`}>
+                                <div className={cn('font-bold text-xs truncate', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>{cleanName}</div>
+                                <div className={cn('text-[10px] flex items-center gap-1.5 mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                                  <span className={cn('px-1.5 py-0.2 rounded border text-[9px] font-mono-data font-bold', typeBadgeStyle)}>
                                     {roomTypeUpper}
                                   </span>
-                                  <span>🪑 {r.total_seats || r.total_rows * r.total_cols} ghế</span>
+                                  <span className="flex items-center gap-1">
+                                    <Armchair className="w-3 h-3 text-[#a09e9a]" />
+                                    <span>{r.total_seats || r.total_rows * r.total_cols} ghế</span>
+                                  </span>
                                 </div>
                               </div>
                             </div>
@@ -6141,12 +7080,13 @@ export default function AdminView() {
 
               {/* Preview Results Table */}
               {autoPreviewList !== null && (
-                <div className={`border rounded-xl p-4 space-y-3 transition-colors ${
-                  isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-50 border-slate-200 shadow-sm'
-                }`}>
+                <div className={cn(
+                  'border rounded-xl p-4 space-y-3 transition-colors',
+                  isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-50 border-slate-200 shadow-xs'
+                )}>
                   <div className="flex justify-between items-center">
-                    <h4 className="font-display font-bold text-sm text-[#2ecc71] flex items-center gap-1.5">
-                      <span>✓</span>
+                    <h4 className="font-display font-bold text-sm text-emerald-500 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                       <span>Kết Quả Dự Kiến ({autoPreviewList.length} suất chiếu)</span>
                     </h4>
                     {autoPreviewList.length > 0 && (
@@ -6154,9 +7094,19 @@ export default function AdminView() {
                         type="button"
                         disabled={autoConfirming}
                         onClick={handleConfirmAutoSchedule}
-                        className="bg-[#2ecc71] text-[#09090e] px-4 py-2 rounded-lg text-xs font-bold hover:brightness-110 cursor-pointer disabled:opacity-50 shadow-sm"
+                        className="bg-[#2ecc71] hover:bg-[#27ae60] text-[#09090e] px-4 py-2 rounded-xl text-xs font-bold cursor-pointer disabled:opacity-50 shadow-sm flex items-center gap-2 transition-colors active:scale-[0.98]"
                       >
-                        {autoConfirming ? '⏳ Đang lưu...' : `✓ Xác Nhận Lưu (${autoPreviewList.length} Suất)`}
+                        {autoConfirming ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Đang lưu {autoPreviewList.length} suất chiếu...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>Xác Nhận Lưu ({autoPreviewList.length} Suất)</span>
+                          </>
+                        )}
                       </button>
                     )}
                   </div>
@@ -6180,9 +7130,12 @@ export default function AdminView() {
                           const horrorTitles = incompatibleMovies.map((m) => m.title).join(', ')
 
                           return (
-                            <div className="text-rose-300 bg-rose-500/10 p-4 rounded-xl border border-rose-500/30 font-medium space-y-1.5 shadow-sm">
-                              <div className="font-bold text-rose-400 text-sm flex items-center gap-1.5">
-                                <span>⛔</span>
+                            <div className={cn(
+                              'p-4 rounded-xl border font-medium space-y-1.5 shadow-sm',
+                              isDark ? 'text-rose-300 bg-rose-500/10 border-rose-500/30' : 'text-rose-900 bg-rose-50 border-rose-200'
+                            )}>
+                              <div className="font-bold text-rose-500 text-sm flex items-center gap-2">
+                                <ShieldAlert className="w-4 h-4 shrink-0" />
                                 <span>Cảnh báo an toàn (Kids Safety Guard):</span>
                               </div>
                               <p className="text-xs leading-relaxed">
@@ -6193,31 +7146,33 @@ export default function AdminView() {
                         }
 
                         return (
-                          <p className={`text-xs italic py-2 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
+                          <p className={cn('text-xs italic py-2', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
                             Không tìm thấy khoảng thời gian trống phù hợp nào trong khoảng ngày đã chọn.
                           </p>
                         )
                       })()}
                     </div>
                   ) : (
-                    <div className={`max-h-[300px] overflow-x-auto overflow-y-auto pr-1 border rounded-xl ${
+                    <div className={cn(
+                      'max-h-[300px] overflow-x-auto overflow-y-auto pr-1 border rounded-xl',
                       isDark ? 'border-white/10' : 'border-slate-200 bg-white'
-                    }`}>
+                    )}>
                       <table className="w-full min-w-[850px] text-left text-xs border-collapse">
                         <thead>
-                          <tr className={`border-b sticky top-0 font-medium ${
+                          <tr className={cn(
+                            'border-b sticky top-0 font-semibold',
                             isDark ? 'border-white/10 text-[#a09e9a] bg-[#111118]' : 'border-slate-200 text-slate-600 bg-slate-100'
-                          }`}>
+                          )}>
                             <th className="py-2.5 px-3 font-mono-data w-12 text-center">STT</th>
                             <th className="py-2.5 px-3 min-w-[200px]">Phim</th>
                             <th className="py-2.5 px-3 w-[130px]">Phòng Chiếu</th>
                             <th className="py-2.5 px-3 w-[150px]">Ngày Chiếu</th>
                             <th className="py-2.5 px-3 w-[160px]">Khung Giờ</th>
                             <th className="py-2.5 px-3 w-[170px]">Giá Vé (Thường/VIP)</th>
-                            <th className="py-2.5 px-3 w-[90px] text-right">Hành Động</th>
+                            <th className="py-2.5 px-3 w-[110px] text-right">Hành Động</th>
                           </tr>
                         </thead>
-                        <tbody className={`divide-y ${isDark ? 'divide-white/5 text-[#f0ede8]' : 'divide-slate-200 text-slate-900'}`}>
+                        <tbody className={cn('divide-y', isDark ? 'divide-white/5 text-[#f0ede8]' : 'divide-slate-200 text-slate-900')}>
                           {autoPreviewList.map((item, idx) => {
                             const isEditing = editingPreviewIdx === idx
                             const startDateObj = new Date(item.start_time)
@@ -6242,15 +7197,16 @@ export default function AdminView() {
                                 <tr key={idx} className={isDark ? 'bg-amber-500/10' : 'bg-amber-50'}>
                                   <td className="py-3 px-3 font-mono-data text-center text-[#e8b84b] font-bold">{idx + 1}</td>
                                   <td className="py-3 px-3 font-medium">
-                                    <div className={`font-semibold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{item.movie_title}</div>
+                                    <div className={cn('font-semibold', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>{item.movie_title}</div>
                                   </td>
                                   <td className="py-3 px-3">
                                     <select
                                       value={editPreviewRoomId}
                                       onChange={(e) => setEditPreviewRoomId(Number(e.target.value))}
-                                      className={`w-full p-1 rounded border text-xs font-semibold ${
+                                      className={cn(
+                                        'w-full p-1.5 rounded-lg border text-xs font-semibold',
                                         isDark ? 'bg-[#111118] border-white/20 text-[#f0ede8]' : 'bg-white border-slate-300 text-slate-900'
-                                      }`}
+                                      )}
                                     >
                                       {rooms.map((r) => (
                                         <option key={r.id} value={r.id}>
@@ -6264,21 +7220,23 @@ export default function AdminView() {
                                       type="datetime-local"
                                       value={editPreviewStartStr}
                                       onChange={(e) => setEditPreviewStartStr(e.target.value)}
-                                      className={`w-full p-1 rounded border text-xs font-mono-data font-semibold ${
+                                      className={cn(
+                                        'w-full p-1.5 rounded-lg border text-xs font-mono-data font-semibold',
                                         isDark ? 'bg-[#111118] border-white/20 text-[#f0ede8]' : 'bg-white border-slate-300 text-slate-900'
-                                      }`}
+                                      )}
                                     />
                                   </td>
                                   <td className="py-3 px-3">
-                                    <div className="flex gap-1 items-center">
+                                    <div className="flex gap-1.5 items-center">
                                       <input
                                         type="number"
                                         step="1000"
                                         value={editPreviewBasePrice}
                                         onChange={(e) => setEditPreviewBasePrice(Number(e.target.value))}
-                                        className={`w-20 p-1 rounded border text-xs font-mono-data ${
+                                        className={cn(
+                                          'w-20 p-1.5 rounded-lg border text-xs font-mono-data',
                                           isDark ? 'bg-[#111118] border-white/20 text-[#f0ede8]' : 'bg-white border-slate-300 text-slate-900'
-                                        }`}
+                                        )}
                                       />
                                       <span>/</span>
                                       <input
@@ -6286,27 +7244,30 @@ export default function AdminView() {
                                         step="1000"
                                         value={editPreviewVipPrice}
                                         onChange={(e) => setEditPreviewVipPrice(Number(e.target.value))}
-                                        className={`w-20 p-1 rounded border text-xs font-mono-data ${
+                                        className={cn(
+                                          'w-20 p-1.5 rounded-lg border text-xs font-mono-data',
                                           isDark ? 'bg-[#111118] border-white/20 text-[#f0ede8]' : 'bg-white border-slate-300 text-slate-900'
-                                        }`}
+                                        )}
                                       />
                                     </div>
                                   </td>
-                                  <td className="py-2.5 text-right pr-2">
-                                    <div className="flex items-center justify-end gap-1.5">
+                                  <td className="py-2.5 text-right pr-3">
+                                    <div className="flex items-center justify-end gap-2">
                                       <button
                                         type="button"
                                         onClick={() => handleSaveEditPreview(idx)}
-                                        className="text-[#2ecc71] font-bold hover:underline text-[11px] cursor-pointer"
+                                        className="text-emerald-500 font-bold hover:underline text-xs cursor-pointer flex items-center gap-1"
                                       >
-                                        ✓ Lưu
+                                        <Check className="w-3 h-3 stroke-[2.5]" />
+                                        <span>Lưu</span>
                                       </button>
                                       <button
                                         type="button"
                                         onClick={() => setEditingPreviewIdx(null)}
-                                        className="text-[#a09e9a] hover:underline text-[11px] cursor-pointer"
+                                        className="text-slate-400 hover:underline text-xs cursor-pointer flex items-center gap-1"
                                       >
-                                        ✕ Hủy
+                                        <X className="w-3 h-3" />
+                                        <span>Hủy</span>
                                       </button>
                                     </div>
                                   </td>
@@ -6315,60 +7276,65 @@ export default function AdminView() {
                             }
 
                             return (
-                              <tr key={idx} className={isDark ? 'hover:bg-white/5 transition-colors' : 'hover:bg-slate-50 transition-colors'}>
-                                <td className={`py-3 px-3 font-mono-data text-center ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>{idx + 1}</td>
+                              <tr key={idx} className={cn('transition-colors', isDark ? 'hover:bg-white/5' : 'hover:bg-slate-50')}>
+                                <td className={cn('py-3 px-3 font-mono-data text-center', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>{idx + 1}</td>
                                 <td className="py-3 px-3 font-medium">
-                                  <div className={`font-semibold ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{item.movie_title}</div>
+                                  <div className={cn('font-semibold', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>{item.movie_title}</div>
                                   {item.matched_genre && (
-                                    <span className="text-[10px] text-[#2ecc71] bg-[#2ecc71]/10 border border-[#2ecc71]/20 px-1.5 py-0.5 rounded font-mono-data inline-block mt-1 font-semibold">
-                                      ✨ Thể loại: {item.matched_genre}
+                                    <span className="text-[10px] text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded font-mono-data inline-flex items-center gap-1 mt-1 font-semibold">
+                                      <Sparkles className="w-2.5 h-2.5" />
+                                      <span>Thể loại: {item.matched_genre}</span>
                                     </span>
                                   )}
                                 </td>
                                 <td className="py-3 px-3 text-[#e8b84b]">
                                   <div className="font-bold">{item.room_name}</div>
-                                  <span className={`text-[10px] font-mono-data uppercase px-1.5 py-0.5 rounded border inline-block mt-0.5 ${
+                                  <span className={cn(
+                                    'text-[10px] font-mono-data uppercase px-1.5 py-0.5 rounded border inline-block mt-0.5',
                                     isDark ? 'text-[#a09e9a] bg-white/5 border-white/5' : 'text-slate-600 bg-slate-100 border-slate-200'
-                                  }`}>
+                                  )}>
                                     {item.room_type || 'standard'}
                                   </span>
                                 </td>
-                                <td className={`py-3 px-3 font-mono-data text-xs ${isDark ? 'text-[#f0ede8]' : 'text-slate-800'}`}>
+                                <td className={cn('py-3 px-3 font-mono-data text-xs', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>
                                   {dateStr}
                                 </td>
                                 <td className="py-3 px-3 font-mono-data text-xs text-[#e8b84b]">
-                                  <span className={`px-2.5 py-1 rounded-md border inline-block font-bold ${
+                                  <span className={cn(
+                                    'px-2.5 py-1 rounded-md border inline-block font-bold',
                                     isDark ? 'bg-white/5 border-white/10' : 'bg-amber-50 border-amber-200 text-amber-800'
-                                  }`}>
-                                    {startTimeStr} ➔ {endTimeStr}
+                                  )}>
+                                    {startTimeStr} → {endTimeStr}
                                   </span>
                                 </td>
-                                <td className={`py-3 px-3 font-mono-data text-xs ${isDark ? 'text-[#f0ede8]' : 'text-slate-900 font-semibold'}`}>
+                                <td className={cn('py-3 px-3 font-mono-data text-xs', isDark ? 'text-[#f0ede8]' : 'text-slate-900 font-semibold')}>
                                   {fmt(item.base_price)} / {fmt(item.vip_price)}
                                 </td>
-                              <td className="py-2.5 text-right pr-2">
-                                <div className="flex items-center justify-end gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleStartEditPreview(idx, item)}
-                                    className="text-[#e8b84b] hover:underline text-[11px] cursor-pointer font-semibold"
-                                  >
-                                    ✏️ Sửa
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setAutoPreviewList(autoPreviewList.filter((_, i) => i !== idx))
-                                    }}
-                                    className="text-[#e07060] hover:underline text-[11px] cursor-pointer"
-                                  >
-                                    Bỏ Qua
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
+                                <td className="py-2.5 text-right pr-3">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartEditPreview(idx, item)}
+                                      className="text-[#e8b84b] hover:underline text-xs cursor-pointer font-semibold flex items-center gap-1"
+                                    >
+                                      <Pencil className="w-3 h-3" />
+                                      <span>Sửa</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setAutoPreviewList(autoPreviewList.filter((_, i) => i !== idx))
+                                      }}
+                                      className="text-rose-400 hover:text-rose-500 hover:underline text-xs cursor-pointer flex items-center gap-1"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                      <span>Bỏ qua</span>
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -6378,17 +7344,27 @@ export default function AdminView() {
             </div>
 
             {/* Modal Fixed Footer Action Bar */}
-            <div className="flex justify-between items-center border-t border-white/10 pt-4 shrink-0">
-              <span className="text-xs text-[#a09e9a]">
-                * Hệ thống sẽ sắp xếp các phim vào các phòng chiếu theo tham số bạn đã chọn.
+            <div className={cn('flex flex-wrap justify-between items-center border-t pt-4 gap-3 shrink-0', isDark ? 'border-white/10' : 'border-slate-200')}>
+              <span className={cn('text-xs flex items-center gap-1.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                * Hệ thống tự động xếp lịch dựa trên thời lượng phim, thời gian dọn phòng và khung giờ hoạt động của rạp.
               </span>
               <button
                 type="button"
                 disabled={autoGenerating || autoStartDate > autoEndDate}
                 onClick={handleGenerateAutoPreview}
-                className="bg-[#e8b84b] text-[#09090e] px-5 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                className="bg-[#e8b84b] hover:bg-[#d9a738] text-[#09090e] px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2 active:scale-[0.98] shadow-sm"
               >
-                <span>{autoGenerating ? '⏳ Đang tính toán...' : '🔍 Tạo Bản Xem Trước (Preview)'}</span>
+                {autoGenerating ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Đang tính toán...</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-4 h-4 stroke-[2.2]" />
+                    <span>Tạo Bản Xem Trước (Preview)</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

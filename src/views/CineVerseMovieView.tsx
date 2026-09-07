@@ -469,7 +469,7 @@ export default function CineVerseMovieView() {
                         {movie.cast.map((actor, idx) => {
                           const rawName = typeof actor === 'string' ? actor : actor.name
                           const name = normalizeInternationalName(rawName)
-                          const char = typeof actor === 'object' ? actor.character : null
+                          const char = typeof actor === 'object' ? normalizeInternationalName(actor.character) : null
                           const photo = typeof actor === 'object' ? actor.profile_url : null
 
                           return (
@@ -625,7 +625,7 @@ export default function CineVerseMovieView() {
                         {movie.cast.map((actor, idx) => {
                           const rawName = typeof actor === 'string' ? actor : actor.name
                           const name = normalizeInternationalName(rawName)
-                          const char = typeof actor === 'object' ? actor.character : null
+                          const char = typeof actor === 'object' ? normalizeInternationalName(actor.character) : null
                           const photo = typeof actor === 'object' ? actor.profile_url : null
 
                           return (
