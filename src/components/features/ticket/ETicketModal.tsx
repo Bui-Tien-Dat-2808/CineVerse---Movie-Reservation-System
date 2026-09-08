@@ -324,6 +324,18 @@ export function ETicketModal({ isOpen, onClose, reservation, userName }: ETicket
               <span className="font-bold text-base text-emerald-400">{fmt(totalPriceNum)}</span>
             </div>
           </div>
+
+          {/* Action Bar: In vé / Lưu vé offline */}
+          <div className="pt-3 border-t border-white/10 flex gap-2 print:hidden">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-[#e8b84b] hover:bg-[#f5c759] text-[#09090e] flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>In vé / Lưu vé offline (PDF)</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

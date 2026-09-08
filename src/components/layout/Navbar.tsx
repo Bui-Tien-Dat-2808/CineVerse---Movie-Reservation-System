@@ -32,7 +32,6 @@ import { cn } from '../../lib/utils'
 const USER_NAV_ITEMS = [
   { label: 'Phim đang chiếu', Icon: Film, path: '/' },
   { label: 'Sắp ra mắt', Icon: Clock, path: '/sap-ra-mat' },
-  { label: 'Rạp chiếu', Icon: Building2, path: '/rap-chieu' },
   { label: 'Khuyến mãi', Icon: Tag, path: '/khuyen-mai' },
 ]
 
@@ -217,7 +216,7 @@ export default function Navbar() {
                       : 'bg-white border-slate-200 text-slate-900 shadow-xl'
                   )}>
                     <div className={cn(
-                      'px-3 py-1.5 text-[10px] font-mono-data uppercase font-bold border-b mb-1',
+                      'px-3 py-1.5 text-[10px] uppercase font-bold tracking-wider border-b mb-1',
                       isDark ? 'text-[#a09e9a] border-white/5' : 'text-slate-500 border-slate-100'
                     )}>
                       Công cụ Quản lý khác
@@ -249,7 +248,7 @@ export default function Navbar() {
                             <SubIcon className="w-4 h-4 shrink-0 text-[#e8b84b] stroke-[1.75]" />
                             <div>
                               <p className="leading-tight">{subItem.label}</p>
-                              <p className={cn('text-[10px] font-normal font-mono-data', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>{subItem.desc}</p>
+                              <p className={cn('text-[11px] font-normal leading-normal mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>{subItem.desc}</p>
                             </div>
                           </div>
                           {isSubActive && <Check className="w-3.5 h-3.5 text-amber-500 stroke-[2.5]" />}
@@ -317,7 +316,7 @@ export default function Navbar() {
                     )}>
                       {user?.full_name ?? user?.email.split('@')[0]}
                     </p>
-                    <span className={cn('font-mono-data text-[9px] flex items-center gap-1', isDark ? 'text-[#a09e9a]' : 'text-slate-600 font-medium')}>
+                    <span className={cn('text-[9px] font-semibold flex items-center gap-1', isDark ? 'text-[#a09e9a]' : 'text-slate-600 font-medium')}>
                       {user?.role === 'admin' ? (
                         <>
                           <ShieldCheck className="w-3 h-3 text-amber-400 inline" />
@@ -350,7 +349,7 @@ export default function Navbar() {
                     <div className={cn('p-2.5 border-b mb-1', isDark ? 'border-white/10' : 'border-slate-200')}>
                       <p className={cn('font-bold truncate', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>{user?.full_name || 'System Administrator'}</p>
                       <p className={cn('text-[10px] truncate mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>{user?.email}</p>
-                      <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded text-[9px] font-bold font-mono-data bg-[#e8b84b]/15 text-[#e8b84b] border border-[#e8b84b]/30">
+                      <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded text-[9px] font-bold bg-[#e8b84b]/15 text-[#e8b84b] border border-[#e8b84b]/30">
                         {user?.role === 'admin' ? (
                           <>
                             <ShieldCheck className="w-3 h-3 text-amber-400" />
@@ -475,7 +474,7 @@ export default function Navbar() {
                         <span>Giao diện {theme === 'dark' ? 'Tối' : 'Sáng'}</span>
                       </div>
                       <span className={cn(
-                        'text-[10px] font-mono-data rounded px-1.5 py-0.5 border',
+                        'text-[10px] font-bold rounded px-1.5 py-0.5 border',
                         isDark ? 'bg-white/5 border-white/10 text-[#a09e9a]' : 'bg-slate-100 border-slate-300 text-slate-700'
                       )}>
                         {theme === 'dark' ? 'Dark' : 'Light'}
@@ -557,7 +556,7 @@ export default function Navbar() {
         )}>
           {isAdminPage ? (
             <div className="space-y-1">
-              <p className={cn('text-[10px] uppercase font-mono-data font-bold px-3 py-1 flex items-center gap-1.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+              <p className={cn('text-[10px] uppercase font-bold tracking-wider px-3 py-1 flex items-center gap-1.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
                 <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
                 <span>Bảng Điều Khiển Admin</span>
               </p>

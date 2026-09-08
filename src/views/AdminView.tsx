@@ -37,15 +37,47 @@ import {
   Check,
   CalendarClock,
   Pencil,
+  Crown,
+  Heart,
+  Baby,
+  Ban,
+  Info,
+  Grid3X3,
+  LayoutGrid,
+  ChevronLeft,
+  ChevronRight,
+  CupSoda,
+  Cookie,
+  Utensils,
+  EyeOff,
+  MoreVertical,
+  Copy,
+  Award,
+  History,
+  Minus,
+  Coins,
+  TrendingUp,
+  Medal,
+  Ribbon,
+  Trophy,
+  Lock,
+  Upload,
+  Image as ImageIcon,
+  XCircle,
+  Key,
+  Smartphone,
+  ClipboardList,
+  Lightbulb,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { apiClient } from '../api/client'
 import { fmt, cn, normalizeInternationalName } from '../lib/utils'
-import { adjustUserPoints, fetchLoyaltyUsers, type LoyaltyTransaction } from '../api/loyalty'
+import { adjustUserPoints, fetchLoyaltyUsers, fetchUserLoyaltyDetail, type LoyaltyTransaction, type LoyaltyStatus } from '../api/loyalty'
 import ReviewManageTab from '../components/admin/ReviewManageTab'
 import MovieDetailModal from '../components/admin/MovieDetailModal'
-import RefundResolveModal from '../components/admin/RefundResolveModal'
+import RefundsAdminTab from '../components/admin/RefundsAdminTab'
+import AnalyticsAdminTab from '../components/admin/AnalyticsAdminTab'
 import { groupConcessions, type GroupedConcession } from '../api/concessions'
 import { CleanDatePicker, toLocalYYYYMMDD, formatVNFullDate } from '../components/common/CleanDatePicker'
 
@@ -333,8 +365,13 @@ interface VoucherAdminItem {
   min_spend: number
   max_discount?: number
   expiry_date?: string
+  valid_weekdays?: number[]
   max_uses_total?: number
+  max_uses_per_user?: number
   min_loyalty_tier?: string
+  applicable_scope?: 'all' | 'rooms' | 'concessions' | 'loyalty' | string
+  target_room_type?: string
+  target_category?: string
   is_active: boolean
   is_first_booking_only?: boolean
 }
@@ -427,35 +464,38 @@ function ImageUploadField({
               <button
                 type="button"
                 onClick={() => inputRef.current?.click()}
-                className="bg-[#e8b84b] text-[#09090e] text-sm font-bold px-4 py-2 rounded-xl cursor-pointer hover:brightness-110 transition-all flex items-center gap-1.5"
+                className="bg-[#e8b84b] text-[#09090e] text-sm font-bold px-4 py-2 rounded-xl cursor-pointer hover:brightness-110 transition-all flex items-center gap-2"
               >
-                🔄 Đổi ảnh
+                <RefreshCw className="w-4 h-4" />
+                <span>Đổi ảnh</span>
               </button>
               <button
                 type="button"
                 onClick={() => onChange('')}
-                className="bg-red-500/80 text-white text-xs font-semibold px-4 py-1.5 rounded-xl cursor-pointer hover:bg-red-500 transition-all"
+                className="bg-red-500/80 text-white text-xs font-semibold px-4 py-1.5 rounded-xl cursor-pointer hover:bg-red-500 transition-all flex items-center gap-1.5"
               >
-                🗑️ Xoá ảnh
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Xoá ảnh</span>
               </button>
             </div>
           </>
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-2.5">
-            <span className="text-4xl">🖼️</span>
+            <ImageIcon className="w-10 h-10 text-amber-500/50" />
             <p className={`text-xs text-center ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>
               Kéo thả ảnh vào đây hoặc
             </p>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); inputRef.current?.click() }}
-              className={`text-sm font-bold px-4 py-2 rounded-xl cursor-pointer transition-all ${
+              className={`text-sm font-bold px-4 py-2 rounded-xl cursor-pointer transition-all flex items-center gap-2 ${
                 isDark
                   ? 'bg-[#e8b84b]/15 text-[#e8b84b] hover:bg-[#e8b84b]/25 border border-[#e8b84b]/30'
                   : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
               }`}
             >
-              📁 Chọn tệp ảnh
+              <Upload className="w-4 h-4" />
+              <span>Chọn tệp ảnh</span>
             </button>
             <p className={`text-[10px] ${isDark ? 'text-[#6e6c68]/60' : 'text-slate-300'}`}>
               JPG, PNG, WEBP — tối đa 5MB
@@ -468,147 +508,820 @@ function ImageUploadField({
 }
 
 // ─────────────────────────────────────────
-// ConcessionAdminTab
+// ─────────────────────────────────────────
+// LoyaltyAdminTab — Enterprise Loyalty & Rewards Management
+
+// ─────────────────────────────────────────
+// LoyaltyAdminTab — Automated Enterprise Loyalty & Rewards Management
 // ─────────────────────────────────────────
 function LoyaltyAdminTab({ isDark }: { isDark: boolean }) {
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [query, setQuery] = useState('')
-  const [msg, setMsg] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedTierTab, setSelectedTierTab] = useState<'all' | 'diamond' | 'gold' | 'silver' | 'bronze'>('all')
+  const [sortBy, setSortBy] = useState<'points_desc' | 'points_asc' | 'name_asc' | 'created_desc'>('points_desc')
+  const [notification, setNotification] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+
+  // Auto Rules Configuration Modal State (Centered)
+  const [isRulesModalOpen, setIsRulesModalOpen] = useState(false)
+  const [rulesConfig, setRulesConfig] = useState<{
+    spendPerPoint: number
+    silverMin: number
+    goldMin: number
+    diamondMin: number
+    autoRevokeOnRefund: boolean
+    signupBonusPoints: number
+  }>(() => {
+    const saved = localStorage.getItem('cineverse_loyalty_rules')
+    if (saved) {
+      try {
+        return JSON.parse(saved)
+      } catch {}
+    }
+    return {
+      spendPerPoint: 1000,
+      silverMin: 1000,
+      goldMin: 5000,
+      diamondMin: 10000,
+      autoRevokeOnRefund: true,
+      signupBonusPoints: 0,
+    }
+  })
+
+  // Manual Adjust Exception Modal State (Centered)
+  const [adjustTargetUser, setAdjustTargetUser] = useState<any | null>(null)
+  const [adjustMode, setAdjustMode] = useState<'add' | 'deduct'>('add')
+  const [adjustAmount, setAdjustAmount] = useState<string>('100')
+  const [adjustReason, setAdjustReason] = useState<string>('Đền bù sự cố trải nghiệm dịch vụ')
+  const [adjustCustomReason, setAdjustCustomReason] = useState<string>('')
+  const [adjustSubmitting, setAdjustSubmitting] = useState(false)
+
+  // Transaction History Modal State (Centered)
+  const [historyTargetUser, setHistoryTargetUser] = useState<any | null>(null)
+  const [historyDetail, setHistoryDetail] = useState<LoyaltyStatus | null>(null)
+  const [historyLoading, setHistoryLoading] = useState(false)
+
+  // Popover menu for exceptions
+  const [activeMenuUserId, setActiveMenuUserId] = useState<number | null>(null)
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 8
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ text, type })
+    setTimeout(() => {
+      setNotification((curr) => (curr?.text === text ? null : curr))
+    }, 4000)
+  }
+
+  // Close modals on Escape key and close popover on outside click
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        if (adjustTargetUser) setAdjustTargetUser(null)
+        if (historyTargetUser) setHistoryTargetUser(null)
+        if (isRulesModalOpen) setIsRulesModalOpen(false)
+        setActiveMenuUserId(null)
+      }
+    }
+    function handleWindowClick() {
+      setActiveMenuUserId(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('click', handleWindowClick)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('click', handleWindowClick)
+    }
+  }, [adjustTargetUser, historyTargetUser, isRulesModalOpen])
 
   async function loadUsers() {
     setLoading(true)
     try {
       const data = await fetchLoyaltyUsers()
-      setUsers(data)
+      setUsers(data || [])
     } catch {
-      setMsg('Không thể tải danh sách thành viên')
+      showToast('Không thể tải danh sách thành viên tích điểm', 'error')
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { loadUsers() }, [])
+  useEffect(() => {
+    loadUsers()
+  }, [])
 
-  function getTierProgress(pts: number) {
-    const tierMap = [
-      { key: 'bronze', label: 'Đồng', icon: '🥉', color: '#CD7F32', min: 0, nextKey: 'silver', nextLabel: 'Bạc', nextMin: 1000 },
-      { key: 'silver', label: 'Bạc', icon: '🥈', color: '#A8A9AD', min: 1000, nextKey: 'gold', nextLabel: 'Vàng', nextMin: 5000 },
-      { key: 'gold', label: 'Vàng', icon: '🥇', color: '#FFD700', min: 5000, nextKey: 'diamond', nextLabel: 'Kim Cương', nextMin: 10000 },
-      { key: 'diamond', label: 'Kim Cương', icon: '💎', color: '#B9F2FF', min: 10000, nextKey: null, nextLabel: null, nextMin: 10000 },
-    ]
+  // Tier configuration constants (Huân chương & Huy chương các hạng)
+  const TIER_CONFIG = {
+    bronze: {
+      key: 'bronze',
+      label: 'Hạng Đồng',
+      icon: Ribbon,
+      badgeColor: 'text-amber-700 dark:text-amber-500 bg-amber-500/10 border-amber-500/25',
+      accentColor: '#CD7F32',
+      min: 0,
+      nextMin: rulesConfig.silverMin,
+      nextLabel: 'Hạng Bạc',
+    },
+    silver: {
+      key: 'silver',
+      label: 'Hạng Bạc',
+      icon: Award,
+      badgeColor: 'text-slate-700 dark:text-slate-300 bg-slate-500/10 border-slate-500/25',
+      accentColor: '#94a3b8',
+      min: rulesConfig.silverMin,
+      nextMin: rulesConfig.goldMin,
+      nextLabel: 'Hạng Vàng',
+    },
+    gold: {
+      key: 'gold',
+      label: 'Hạng Vàng',
+      icon: Medal,
+      badgeColor: 'text-amber-600 dark:text-amber-400 bg-[#e8b84b]/15 border-[#e8b84b]/30',
+      accentColor: '#e8b84b',
+      min: rulesConfig.goldMin,
+      nextMin: rulesConfig.diamondMin,
+      nextLabel: 'Hạng Kim Cương',
+    },
+    diamond: {
+      key: 'diamond',
+      label: 'Hạng Kim Cương',
+      icon: Trophy,
+      badgeColor: 'text-sky-600 dark:text-sky-400 bg-sky-500/15 border-sky-500/30',
+      accentColor: '#38bdf8',
+      min: rulesConfig.diamondMin,
+      nextMin: rulesConfig.diamondMin,
+      nextLabel: null,
+    },
+  }
 
-    const currentTier = tierMap.find((t) => pts >= t.min && (t.nextKey === null || pts < t.nextMin)) || tierMap[0]
-    if (!currentTier.nextKey) {
+  function getTierData(pts: number) {
+    if (pts >= rulesConfig.diamondMin) return TIER_CONFIG.diamond
+    if (pts >= rulesConfig.goldMin) return TIER_CONFIG.gold
+    if (pts >= rulesConfig.silverMin) return TIER_CONFIG.silver
+    return TIER_CONFIG.bronze
+  }
+
+  function calculateProgress(pts: number) {
+    const tier = getTierData(pts)
+    if (tier.key === 'diamond') {
       return {
-        tier: currentTier,
+        tier,
         progressPct: 100,
         remaining: 0,
         nextLabel: null,
       }
     }
-
-    const range = currentTier.nextMin - currentTier.min
-    const progressPct = Math.min(100, Math.max(0, ((pts - currentTier.min) / range) * 100))
-    const remaining = Math.max(0, currentTier.nextMin - pts)
-
+    const range = tier.nextMin - tier.min
+    const progressPct = Math.min(100, Math.max(0, ((pts - tier.min) / range) * 100))
+    const remaining = Math.max(0, tier.nextMin - pts)
     return {
-      tier: currentTier,
+      tier,
       progressPct,
       remaining,
-      nextLabel: currentTier.nextLabel,
+      nextLabel: tier.nextLabel,
     }
   }
 
-  const filteredUsers = users.filter((u) => {
-    if (u.role === 'admin' || u.role === 'ADMIN' || u.email?.toLowerCase().includes('admin')) return false
-    const text = `${u.full_name || ''} ${u.email || ''}`.toLowerCase()
-    return text.includes(query.toLowerCase())
-  })
+  // Pre-calculate statistics
+  const stats = useMemo(() => {
+    const validUsers = users.filter((u) => u.role !== 'admin' && u.role !== 'ADMIN' && !u.email?.toLowerCase().includes('admin'))
+    const totalMembers = validUsers.length
+    const totalPoints = validUsers.reduce((sum, u) => sum + Number(u.loyalty_points || 0), 0)
+
+    const counts = {
+      diamond: validUsers.filter((u) => Number(u.loyalty_points || 0) >= rulesConfig.diamondMin).length,
+      gold: validUsers.filter((u) => {
+        const p = Number(u.loyalty_points || 0)
+        return p >= rulesConfig.goldMin && p < rulesConfig.diamondMin
+      }).length,
+      silver: validUsers.filter((u) => {
+        const p = Number(u.loyalty_points || 0)
+        return p >= rulesConfig.silverMin && p < rulesConfig.goldMin
+      }).length,
+      bronze: validUsers.filter((u) => Number(u.loyalty_points || 0) < rulesConfig.silverMin).length,
+    }
+
+    return { totalMembers, totalPoints, counts }
+  }, [users, rulesConfig])
+
+  // Filtered & Sorted Users
+  const processedUsers = useMemo(() => {
+    let result = users.filter((u) => u.role !== 'admin' && u.role !== 'ADMIN' && !u.email?.toLowerCase().includes('admin'))
+
+    // Filter by tier tab
+    if (selectedTierTab !== 'all') {
+      result = result.filter((u) => {
+        const tier = getTierData(Number(u.loyalty_points || 0))
+        return tier.key === selectedTierTab
+      })
+    }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      result = result.filter(
+        (u) =>
+          (u.full_name && u.full_name.toLowerCase().includes(q)) ||
+          (u.email && u.email.toLowerCase().includes(q)) ||
+          (u.phone_number && u.phone_number.includes(q)) ||
+          String(u.id).includes(q)
+      )
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      const ptsA = Number(a.loyalty_points || 0)
+      const ptsB = Number(b.loyalty_points || 0)
+      if (sortBy === 'points_desc') return ptsB - ptsA
+      if (sortBy === 'points_asc') return ptsA - ptsB
+      if (sortBy === 'name_asc') return (a.full_name || a.email || '').localeCompare(b.full_name || b.email || '')
+      if (sortBy === 'created_desc') return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      return 0
+    })
+
+    return result
+  }, [users, selectedTierTab, searchQuery, sortBy, rulesConfig])
+
+  // Paginated records
+  const totalPages = Math.ceil(processedUsers.length / PAGE_SIZE) || 1
+  const paginatedUsers = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return processedUsers.slice(start, start + PAGE_SIZE)
+  }, [processedUsers, currentPage])
+
+  // Open transaction history modal
+  async function handleOpenHistory(user: any) {
+    setHistoryTargetUser(user)
+    setHistoryDetail(null)
+    setHistoryLoading(true)
+    try {
+      const detail = await fetchUserLoyaltyDetail(user.id)
+      setHistoryDetail(detail)
+    } catch {
+      showToast('Không thể tải lịch sử giao dịch điểm của thành viên', 'error')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  // Open exception adjust modal
+  function handleOpenAdjust(user: any) {
+    setAdjustTargetUser(user)
+    setAdjustMode('add')
+    setAdjustAmount('100')
+    setAdjustReason('Đền bù sự cố trải nghiệm dịch vụ')
+    setAdjustCustomReason('')
+    setActiveMenuUserId(null)
+  }
+
+  // Submit point adjustment (Exception only)
+  async function handleSaveAdjustment(e: React.FormEvent) {
+    e.preventDefault()
+    if (!adjustTargetUser) return
+
+    const parsedPts = parseInt(adjustAmount, 10)
+    if (isNaN(parsedPts) || parsedPts <= 0) {
+      showToast('Vui lòng nhập số điểm hợp lệ (> 0)', 'error')
+      return
+    }
+
+    const finalPoints = adjustMode === 'add' ? parsedPts : -parsedPts
+    const currentPts = Number(adjustTargetUser.loyalty_points || 0)
+
+    if (adjustMode === 'deduct' && parsedPts > currentPts) {
+      showToast(`Không thể trừ quá số điểm hiện có (${currentPts.toLocaleString('vi-VN')} điểm)`, 'error')
+      return
+    }
+
+    const reasonText = adjustReason === 'Khác' ? adjustCustomReason.trim() : adjustReason
+    if (!reasonText) {
+      showToast('Vui lòng cung cấp lý do điều chỉnh điểm', 'error')
+      return
+    }
+
+    setAdjustSubmitting(true)
+    try {
+      await adjustUserPoints({
+        user_id: adjustTargetUser.id,
+        points: finalPoints,
+        reason: `[Điều chỉnh ngoại lệ] ${reasonText}`,
+      })
+      showToast(
+        `Đã ${adjustMode === 'add' ? 'cộng' : 'khấu trừ'} thành công ${parsedPts.toLocaleString('vi-VN')} điểm cho "${adjustTargetUser.full_name || adjustTargetUser.email}"`
+      )
+      setAdjustTargetUser(null)
+      await loadUsers()
+    } catch (err: any) {
+      showToast(err?.response?.data?.detail || 'Lỗi khi điều chỉnh điểm thưởng thành viên', 'error')
+    } finally {
+      setAdjustSubmitting(false)
+    }
+  }
+
+  // Save rules config
+  function handleSaveRules(e: React.FormEvent) {
+    e.preventDefault()
+    localStorage.setItem('cineverse_loyalty_rules', JSON.stringify(rulesConfig))
+    showToast('Đã lưu cấu hình quy tắc tích điểm tự động thành công')
+    setIsRulesModalOpen(false)
+  }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className={`font-display text-2xl font-black ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>🏆 Tiến Độ Tích Điểm Thành Viên</h2>
-          <p className={`text-sm mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Theo dõi tổng điểm, phân hạng và điểm còn thiếu để thăng hạng của khách hàng.</p>
+    <div className="space-y-6">
+      {/* Toast Notification */}
+      {notification && (
+        <div
+          className={cn(
+            'fixed bottom-6 right-6 z-[120] px-4 py-3 rounded-2xl shadow-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in slide-in-from-bottom-3 duration-200 border',
+            notification.type === 'success'
+              ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+              : 'bg-rose-600 text-white border-rose-400'
+          )}
+        >
+          {notification.type === 'success' ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          <span>{notification.text}</span>
+        </div>
+      )}
+
+      {/* Top Header Card */}
+      <div
+        className={cn(
+          'p-5 sm:p-6 rounded-2xl border transition-all shadow-sm',
+          isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-sm'
+        )}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <span
+              className={cn(
+                'p-3 rounded-2xl flex items-center justify-center text-amber-500',
+                isDark ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-amber-50 border border-amber-200'
+              )}
+            >
+              <Award className="w-6 h-6 stroke-[2]" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h2 className={cn('font-display font-black text-xl sm:text-2xl', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                  Quản Lý Tích Điểm & Thành Viên
+                </h2>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Vận hành tự động</span>
+                </span>
+              </div>
+              <p className={cn('text-xs mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                Điểm thưởng tự động cộng khi mua vé và tự động nâng hạng thành viên theo cơ chế toàn hệ thống.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setIsRulesModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-[#e8b84b] hover:bg-[#dfad3e] text-[#09090e] transition-all cursor-pointer select-none shadow-sm"
+              title="Xem và cấu hình quy tắc tích điểm tự động"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Cấu Hình Quy Tắc Tự Động</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={loadUsers}
+              disabled={loading}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer select-none shadow-xs',
+                isDark
+                  ? 'bg-white/5 border-white/10 text-[#f0ede8] hover:bg-white/10'
+                  : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+              )}
+            >
+              <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+              <span>Làm Mới</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {msg && <div className={`text-sm px-4 py-2.5 rounded-xl border ${isDark ? 'bg-red-900/20 border-red-500/30 text-red-400' : 'bg-red-50 border-red-200 text-red-700'}`}>{msg}</div>}
+      {/* ── BỘ LỌC DUY NHẤT: 5 THẺ PHÂN HẠNG TƯƠNG TÁC (LOẠI BỎ HÀNG DUPLICATE) ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+        {/* Card 1: Tất Cả Thành Viên */}
+        <div
+          onClick={() => {
+            setSelectedTierTab('all')
+            setCurrentPage(1)
+          }}
+          className={cn(
+            'p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group shadow-xs hover:shadow-md select-none',
+            selectedTierTab === 'all'
+              ? 'ring-2 ring-amber-500 border-amber-500 bg-amber-500/10'
+              : isDark
+              ? 'bg-[#111118] border-white/10 hover:border-amber-500/40'
+              : 'bg-white border-slate-200 hover:border-amber-400'
+          )}
+        >
+          <div className="flex items-center justify-between">
+            <span className={cn('text-xs font-bold uppercase tracking-wider', selectedTierTab === 'all' ? 'text-amber-500 font-black' : isDark ? 'text-slate-300' : 'text-slate-700')}>
+              Tất Cả Thành Viên
+            </span>
+            <span className={cn('p-1.5 rounded-xl border transition-transform group-hover:scale-110', selectedTierTab === 'all' ? 'bg-amber-500 text-slate-950 border-amber-400' : 'bg-white/5 border-white/10 text-amber-500')}>
+              <Users className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="mt-3 flex items-baseline justify-between">
+            <div className="font-display font-black text-2xl sm:text-3xl text-amber-500">{stats.totalMembers}</div>
+            <span className="text-[10px] font-semibold opacity-70">Toàn rạp</span>
+          </div>
+          <p className={cn('text-[11px] mt-1 truncate', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+            {stats.totalPoints.toLocaleString('vi-VN')} điểm lưu hành
+          </p>
+        </div>
 
-      <div className={`rounded-2xl border p-4 ${isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'}`}>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Tìm khách hàng theo tên hoặc email..."
-          className={`w-full px-3 py-2 rounded-xl border text-sm outline-none ${isDark ? 'bg-[#0d0d14] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
-        />
+        {/* Card 2: Hạng Kim Cương */}
+        <div
+          onClick={() => {
+            setSelectedTierTab('diamond')
+            setCurrentPage(1)
+          }}
+          className={cn(
+            'p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group shadow-xs hover:shadow-md select-none',
+            selectedTierTab === 'diamond'
+              ? 'ring-2 ring-sky-500 border-sky-500 bg-sky-500/10'
+              : isDark
+              ? 'bg-[#111118] border-white/10 hover:border-sky-500/40'
+              : 'bg-white border-slate-200 hover:border-sky-400'
+          )}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-sky-500">Kim Cương</span>
+            <span className={cn('p-1.5 rounded-xl border transition-transform group-hover:scale-110', selectedTierTab === 'diamond' ? 'bg-sky-500 text-slate-950 border-sky-400' : 'bg-sky-500/15 border-sky-500/30 text-sky-400')}>
+              <Trophy className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="mt-3 flex items-baseline justify-between">
+            <div className="font-display font-black text-2xl sm:text-3xl text-sky-400">{stats.counts.diamond}</div>
+            <span className="text-[10px] font-semibold opacity-70">Từ 10.000+ đ</span>
+          </div>
+          <p className={cn('text-[11px] mt-1 truncate', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>Khách hàng VIP cao nhất</p>
+        </div>
+
+        {/* Card 3: Hạng Vàng */}
+        <div
+          onClick={() => {
+            setSelectedTierTab('gold')
+            setCurrentPage(1)
+          }}
+          className={cn(
+            'p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group shadow-xs hover:shadow-md select-none',
+            selectedTierTab === 'gold'
+              ? 'ring-2 ring-[#e8b84b] border-[#e8b84b] bg-[#e8b84b]/10'
+              : isDark
+              ? 'bg-[#111118] border-white/10 hover:border-[#e8b84b]/40'
+              : 'bg-white border-slate-200 hover:border-amber-400'
+          )}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-500">Hạng Vàng</span>
+            <span className={cn('p-1.5 rounded-xl border transition-transform group-hover:scale-110', selectedTierTab === 'gold' ? 'bg-[#e8b84b] text-slate-950 border-[#e8b84b]' : 'bg-[#e8b84b]/15 border-[#e8b84b]/30 text-amber-400')}>
+              <Medal className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="mt-3 flex items-baseline justify-between">
+            <div className="font-display font-black text-2xl sm:text-3xl text-[#e8b84b]">{stats.counts.gold}</div>
+            <span className="text-[10px] font-semibold opacity-70">5.000 – 9.999 đ</span>
+          </div>
+          <p className={cn('text-[11px] mt-1 truncate', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>Hội viên thân thiết Gold</p>
+        </div>
+
+        {/* Card 4: Hạng Bạc */}
+        <div
+          onClick={() => {
+            setSelectedTierTab('silver')
+            setCurrentPage(1)
+          }}
+          className={cn(
+            'p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group shadow-xs hover:shadow-md select-none',
+            selectedTierTab === 'silver'
+              ? 'ring-2 ring-slate-400 border-slate-400 bg-slate-500/10'
+              : isDark
+              ? 'bg-[#111118] border-white/10 hover:border-white/25'
+              : 'bg-white border-slate-200 hover:border-slate-400'
+          )}
+        >
+          <div className="flex items-center justify-between">
+            <span className={cn('text-xs font-bold uppercase tracking-wider', isDark ? 'text-slate-300' : 'text-slate-700')}>Hạng Bạc</span>
+            <span className={cn('p-1.5 rounded-xl border transition-transform group-hover:scale-110', selectedTierTab === 'silver' ? 'bg-slate-400 text-slate-950 border-slate-300' : 'bg-slate-500/15 border-slate-500/30 text-slate-400')}>
+              <Award className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="mt-3 flex items-baseline justify-between">
+            <div className={cn('font-display font-black text-2xl sm:text-3xl', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>
+              {stats.counts.silver}
+            </div>
+            <span className="text-[10px] font-semibold opacity-70">1.000 – 4.999 đ</span>
+          </div>
+          <p className={cn('text-[11px] mt-1 truncate', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>Hội viên tích cực</p>
+        </div>
+
+        {/* Card 5: Hạng Đồng */}
+        <div
+          onClick={() => {
+            setSelectedTierTab('bronze')
+            setCurrentPage(1)
+          }}
+          className={cn(
+            'p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group shadow-xs hover:shadow-md select-none',
+            selectedTierTab === 'bronze'
+              ? 'ring-2 ring-amber-700 border-amber-700 bg-amber-700/10'
+              : isDark
+              ? 'bg-[#111118] border-white/10 hover:border-amber-700/40'
+              : 'bg-white border-slate-200 hover:border-amber-700/40'
+          )}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-500">Hạng Đồng</span>
+            <span className={cn('p-1.5 rounded-xl border transition-transform group-hover:scale-110', selectedTierTab === 'bronze' ? 'bg-amber-700 text-white border-amber-600' : 'bg-amber-700/15 border-amber-700/30 text-amber-600 dark:text-amber-400')}>
+              <Ribbon className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="mt-3 flex items-baseline justify-between">
+            <div className="font-display font-black text-2xl sm:text-3xl text-amber-700 dark:text-amber-500">{stats.counts.bronze}</div>
+            <span className="text-[10px] font-semibold opacity-70">Dưới 1.000 đ</span>
+          </div>
+          <p className={cn('text-[11px] mt-1 truncate', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>Hội viên mới</p>
+        </div>
       </div>
 
+      {/* ── BANNER QUY TẮC TỰ ĐỘNG HÓA 100% ── */}
+      <div
+        className={cn(
+          'p-4 rounded-2xl border text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs',
+          isDark ? 'bg-amber-500/5 border-amber-500/20 text-[#f0ede8]' : 'bg-amber-50/80 border-amber-200 text-amber-950'
+        )}
+      >
+        <div className="flex items-center gap-3">
+          <span className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0">
+            <TrendingUp className="w-4 h-4" />
+          </span>
+          <div>
+            <span className="font-bold block text-amber-500">Cơ Chế Tích Điểm Tự Động Toàn Hệ Thống:</span>
+            <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-600'}>
+              Mỗi đơn đặt vé thành công tự động tích lũy <strong className="text-amber-500 font-mono-data">1 điểm / {rulesConfig.spendPerPoint.toLocaleString('vi-VN')}₫</strong> và tự động thăng hạng theo mốc điểm. Khi hủy vé, hệ thống tự động thu hồi điểm.
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Toolbar: Search and Sort Only (Tabs removed to eliminate duplicate filter) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {/* Left Search Bar */}
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#a09e9a]" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value)
+              setCurrentPage(1)
+            }}
+            placeholder="Tìm theo tên khách hàng, email, số điện thoại..."
+            className={cn(
+              'w-full pl-9 pr-8 py-2.5 rounded-xl border text-xs outline-none transition-all',
+              isDark
+                ? 'bg-[#111118] border-white/10 text-[#f0ede8] placeholder:text-[#6e6c68] focus:border-[#e8b84b]'
+                : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-amber-500 shadow-2xs'
+            )}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('')
+                setCurrentPage(1)
+              }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#a09e9a] hover:text-[#f0ede8] p-0.5 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Right Active Filter & Sort Dropdown */}
+        <div className="flex items-center gap-2.5">
+          {selectedTierTab !== 'all' && (
+            <button
+              type="button"
+              onClick={() => setSelectedTierTab('all')}
+              className="text-xs font-semibold text-amber-500 hover:underline cursor-pointer flex items-center gap-1"
+            >
+              <X className="w-3 h-3" />
+              <span>Bỏ lọc hạng</span>
+            </button>
+          )}
+
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className={cn(
+              'px-3.5 py-2.5 rounded-xl border text-xs font-semibold outline-none cursor-pointer',
+              isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-800 shadow-2xs'
+            )}
+          >
+            <option value="points_desc">Điểm: Cao nhất</option>
+            <option value="points_asc">Điểm: Thấp nhất</option>
+            <option value="name_asc">Tên: A → Z</option>
+            <option value="created_desc">Mới tham gia</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Member Cards List */}
       {loading ? (
-        <div className={`p-10 text-center rounded-2xl border ${isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'}`}>
-          Đang tải danh sách thành viên...
+        <div
+          className={cn(
+            'p-12 text-center rounded-2xl border space-y-3',
+            isDark ? 'bg-[#111118] border-white/10 text-[#a09e9a]' : 'bg-white border-slate-200 text-slate-500'
+          )}
+        >
+          <RefreshCw className="w-6 h-6 animate-spin mx-auto text-amber-500" />
+          <p className="text-xs font-semibold">Đang đồng bộ dữ liệu tích điểm tự động từ cơ sở dữ liệu...</p>
         </div>
-      ) : filteredUsers.length === 0 ? (
-        <div className={`p-10 text-center rounded-2xl border text-xs ${isDark ? 'bg-[#111118] border-white/10 text-[#a09e9a]' : 'bg-white border-slate-200 text-slate-500'}`}>
-          Không tìm thấy khách hàng nào.
+      ) : paginatedUsers.length === 0 ? (
+        <div
+          className={cn(
+            'p-14 text-center rounded-2xl border space-y-3',
+            isDark ? 'bg-[#111118] border-white/10 text-[#a09e9a]' : 'bg-white border-slate-200 text-slate-500'
+          )}
+        >
+          <Award className="w-10 h-10 mx-auto opacity-30 text-amber-500 mb-1" />
+          <p className="text-sm font-bold">Không tìm thấy thành viên nào phù hợp</p>
+          <p className="text-xs opacity-75">Hãy thử thay đổi từ khóa tìm kiếm hoặc chọn phân hạng khác.</p>
+          {(searchQuery || selectedTierTab !== 'all') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('')
+                setSelectedTierTab('all')
+                setCurrentPage(1)
+              }}
+              className="mt-2 px-4 py-2 rounded-xl text-xs font-bold text-amber-500 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 cursor-pointer"
+            >
+              Đặt Lại Bộ Lọc
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredUsers.map((user) => {
+          {paginatedUsers.map((user) => {
             const pts = Number(user.loyalty_points || 0)
-            const info = getTierProgress(pts)
+            const progress = calculateProgress(pts)
+            const TierIcon = progress.tier.icon
+            const firstLetter = (user.full_name || user.email || 'U').charAt(0).toUpperCase()
 
             return (
-              <div key={user.id} className={`rounded-2xl border p-5 ${isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'}`}>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className={`font-bold text-base ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{user.full_name || user.email}</span>
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border" style={{
-                        backgroundColor: `${info.tier.color}15`,
-                        borderColor: `${info.tier.color}40`,
-                        color: isDark ? info.tier.color : '#09090e'
-                      }}>
-                        <span>{info.tier.icon}</span>
-                        <span>Hạng {info.tier.label}</span>
-                      </span>
-                    </div>
-                    <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>{user.email}</p>
+              <div
+                key={user.id}
+                className={cn(
+                  'p-4 sm:p-5 rounded-2xl border transition-all shadow-xs hover:shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-4',
+                  isDark ? 'bg-[#111118] border-white/10 hover:border-white/20' : 'bg-white border-slate-200 hover:border-slate-300'
+                )}
+              >
+                {/* Left: User Avatar & Identification */}
+                <div className="flex items-center gap-3.5 min-w-[240px]">
+                  <div
+                    className="w-11 h-11 rounded-2xl flex items-center justify-center font-display font-black text-base shrink-0 shadow-inner"
+                    style={{
+                      backgroundColor: `${progress.tier.accentColor}18`,
+                      border: `1.5px solid ${progress.tier.accentColor}40`,
+                      color: progress.tier.accentColor,
+                    }}
+                  >
+                    {firstLetter}
                   </div>
 
-                  <div className="text-left sm:text-right">
-                    <span className={`text-lg font-black font-display ${isDark ? 'text-[#e8b84b]' : 'text-amber-700'}`}>
-                      {pts.toLocaleString('vi-VN')} điểm
-                    </span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={cn('font-bold text-sm truncate', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                        {user.full_name || 'Khách xem phim'}
+                      </span>
+
+                      <span className={cn('px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-flex items-center gap-1', progress.tier.badgeColor)}>
+                        <TierIcon className="w-3 h-3" />
+                        <span>{progress.tier.label}</span>
+                      </span>
+
+                      <span className="text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                        <span className="w-1 h-1 rounded-full bg-emerald-400" />
+                        <span>Tự động</span>
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs mt-0.5">
+                      <span className={cn('truncate', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>{user.email}</span>
+                      {user.phone_number && (
+                        <>
+                          <span className="opacity-30">•</span>
+                          <span className={cn('font-mono-data text-[11px]', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                            {user.phone_number}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Progress Bar & Tier info */}
-                <div className={`mt-3 pt-3 border-t text-xs ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1.5 font-medium">
-                    <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-600'}>
-                      {info.nextLabel
-                        ? `Tiến độ thăng hạng từ ${info.tier.label} (${info.tier.min.toLocaleString('vi-VN')}) ➔ ${info.nextLabel}`
-                        : '🎉 Đã đạt Hạng Kim Cương cao nhất!'}
-                    </span>
-                    <span className={`font-bold ${isDark ? 'text-[#e8b84b]' : 'text-amber-700'}`}>
-                      {info.remaining > 0
-                        ? `Còn ${info.remaining.toLocaleString('vi-VN')} điểm nữa ➔ ${info.nextLabel}`
-                        : 'Đã đạt hạng cao nhất'}
-                    </span>
+                {/* Middle: Points & Progress Bar */}
+                <div className="flex-1 max-w-xl min-w-0">
+                  <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold opacity-80">Điểm tích lũy:</span>
+                      <span className="font-mono-data font-black text-base sm:text-lg text-[#e8b84b]">
+                        {pts.toLocaleString('vi-VN')}
+                      </span>
+                      <span className="text-[11px] font-bold text-amber-500">điểm</span>
+                    </div>
+
+                    <div className="text-[11px] font-semibold text-right">
+                      {progress.nextLabel ? (
+                        <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-500'}>
+                          Còn thiếu <strong className="text-amber-500 font-mono-data">{progress.remaining.toLocaleString('vi-VN')}</strong> điểm →{' '}
+                          <span className="font-bold">{progress.nextLabel}</span>
+                        </span>
+                      ) : (
+                        <span className="text-sky-400 font-bold inline-flex items-center gap-1">
+                          <Trophy className="w-3 h-3" />
+                          <span>Hạng Kim Cương cao nhất</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Progress Bar */}
-                  <div className={`h-2.5 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-200'}`}>
+                  {/* Progress Bar Container */}
+                  <div className={cn('h-2 rounded-full overflow-hidden', isDark ? 'bg-white/5 border border-white/5' : 'bg-slate-100 border border-slate-200')}>
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{
-                        width: `${info.progressPct}%`,
-                        backgroundColor: info.tier.color || '#e8b84b',
+                        width: `${progress.progressPct}%`,
+                        backgroundColor: progress.tier.accentColor,
                       }}
                     />
+                  </div>
+                </div>
+
+                {/* Right: Automated Actions (View History is Primary) */}
+                <div className="flex items-center gap-2 shrink-0 self-end lg:self-center relative">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenHistory(user)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#e8b84b] hover:bg-[#dfad3e] text-[#09090e] transition-all cursor-pointer shadow-xs"
+                    title="Xem lịch sử tự động tích điểm từ các đơn vé"
+                  >
+                    <History className="w-3.5 h-3.5 stroke-[2.5]" />
+                    <span>Lịch Sử Tích Điểm</span>
+                  </button>
+
+                  {/* Secondary More Options Button for Exceptions */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setActiveMenuUserId(activeMenuUserId === user.id ? null : user.id)
+                      }}
+                      className={cn(
+                        'p-2 rounded-xl border transition-all cursor-pointer',
+                        isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                      )}
+                      title="Tùy chọn can thiệp ngoại lệ"
+                    >
+                      <MoreVertical className="w-3.5 h-3.5" />
+                    </button>
+
+                    {activeMenuUserId === user.id && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className={cn(
+                          'absolute right-0 mt-1.5 w-52 rounded-xl border shadow-xl p-1 z-30 animate-in fade-in zoom-in-95 duration-150',
+                          isDark ? 'bg-[#161622] border-white/15 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-800'
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleOpenAdjust(user)}
+                          className={cn(
+                            'w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer',
+                            isDark ? 'hover:bg-white/10 text-amber-400' : 'hover:bg-amber-50 text-amber-700'
+                          )}
+                        >
+                          <Coins className="w-3.5 h-3.5" />
+                          <span>Bù điểm sự cố (Ngoại lệ)</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -616,9 +1329,517 @@ function LoyaltyAdminTab({ isDark }: { isDark: boolean }) {
           })}
         </div>
       )}
+
+      {/* Pagination Footer */}
+      {totalPages > 1 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3">
+          <span className={cn('text-xs font-medium', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+            Hiển thị {(currentPage - 1) * PAGE_SIZE + 1} – {Math.min(currentPage * PAGE_SIZE, processedUsers.length)} trong tổng số{' '}
+            <strong className={isDark ? 'text-[#f0ede8]' : 'text-slate-800'}>{processedUsers.length}</strong> thành viên
+          </span>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className={cn(
+                'px-3 py-1.5 rounded-xl text-xs font-bold border cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed',
+                isDark ? 'bg-white/5 border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-700'
+              )}
+            >
+              Trước
+            </button>
+
+            <span className="text-xs font-semibold px-2">
+              Trang {currentPage} / {totalPages}
+            </span>
+
+            <button
+              type="button"
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className={cn(
+                'px-3 py-1.5 rounded-xl text-xs font-bold border cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed',
+                isDark ? 'bg-white/5 border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-700'
+              )}
+            >
+              Sau
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── CENTERED MODAL: CẤU HÌNH QUY TẮC TÍCH ĐIỂM TỰ ĐỘNG (CHÍNH GIỮA MÀN HÌNH) ── */}
+      {isRulesModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 md:p-6 animate-in fade-in duration-200">
+          <div onClick={() => setIsRulesModalOpen(false)} className="fixed inset-0 bg-black/70 backdrop-blur-xs transition-opacity" />
+
+          <div
+            className={cn(
+              'relative z-10 w-full max-w-2xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col border overflow-hidden animate-in zoom-in-95 fade-in duration-200',
+              isDark ? 'bg-[#111118] border-white/15 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+            )}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-white/10 shrink-0">
+              <div className="flex items-center gap-3">
+                <span className={cn('p-2.5 rounded-2xl text-amber-500', isDark ? 'bg-amber-500/10' : 'bg-amber-50')}>
+                  <SlidersHorizontal className="w-5 h-5 stroke-[2.5]" />
+                </span>
+                <div>
+                  <h3 className={cn('font-display font-black text-lg', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                    Cấu Hình Quy Tắc Tích Điểm Tự Động
+                  </h3>
+                  <p className={cn('text-xs mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                    Hệ thống tự động áp dụng các quy tắc này khi khách hàng đặt vé hoặc hủy vé
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsRulesModalOpen(false)}
+                className={cn('p-2 rounded-xl text-[#a09e9a] hover:text-[#f0ede8] transition-colors cursor-pointer', isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100')}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form id="rules-config-form" onSubmit={handleSaveRules} className="p-5 sm:p-6 overflow-y-auto space-y-6">
+              {/* Section 1: Tỷ lệ tích điểm tự động theo đơn hàng */}
+              <div className="space-y-3">
+                <h4 className={cn('text-xs font-bold uppercase tracking-wider pb-1 border-b border-white/5 flex items-center gap-2', isDark ? 'text-amber-400' : 'text-amber-700')}>
+                  <span>1. Tỷ Lệ Tích Điểm Tự Động Khi Đặt Vé</span>
+                </h4>
+
+                <div>
+                  <label className={cn('text-xs font-bold block mb-1.5 uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                    Mức Chi Tiêu Quy Đổi 1 Điểm (VNĐ)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="100"
+                      step="100"
+                      required
+                      value={rulesConfig.spendPerPoint}
+                      onChange={(e) => setRulesConfig({ ...rulesConfig, spendPerPoint: Number(e.target.value) })}
+                      className={cn(
+                        'w-full px-4 py-2.5 rounded-xl border text-sm font-mono-data font-bold outline-none transition-all',
+                        isDark ? 'bg-[#09090e] border-white/15 text-[#f0ede8] focus:border-[#e8b84b]' : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500'
+                      )}
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold opacity-60">VNĐ / 1 Điểm</span>
+                  </div>
+                  <p className={cn('text-[11px] mt-1.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                    Ví dụ: Đơn vé 100.000 VNĐ → Tự động tích lũy <strong className="text-amber-500 font-mono-data">{Math.floor(100000 / (rulesConfig.spendPerPoint || 1000))} điểm</strong> ngay khi thanh toán thành công.
+                  </p>
+                </div>
+              </div>
+
+              {/* Section 2: Mốc điểm thăng hạng tự động */}
+              <div className="space-y-3">
+                <h4 className={cn('text-xs font-bold uppercase tracking-wider pb-1 border-b border-white/5 flex items-center gap-2', isDark ? 'text-amber-400' : 'text-amber-700')}>
+                  <span>2. Mốc Điểm Thăng Hạng Tự Động</span>
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className={cn('text-xs font-bold block mb-1 text-slate-400 flex items-center gap-1')}>
+                      <Award className="w-3.5 h-3.5" />
+                      <span>Hạng Bạc (Tối thiểu)</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="100"
+                      step="100"
+                      required
+                      value={rulesConfig.silverMin}
+                      onChange={(e) => setRulesConfig({ ...rulesConfig, silverMin: Number(e.target.value) })}
+                      className={cn(
+                        'w-full px-3 py-2 rounded-xl border text-xs font-mono-data font-bold outline-none',
+                        isDark ? 'bg-[#09090e] border-white/15 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={cn('text-xs font-bold block mb-1 text-amber-500 flex items-center gap-1')}>
+                      <Medal className="w-3.5 h-3.5" />
+                      <span>Hạng Vàng (Tối thiểu)</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="500"
+                      step="100"
+                      required
+                      value={rulesConfig.goldMin}
+                      onChange={(e) => setRulesConfig({ ...rulesConfig, goldMin: Number(e.target.value) })}
+                      className={cn(
+                        'w-full px-3 py-2 rounded-xl border text-xs font-mono-data font-bold outline-none',
+                        isDark ? 'bg-[#09090e] border-white/15 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={cn('text-xs font-bold block mb-1 text-sky-400 flex items-center gap-1')}>
+                      <Trophy className="w-3.5 h-3.5" />
+                      <span>Kim Cương (Tối thiểu)</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1000"
+                      step="500"
+                      required
+                      value={rulesConfig.diamondMin}
+                      onChange={(e) => setRulesConfig({ ...rulesConfig, diamondMin: Number(e.target.value) })}
+                      className={cn(
+                        'w-full px-3 py-2 rounded-xl border text-xs font-mono-data font-bold outline-none',
+                        isDark ? 'bg-[#09090e] border-white/15 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
+                      )}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Quy tắc tự động hoàn điểm & thưởng đăng ký */}
+              <div className="space-y-3">
+                <h4 className={cn('text-xs font-bold uppercase tracking-wider pb-1 border-b border-white/5 flex items-center gap-2', isDark ? 'text-amber-400' : 'text-amber-700')}>
+                  <span>3. Tự Động Xử Lý Khi Hủy Vé & Chống Gian Lận</span>
+                </h4>
+
+                <div className={cn('p-3.5 rounded-xl border flex items-center justify-between', isDark ? 'bg-white/[0.02] border-white/10' : 'bg-slate-50 border-slate-200')}>
+                  <div>
+                    <span className={cn('text-xs font-bold block', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>
+                      Tự Động Thu Hồi Điểm Khi Vé Bị Hủy / Hoàn Tiền
+                    </span>
+                    <span className={cn('text-[11px]', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                      Tự động khấu trừ lại số điểm đã cộng của đơn vé khi khách yêu cầu hủy vé hoặc hoàn tiền
+                    </span>
+                  </div>
+
+                  <input
+                    type="checkbox"
+                    checked={rulesConfig.autoRevokeOnRefund}
+                    onChange={(e) => setRulesConfig({ ...rulesConfig, autoRevokeOnRefund: e.target.checked })}
+                    className="w-4 h-4 rounded border-white/20 accent-[#e8b84b] cursor-pointer"
+                  />
+                </div>
+              </div>
+            </form>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 border-t border-white/10 shrink-0 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsRulesModalOpen(false)}
+                className={cn(
+                  'px-5 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all',
+                  isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                )}
+              >
+                Đóng
+              </button>
+
+              <button
+                form="rules-config-form"
+                type="submit"
+                className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-[#e8b84b] hover:bg-[#dfad3e] text-[#09090e] transition-all cursor-pointer shadow-md"
+              >
+                <Check className="w-4 h-4 stroke-[2.5]" />
+                <span>Lưu Cấu Hình Quy Tắc</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CENTERED MODAL: TRANSACTION HISTORY (LỊCH SỬ TÍCH ĐIỂM TỰ ĐỘNG) ── */}
+      {historyTargetUser && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 md:p-6 animate-in fade-in duration-200">
+          <div onClick={() => setHistoryTargetUser(null)} className="fixed inset-0 bg-black/70 backdrop-blur-xs transition-opacity" />
+
+          <div
+            className={cn(
+              'relative z-10 w-full max-w-2xl max-h-[85vh] rounded-2xl shadow-2xl flex flex-col border overflow-hidden animate-in zoom-in-95 fade-in duration-200',
+              isDark ? 'bg-[#111118] border-white/15 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+            )}
+          >
+            {/* History Header */}
+            <div className="flex items-center justify-between p-5 border-b border-white/10 shrink-0">
+              <div className="flex items-center gap-3">
+                <span className={cn('p-2.5 rounded-2xl text-amber-500', isDark ? 'bg-amber-500/10' : 'bg-amber-50')}>
+                  <History className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className={cn('font-display font-black text-lg', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                    Lịch Sử Tích Điểm Thành Viên
+                  </h3>
+                  <p className={cn('text-xs mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                    Thành viên: <strong className="text-amber-500">{historyTargetUser.full_name || historyTargetUser.email}</strong> • Hiện có{' '}
+                    <strong className="font-mono-data">{Number(historyTargetUser.loyalty_points || 0).toLocaleString('vi-VN')}</strong> điểm
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setHistoryTargetUser(null)}
+                className={cn('p-2 rounded-xl text-[#a09e9a] hover:text-[#f0ede8] transition-colors cursor-pointer', isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100')}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* History Body */}
+            <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
+              {historyLoading ? (
+                <div className="py-12 text-center text-xs space-y-3">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto text-amber-500" />
+                  <p className="font-semibold">Đang tải lịch sử giao dịch điểm tự động...</p>
+                </div>
+              ) : !historyDetail?.transactions || historyDetail.transactions.length === 0 ? (
+                <div className={cn('py-12 text-center rounded-2xl border text-xs space-y-2', isDark ? 'bg-white/[0.02] border-white/5 text-[#a09e9a]' : 'bg-slate-50 border-slate-200 text-slate-500')}>
+                  <History className="w-8 h-8 mx-auto opacity-30 text-amber-500 mb-1" />
+                  <p className="font-bold">Chưa có lịch sử biến động điểm nào</p>
+                  <p className="text-[11px] opacity-75">Mỗi lần khách hàng đặt vé hoặc hủy vé thành công, hệ thống sẽ tự động ghi nhận vào đây.</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {historyDetail.transactions.map((tx) => {
+                    const isPositive = tx.points > 0
+                    const createdDate = tx.created_at ? new Date(tx.created_at).toLocaleString('vi-VN') : 'Mới đây'
+
+                    return (
+                      <div
+                        key={tx.id}
+                        className={cn(
+                          'p-3.5 rounded-xl border flex items-center justify-between gap-3 transition-colors',
+                          isDark ? 'bg-white/[0.02] border-white/5 hover:border-white/10' : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                        )}
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={cn(
+                                'px-2 py-0.5 rounded-md text-[11px] font-bold border',
+                                isPositive
+                                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                                  : 'bg-rose-500/15 border-rose-500/30 text-rose-400'
+                              )}
+                            >
+                              <span className="font-mono-data">{isPositive ? `+${tx.points.toLocaleString('vi-VN')}` : `${tx.points.toLocaleString('vi-VN')}`}</span> <span>điểm</span>
+                            </span>
+
+                            {tx.reservation_id && (
+                              <span className={cn('text-[10px] font-mono-data px-1.5 py-0.5 rounded border', isDark ? 'bg-white/5 border-white/10 text-amber-400' : 'bg-white border-slate-200 text-amber-700')}>
+                                Đơn vé #{tx.reservation_id}
+                              </span>
+                            )}
+                          </div>
+
+                          <p className={cn('text-xs font-semibold', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>
+                            {tx.reason === 'booking' ? 'Tự động tích điểm khi đặt vé xem phim' : (tx.reason || (isPositive ? 'Tích lũy điểm thưởng' : 'Khấu trừ điểm'))}
+                          </p>
+                        </div>
+
+                        <div className={cn('text-[11px] font-mono-data text-right shrink-0', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                          {createdDate}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* History Footer */}
+            <div className="p-4 border-t border-white/10 shrink-0 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setHistoryTargetUser(null)}
+                className={cn(
+                  'px-5 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all',
+                  isDark ? 'bg-white/10 hover:bg-white/15 text-[#f0ede8]' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                )}
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CENTERED MODAL: ĐIỀU CHỈNH NGOẠI LỆ (KHI CẦN CAN THIỆP SỰ CỐ) ── */}
+      {adjustTargetUser && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 md:p-6 animate-in fade-in duration-200">
+          <div onClick={() => setAdjustTargetUser(null)} className="fixed inset-0 bg-black/70 backdrop-blur-xs transition-opacity" />
+
+          <div
+            className={cn(
+              'relative z-10 w-full max-w-xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col border overflow-hidden animate-in zoom-in-95 fade-in duration-200',
+              isDark ? 'bg-[#111118] border-white/15 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+            )}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-white/10 shrink-0">
+              <div className="flex items-center gap-3">
+                <span className={cn('p-2.5 rounded-2xl text-amber-500', isDark ? 'bg-amber-500/10' : 'bg-amber-50')}>
+                  <Coins className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className={cn('font-display font-black text-lg', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                    Can Thiệp Bù Điểm (Ngoại Lệ)
+                  </h3>
+                  <p className={cn('text-xs mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                    Khách hàng: <strong className="text-amber-500">{adjustTargetUser.full_name || adjustTargetUser.email}</strong>
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setAdjustTargetUser(null)}
+                className={cn('p-2 rounded-xl text-[#a09e9a] hover:text-[#f0ede8] transition-colors cursor-pointer', isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100')}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form id="adjust-points-form" onSubmit={handleSaveAdjustment} className="p-5 sm:p-6 overflow-y-auto space-y-5">
+              <div className={cn('p-3 rounded-xl border text-xs leading-relaxed flex items-start gap-2.5', isDark ? 'bg-amber-500/10 border-amber-500/20 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-900')}>
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+                <div>
+                  <strong>Lưu ý:</strong> Hệ thống đã tự động cộng/trừ điểm theo đơn vé. Chức năng này chỉ sử dụng trong các trường hợp ngoại lệ (đền bù sự cố phòng chiếu, chăm sóc đặc biệt).
+                </div>
+              </div>
+
+              {/* Action Mode Toggle */}
+              <div>
+                <label className={cn('text-xs font-bold block mb-2 uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                  Loại Thao Tác
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAdjustMode('add')}
+                    className={cn(
+                      'p-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all',
+                      adjustMode === 'add'
+                        ? 'bg-emerald-500/15 border-emerald-500 text-emerald-400 shadow-sm'
+                        : isDark
+                        ? 'bg-white/5 border-white/10 text-[#a09e9a]'
+                        : 'bg-slate-100 border-slate-200 text-slate-600'
+                    )}
+                  >
+                    <Plus className="w-4 h-4 stroke-[2.5]" />
+                    <span>Bù Thêm Điểm (+)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAdjustMode('deduct')}
+                    className={cn(
+                      'p-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all',
+                      adjustMode === 'deduct'
+                        ? 'bg-rose-500/15 border-rose-500 text-rose-400 shadow-sm'
+                        : isDark
+                        ? 'bg-white/5 border-white/10 text-[#a09e9a]'
+                        : 'bg-slate-100 border-slate-200 text-slate-600'
+                    )}
+                  >
+                    <Minus className="w-4 h-4 stroke-[2.5]" />
+                    <span>Thu Hồi Điểm (-)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Points Amount Input */}
+              <div>
+                <label className={cn('text-xs font-bold block mb-1.5 uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                  Số Điểm Cần {adjustMode === 'add' ? 'Bù Thêm' : 'Thu Hồi'} <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="10"
+                  required
+                  value={adjustAmount}
+                  onChange={(e) => setAdjustAmount(e.target.value)}
+                  placeholder="Ví dụ: 100"
+                  className={cn(
+                    'w-full px-4 py-2.5 rounded-xl border text-sm font-mono-data font-bold outline-none transition-all',
+                    isDark
+                      ? 'bg-[#09090e] border-white/15 text-[#f0ede8] focus:border-[#e8b84b]'
+                      : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500'
+                  )}
+                />
+              </div>
+
+              {/* Reason */}
+              <div>
+                <label className={cn('text-xs font-bold block mb-1.5 uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                  Lý Do Cụ Thể <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                  placeholder="Ví dụ: Đền bù khách hàng do lỗi máy chiếu..."
+                  className={cn(
+                    'w-full px-3.5 py-2.5 rounded-xl border text-xs outline-none transition-all',
+                    isDark
+                      ? 'bg-[#09090e] border-white/15 text-[#f0ede8] focus:border-[#e8b84b]'
+                      : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500'
+                  )}
+                />
+              </div>
+            </form>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 border-t border-white/10 shrink-0 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setAdjustTargetUser(null)}
+                className={cn(
+                  'px-5 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all',
+                  isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                )}
+              >
+                Hủy Bỏ
+              </button>
+
+              <button
+                form="adjust-points-form"
+                type="submit"
+                disabled={adjustSubmitting}
+                className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-[#e8b84b] hover:bg-[#dfad3e] text-[#09090e] transition-all cursor-pointer shadow-md disabled:opacity-50"
+              >
+                {adjustSubmitting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Đang lưu...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4 stroke-[2.5]" />
+                    <span>Xác Nhận</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+
 interface SeatGridItem {
   id?: number
   row_label: string
@@ -648,18 +1869,38 @@ function UnifiedRoomLayoutModal({
 }: UnifiedRoomLayoutModalProps) {
   const allRooms = useMemo(() => (Array.isArray(rooms) ? rooms : []), [rooms])
 
-  // Filter tab for room types (Standard, VIP, IMAX, 3D, 4DX, Kids)
+  // Resolve starting room so the canvas is NEVER empty on open
+  const defaultRoom = useMemo(() => {
+    if (initialRoomIds && initialRoomIds.length > 0) {
+      return allRooms.find((r) => r.id === initialRoomIds[0]) || allRooms[0]
+    }
+    if (initialRoomType && initialRoomType !== 'all') {
+      const typeRoom = allRooms.find((r) => (r.room_type || 'standard') === initialRoomType)
+      if (typeRoom) return typeRoom
+    }
+    return allRooms[0]
+  }, [allRooms, initialRoomIds, initialRoomType])
+
+  const [activeRoomId, setActiveRoomId] = useState<number>(() => defaultRoom?.id || (allRooms[0]?.id ?? 0))
   const [filterType, setFilterType] = useState<string>(() => {
+    if (defaultRoom?.room_type) return defaultRoom.room_type
     if (initialRoomType && initialRoomType !== 'all') return initialRoomType
     return 'standard'
   })
 
-  // Selected room IDs - Empty by default unless specific room IDs passed
+  const displayedRooms = useMemo(
+    () => allRooms.filter((r) => (r.room_type || 'standard') === filterType),
+    [allRooms, filterType]
+  )
+  const activeRoomObj = allRooms.find((r) => r.id === activeRoomId) || defaultRoom
+
+  // Multi-room synchronization mode
+  const [syncBatch, setSyncBatch] = useState<boolean>(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => {
     if (initialRoomIds && initialRoomIds.length > 0) {
       return new Set(initialRoomIds)
     }
-    return new Set()
+    return defaultRoom?.id ? new Set([defaultRoom.id]) : new Set()
   })
 
   const [rows, setRows] = useState<number>(10)
@@ -667,7 +1908,51 @@ function UnifiedRoomLayoutModal({
   const [seats, setSeats] = useState<SeatGridItem[]>([])
   const [selectedTool, setSelectedTool] = useState<'standard' | 'vip' | 'couple' | 'kids' | 'inactive'>('standard')
   const [saving, setSaving] = useState(false)
-  const [deletingRoomId, setDeletingRoomId] = useState<number | null>(null)
+
+  const roomsScrollRef = useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+
+  const checkRoomsScroll = () => {
+    try {
+      if (roomsScrollRef.current) {
+        const { scrollLeft, scrollWidth, clientWidth } = roomsScrollRef.current
+        setCanScrollLeft(scrollLeft > 2)
+        setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 2)
+      }
+    } catch {}
+  }
+
+  useEffect(() => {
+    checkRoomsScroll()
+    const timer = setTimeout(checkRoomsScroll, 100)
+    return () => clearTimeout(timer)
+  }, [filterType, allRooms, displayedRooms])
+
+  useEffect(() => {
+    window.addEventListener('resize', checkRoomsScroll)
+    return () => window.removeEventListener('resize', checkRoomsScroll)
+  }, [])
+
+  useEffect(() => {
+    try {
+      if (activeRoomId && roomsScrollRef.current) {
+        const activeBtn = roomsScrollRef.current.querySelector(`[data-room-id="${activeRoomId}"]`) as HTMLElement
+        if (activeBtn && typeof activeBtn.scrollIntoView === 'function') {
+          activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+        }
+      }
+    } catch {}
+  }, [activeRoomId])
+
+  const handleScrollRooms = (direction: 'left' | 'right') => {
+    if (!roomsScrollRef.current) return
+    const scrollAmount = 240
+    roomsScrollRef.current.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    })
+  }
 
   // Initialize or generate seat matrix based on rows, cols and room type
   const generateSeatMatrix = (rCount: number, cCount: number, baseType: string = 'standard') => {
@@ -751,12 +2036,34 @@ function UnifiedRoomLayoutModal({
     }
   }
 
-  // Initial load if initialRoomIds are provided
+  // Load layout on initial mount or when activeRoomId changes
   useEffect(() => {
-    if (initialRoomIds && initialRoomIds.length > 0) {
-      loadRoomLayout(initialRoomIds[0])
+    if (activeRoomId) {
+      loadRoomLayout(activeRoomId)
+    } else if (allRooms.length > 0) {
+      setActiveRoomId(allRooms[0].id)
+      loadRoomLayout(allRooms[0].id)
     }
-  }, [])
+  }, [activeRoomId])
+
+  // Select active room
+  const handleSelectActiveRoom = (r: RoomItem) => {
+    setActiveRoomId(r.id)
+    if (!syncBatch) {
+      setSelectedIds(new Set([r.id]))
+    }
+  }
+
+  // Toggle sync batch mode
+  const handleToggleSyncBatch = (enable: boolean) => {
+    setSyncBatch(enable)
+    if (enable) {
+      const targetIds = allRooms.filter((r) => (r.room_type || 'standard') === filterType).map((r) => r.id)
+      setSelectedIds(new Set(targetIds))
+    } else {
+      setSelectedIds(new Set([activeRoomId]))
+    }
+  }
 
   // When rows or cols are modified, resize seat matrix preserving custom assignments
   const handleDimensionChange = (newRows: number, newCols: number) => {
@@ -788,7 +2095,7 @@ function UnifiedRoomLayoutModal({
     setSeats(newSeats)
   }
 
-  // Toggle seat on click
+  // Toggle single seat on click
   const handleSeatClick = (rowLabel: string, colNum: number) => {
     setSeats((prev) =>
       prev.map((s) => {
@@ -807,37 +2114,65 @@ function UnifiedRoomLayoutModal({
     )
   }
 
-  // Toggle room selection
-  const handleToggleRoom = (id: number) => {
-    const next = new Set(selectedIds)
-    if (next.has(id)) {
-      next.delete(id)
-      if (next.size > 0) {
-        const remaining = Array.from(next)
-        loadRoomLayout(remaining[remaining.length - 1])
-      }
-    } else {
-      next.add(id)
-      loadRoomLayout(id)
-    }
-    setSelectedIds(next)
+  // Quick Row Click: Apply current tool to entire row
+  const handleRowLabelClick = (rowLabel: string) => {
+    setSeats((prev) =>
+      prev.map((s) => {
+        if (s.row_label === rowLabel) {
+          if (selectedTool === 'inactive') {
+            return { ...s, is_active: false }
+          }
+          return {
+            ...s,
+            seat_type: selectedTool as any,
+            is_active: true,
+          }
+        }
+        return s
+      })
+    )
+    notify('success', `Đã áp dụng công cụ "${selectedTool.toUpperCase()}" cho toàn bộ hàng ${rowLabel}`)
   }
 
-  const selectAllRoomsOfFiltered = () => {
-    const target = allRooms.filter((r) => (r.room_type || 'standard') === filterType).map((r) => r.id)
-    setSelectedIds(new Set([...Array.from(selectedIds), ...target]))
-    if (target.length > 0) {
-      loadRoomLayout(target[0])
-    }
+  // Smart Layout Generator Presets
+  const applySmartVipRows = () => {
+    const midStart = Math.floor(rows * 0.3)
+    const midEnd = Math.floor(rows * 0.7)
+    setSeats((prev) =>
+      prev.map((s, idx) => {
+        const rIdx = Math.floor(idx / cols)
+        if (rIdx >= midStart && rIdx <= midEnd && s.is_active) {
+          return { ...s, seat_type: 'vip' }
+        }
+        return s
+      })
+    )
+    notify('success', 'Đã gán các hàng trung tâm (Sweet Spot) thành Ghế VIP!')
   }
 
-  const deselectAllRoomsOfFiltered = () => {
-    const target = new Set(allRooms.filter((r) => (r.room_type || 'standard') === filterType).map((r) => r.id))
-    const next = new Set(Array.from(selectedIds).filter((id) => !target.has(id)))
-    setSelectedIds(next)
-    if (next.size > 0) {
-      loadRoomLayout(Array.from(next)[0])
-    }
+  const applyCoupleBackRow = () => {
+    const lastRowIdx = rows - 1
+    setSeats((prev) =>
+      prev.map((s, idx) => {
+        const rIdx = Math.floor(idx / cols)
+        if (rIdx === lastRowIdx && s.is_active) {
+          return { ...s, seat_type: 'couple' }
+        }
+        return s
+      })
+    )
+    notify('success', 'Đã gán hàng ghế cuối cùng thành Ghế Đôi (Sweetbox Couple)!')
+  }
+
+  const resetAllToStandard = () => {
+    setSeats((prev) =>
+      prev.map((s) => ({
+        ...s,
+        seat_type: 'standard',
+        is_active: true,
+      }))
+    )
+    notify('success', 'Đã đặt lại toàn bộ sơ đồ thành Ghế Thường khả dụng!')
   }
 
   // Stats calculation
@@ -881,7 +2216,7 @@ function UnifiedRoomLayoutModal({
   // Save handler
   const handleSave = async () => {
     if (selectedIds.size === 0) {
-      notify('warning', 'Vui lòng tích chọn ít nhất 1 phòng chiếu để áp dụng.')
+      notify('warning', 'Vui lòng chọn ít nhất 1 phòng chiếu để lưu sơ đồ.')
       return
     }
 
@@ -904,7 +2239,7 @@ function UnifiedRoomLayoutModal({
         }
       )
 
-      notify('success', data.message || `Đã áp dụng sơ đồ ghế thành công cho ${data.updated_count} phòng!`)
+      notify('success', data.message || `Đã lưu thành công sơ đồ ghế cho ${data.updated_count} phòng!`)
       onSuccess()
       onClose()
     } catch (err: any) {
@@ -915,465 +2250,565 @@ function UnifiedRoomLayoutModal({
     }
   }
 
-  const handleDeleteRoomInModal = async (roomId: number, roomName: string) => {
-    if (!confirm(`Bạn có chắc chắn muốn xóa phòng "${roomName}"?\nLưu ý: Cần hủy tất cả các suất chiếu của phòng này trước khi xóa.`)) return
-    setDeletingRoomId(roomId)
-    try {
-      const res = await apiClient.delete(`/api/v1/rooms/${roomId}`)
-      const msg = res.data?.message ?? `Đã xóa phòng "${roomName}" thành công!`
-      notify('success', msg)
-      setSelectedIds((prev) => {
-        const next = new Set(prev)
-        next.delete(roomId)
-        return next
-      })
-      await onSuccess()
-    } catch (err: any) {
-      const msg = err.response?.data?.detail ?? 'Xóa phòng thất bại.'
-      notify('error', typeof msg === 'string' ? msg : JSON.stringify(msg))
-    } finally {
-      setDeletingRoomId(null)
-    }
-  }
 
-  const displayedRooms = allRooms.filter((r) => (r.room_type || 'standard') === filterType)
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 pt-16 sm:pt-8 pb-6 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className={`w-full max-w-5xl max-h-[88vh] flex flex-col rounded-3xl border shadow-2xl overflow-hidden ${
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 pt-16 sm:pt-6 pb-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className={cn(
+        'w-full max-w-5xl max-h-[92vh] flex flex-col rounded-2xl border shadow-2xl overflow-hidden transition-colors',
         isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
-      }`}>
-        {/* Header */}
-        <div className={`p-4 sm:p-5 border-b flex items-center justify-between gap-4 shrink-0 ${
+      )}>
+        {/* Modal Header Bar */}
+        <div className={cn(
+          'px-5 py-4 border-b flex items-center justify-between gap-4 shrink-0 transition-colors',
           isDark ? 'border-white/10 bg-[#0d0d14]' : 'border-slate-200 bg-slate-50'
-        }`}>
-          <div>
-            <div className="flex items-center gap-2.5">
-              <span className="text-xl">📐</span>
-              <h3 className={`font-display text-lg sm:text-xl font-black ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                Cấu Hình Hàng, Cột & Sơ Đồ Ghế Phòng Chiếu
-              </h3>
-              <span className={`text-xs font-mono-data px-2.5 py-0.5 rounded-full font-bold border ${
-                selectedIds.size > 0
-                  ? isDark
-                    ? 'bg-[#e8b84b]/15 text-[#e8b84b] border-[#e8b84b]/30'
-                    : 'bg-amber-100 text-amber-950 border-amber-300 font-extrabold'
-                  : 'bg-slate-500/15 text-slate-400 border-slate-500/20'
-              }`}>
-                Đã chọn {selectedIds.size} / {allRooms.length} phòng
-              </span>
+        )}>
+          <div className="flex items-center gap-3">
+            <span className={cn(
+              'p-2.5 rounded-xl shrink-0',
+              isDark ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-amber-50 text-amber-700 border border-amber-200'
+            )}>
+              <SlidersHorizontal className="w-5 h-5 stroke-[2.2]" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h3 className={cn('font-display text-lg sm:text-xl font-bold', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                  Cấu Hình & Thiết Kế Sơ Đồ Ghế
+                </h3>
+                {activeRoomObj && (
+                  <span className={cn(
+                    'text-xs font-mono-data px-2.5 py-0.5 rounded-full font-bold border inline-flex items-center gap-1',
+                    isDark ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' : 'bg-amber-100 text-amber-900 border-amber-300'
+                  )}>
+                    <span>{activeRoomObj.name} ({activeRoomObj.room_type?.toUpperCase()})</span>
+                  </span>
+                )}
+              </div>
+              <p className={cn('text-xs mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                Điều chỉnh số hàng/cột, gán phân loại ghế (VIP, Đôi, Trẻ em, Thường) và đồng bộ sơ đồ phòng rạp.
+              </p>
             </div>
-            <p className={`text-xs mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-              Tích chọn phòng để xem sơ đồ hiện tại, điều chỉnh số hàng/cột và click vào ghế để đổi loại ghế.
-            </p>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer transition-colors ${
-              isDark ? 'bg-white/10 text-[#f0ede8] hover:bg-white/20' : 'bg-slate-200 text-slate-800 hover:bg-slate-300'
-            }`}
+            className={cn(
+              'p-2 rounded-xl border transition-all cursor-pointer',
+              isDark
+                ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-white hover:bg-white/10'
+                : 'bg-slate-100 border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-200'
+            )}
+            aria-label="Đóng cửa sổ"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Scrollable Content Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
-          {/* SECTION 1: ROOMS SELECTION BAR */}
-          <div className={`p-4 rounded-2xl border space-y-3 ${
-            isDark ? 'bg-[#181824] border-white/10' : 'bg-slate-50 border-slate-200 shadow-xs'
-          }`}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-[#e8b84b]">
-                  1. Chọn phòng chiếu:
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={selectAllRoomsOfFiltered}
-                  className="text-amber-500 hover:underline font-bold cursor-pointer"
-                >
-                  ✓ Chọn tất cả ({displayedRooms.length})
-                </button>
-                <span className="text-slate-400">·</span>
-                <button
-                  type="button"
-                  onClick={deselectAllRoomsOfFiltered}
-                  className="text-slate-400 hover:underline cursor-pointer"
-                >
-                  Bỏ chọn
-                </button>
-              </div>
-            </div>
-
-            {/* Room Type Tabs Filter (Standard, VIP, IMAX, 3D, 4DX, Kids) */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+        {/* Auditorium Selection Bar */}
+        <div className={cn(
+          'px-5 py-3 border-b space-y-2.5 shrink-0 transition-colors',
+          isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-50/80 border-slate-200'
+        )}>
+          {/* Room Type Selector Tabs */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none text-xs">
+              <span className={cn('text-[11px] font-semibold uppercase tracking-wider mr-1', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                Loại phòng:
+              </span>
               {[
                 { key: 'standard', label: 'Standard' },
                 { key: 'vip', label: 'VIP Lounge' },
                 { key: 'imax', label: 'IMAX 3D Laser' },
                 { key: '3d', label: '3D Surround' },
                 { key: '4d', label: '4DX Motion' },
-                { key: 'kids', label: 'Kids' },
+                { key: 'kids', label: 'Kids Studio' },
               ].map((t) => (
                 <button
                   key={t.key}
                   type="button"
-                  onClick={() => setFilterType(t.key)}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer border ${
+                  onClick={() => {
+                    setFilterType(t.key)
+                    const firstOfCategory = allRooms.find((r) => (r.room_type || 'standard') === t.key)
+                    if (firstOfCategory) {
+                      setActiveRoomId(firstOfCategory.id)
+                      if (!syncBatch) {
+                        setSelectedIds(new Set([firstOfCategory.id]))
+                      }
+                    }
+                  }}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer border',
                     filterType === t.key
                       ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] font-bold shadow-xs'
                       : isDark
                       ? 'bg-white/5 text-[#a09e9a] border-white/10 hover:border-white/20'
                       : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                  }`}
+                  )}
                 >
                   {t.label}
                 </button>
               ))}
             </div>
 
-            {/* Room Checkbox Badges with Integrated Delete button */}
-            <div className="flex flex-wrap gap-2 pt-1">
+            {/* Sync Batch Toggle */}
+            <label className="flex items-center gap-2 text-xs cursor-pointer select-none font-semibold">
+              <input
+                type="checkbox"
+                checked={syncBatch}
+                onChange={(e) => handleToggleSyncBatch(e.target.checked)}
+                className="w-4 h-4 accent-[#e8b84b] rounded cursor-pointer"
+              />
+              <span className={isDark ? 'text-[#e8b84b]' : 'text-amber-900'}>
+                Đồng bộ sơ đồ này cho tất cả phòng {filterType.toUpperCase()} ({displayedRooms.length} phòng)
+              </span>
+            </label>
+          </div>
+
+          {/* Room Pills Switcher with Slider Bar and Navigation Buttons */}
+          <div className="pt-0.5 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className={cn('text-[11px] font-bold uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                  Phòng đang chọn ({displayedRooms.length} phòng):
+                </span>
+                {displayedRooms.length > 4 && (
+                  <span className={cn('text-[10px] hidden sm:inline-block', isDark ? 'text-white/40' : 'text-slate-400')}>
+                    (Kéo thanh trượt hoặc lăn chuột để chọn phòng)
+                  </span>
+                )}
+              </div>
+
+              {/* Slider Left/Right Quick Navigation Buttons */}
+              {displayedRooms.length > 3 && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleScrollRooms('left')}
+                    disabled={!canScrollLeft}
+                    title="Trượt sang trái"
+                    className={cn(
+                      'w-6 h-6 rounded-lg border flex items-center justify-center transition-all cursor-pointer disabled:opacity-25 disabled:cursor-not-allowed',
+                      isDark
+                        ? 'bg-white/5 border-white/10 hover:bg-white/15 text-[#f0ede8]'
+                        : 'bg-white border-slate-300 hover:bg-slate-100 text-slate-700 shadow-xs'
+                    )}
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 stroke-[2.5]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleScrollRooms('right')}
+                    disabled={!canScrollRight}
+                    title="Trượt sang phải"
+                    className={cn(
+                      'w-6 h-6 rounded-lg border flex items-center justify-center transition-all cursor-pointer disabled:opacity-25 disabled:cursor-not-allowed',
+                      isDark
+                        ? 'bg-white/5 border-white/10 hover:bg-white/15 text-[#f0ede8]'
+                        : 'bg-white border-slate-300 hover:bg-slate-100 text-slate-700 shadow-xs'
+                    )}
+                  >
+                    <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Scrollable Slider Track with visible scrollbar */}
+            <div
+              ref={roomsScrollRef}
+              onScroll={checkRoomsScroll}
+              onWheel={(e) => {
+                if (e.deltaY !== 0 && roomsScrollRef.current) {
+                  roomsScrollRef.current.scrollBy({ left: e.deltaY, behavior: 'auto' })
+                }
+              }}
+              className="room-slider-track flex items-center gap-2 overflow-x-auto pb-2.5 pt-0.5 text-xs select-none scroll-smooth"
+              style={{
+                scrollbarWidth: 'thin',
+                scrollbarColor: isDark ? 'rgba(232, 184, 75, 0.5) rgba(255, 255, 255, 0.08)' : 'rgba(232, 184, 75, 0.7) rgba(0, 0, 0, 0.08)',
+              }}
+            >
               {displayedRooms.length === 0 ? (
                 <span className="text-xs text-slate-400 italic">Không có phòng nào thuộc danh mục này.</span>
               ) : (
                 displayedRooms.map((r) => {
-                  const isChecked = selectedIds.has(r.id)
-                  const isDeleting = deletingRoomId === r.id
+                  const isActive = r.id === activeRoomId
+                  const isSelected = selectedIds.has(r.id)
                   return (
-                    <div
+                    <button
                       key={r.id}
-                      onClick={() => handleToggleRoom(r.id)}
-                      className={`flex items-center gap-2 pl-3 pr-2 py-2 rounded-xl text-xs font-mono-data cursor-pointer transition-all border select-none ${
-                        isChecked
+                      data-room-id={r.id}
+                      type="button"
+                      onClick={() => handleSelectActiveRoom(r)}
+                      className={cn(
+                        'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border flex items-center gap-1.5 shrink-0 select-none whitespace-nowrap',
+                        isActive
+                          ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] font-bold shadow-xs ring-1 ring-[#e8b84b]'
+                          : isSelected
                           ? isDark
-                            ? 'bg-[#e8b84b]/15 border-[#e8b84b] text-[#f0ede8] font-bold shadow-xs'
-                            : 'bg-amber-100 border-amber-400 text-amber-950 font-bold shadow-xs'
+                            ? 'bg-amber-500/15 border-amber-500/40 text-[#e8b84b] font-bold'
+                            : 'bg-amber-100 border-amber-400 text-amber-950 font-bold'
                           : isDark
-                          ? 'bg-[#09090e] border-white/10 text-[#a09e9a] hover:border-white/20'
-                          : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                      }`}
+                          ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:border-white/20 hover:text-white'
+                          : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900'
+                      )}
                     >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => {}} // handled by parent div
-                        className="w-4 h-4 accent-amber-500 rounded cursor-pointer pointer-events-none"
-                      />
                       <span>{r.name}</span>
                       <span className="text-[10px] opacity-75 font-normal">
                         ({r.total_rows}×{r.total_cols})
                       </span>
-
-                      {/* Integrated Delete Room Button */}
-                      <button
-                        type="button"
-                        disabled={isDeleting}
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          handleDeleteRoomInModal(r.id, r.name)
-                        }}
-                        title={`Xóa phòng ${r.name}`}
-                        className="p-1 rounded-md text-red-400 hover:text-red-300 hover:bg-red-500/20 transition-colors ml-0.5 cursor-pointer disabled:opacity-50"
-                      >
-                        {isDeleting ? '⏳' : '🗑️'}
-                      </button>
-                    </div>
+                    </button>
                   )
                 })
               )}
             </div>
           </div>
-
-          {/* Conditional Display: Only show layout controls & matrix when at least 1 room is selected */}
-          {selectedIds.size === 0 ? (
-            <div className={`py-16 text-center border-2 border-dashed rounded-3xl p-8 space-y-3 ${
-              isDark ? 'border-white/10 bg-[#09090e]/50 text-[#a09e9a]' : 'border-slate-300 bg-slate-50 text-slate-500'
-            }`}>
-              <span className="text-4xl block">🪑</span>
-              <h4 className={`font-display font-bold text-base ${isDark ? 'text-[#f0ede8]' : 'text-slate-800'}`}>
-                Chưa chọn phòng chiếu nào
-              </h4>
-              <p className="text-xs max-w-md mx-auto">
-                Vui lòng tích chọn ít nhất 1 phòng chiếu ở danh sách phía trên để xem và điều chỉnh sơ đồ bố trí ghế.
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* SECTION 2: GRID ROWS & COLS CONTROLS */}
-              <div className={`p-4 rounded-2xl border grid grid-cols-1 sm:grid-cols-2 gap-4 items-center ${
-                isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-50 border-slate-200'
-              }`}>
-                <div>
-                  <label className={`block text-xs font-bold mb-1.5 ${isDark ? 'text-[#f0ede8]' : 'text-slate-800'}`}>
-                    Số Hàng Ghế (Rows: 4–20)
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleDimensionChange(rows - 1, cols)}
-                      disabled={rows <= 4}
-                      className={`w-9 h-9 rounded-lg border font-bold text-sm cursor-pointer disabled:opacity-40 ${
-                        isDark ? 'bg-white/10 border-white/10 hover:bg-white/20 text-white' : 'bg-white border-slate-300 hover:bg-slate-100'
-                      }`}
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      min={4}
-                      max={20}
-                      value={rows}
-                      onChange={(e) => handleDimensionChange(Number(e.target.value), cols)}
-                      className={`w-16 h-9 text-center rounded-lg border text-sm font-mono-data font-bold outline-none ${
-                        isDark ? 'bg-[#181824] border-white/15 text-[#f0ede8] focus:border-[#e8b84b]' : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500'
-                      }`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleDimensionChange(rows + 1, cols)}
-                      disabled={rows >= 20}
-                      className={`w-9 h-9 rounded-lg border font-bold text-sm cursor-pointer disabled:opacity-40 ${
-                        isDark ? 'bg-white/10 border-white/10 hover:bg-white/20 text-white' : 'bg-white border-slate-300 hover:bg-slate-100'
-                      }`}
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className={`block text-xs font-bold mb-1.5 ${isDark ? 'text-[#f0ede8]' : 'text-slate-800'}`}>
-                    Số Ghế/Hàng (Cols: 4–25)
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleDimensionChange(rows, cols - 1)}
-                      disabled={cols <= 4}
-                      className={`w-9 h-9 rounded-lg border font-bold text-sm cursor-pointer disabled:opacity-40 ${
-                        isDark ? 'bg-white/10 border-white/10 hover:bg-white/20 text-white' : 'bg-white border-slate-300 hover:bg-slate-100'
-                      }`}
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      min={4}
-                      max={25}
-                      value={cols}
-                      onChange={(e) => handleDimensionChange(rows, Number(e.target.value))}
-                      className={`w-16 h-9 text-center rounded-lg border text-sm font-mono-data font-bold outline-none ${
-                        isDark ? 'bg-[#181824] border-white/15 text-[#f0ede8] focus:border-[#e8b84b]' : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500'
-                      }`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleDimensionChange(rows, cols + 1)}
-                      disabled={cols >= 25}
-                      className={`w-9 h-9 rounded-lg border font-bold text-sm cursor-pointer disabled:opacity-40 ${
-                        isDark ? 'bg-white/10 border-white/10 hover:bg-white/20 text-white' : 'bg-white border-slate-300 hover:bg-slate-100'
-                      }`}
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION 3: PAINTBRUSH PALETTE */}
-              <div className={`p-4 rounded-2xl border ${
-                isDark ? 'bg-[#181824] border-[#e8b84b]/30' : 'bg-amber-50/90 border-amber-300 shadow-sm'
-              }`}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                      isDark ? 'text-[#e8b84b]' : 'text-amber-900 font-extrabold'
-                    }`}>
-                      <span>2. Chỉnh sửa loại ghế cho phòng chiếu</span>
-                    </h4>
-                    <p className={`text-[11px] mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-                      Click vào bất kỳ ghế nào trên sơ đồ bên dưới để gán loại ghế đó.
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {[
-                      {
-                        type: 'standard',
-                        label: 'Ghế thường',
-                        activeClass: isDark ? 'bg-[#181824] border-white text-white' : 'bg-slate-800 text-white border-slate-900',
-                      },
-                      {
-                        type: 'vip',
-                        label: 'Ghế VIP (👑)',
-                        activeClass: isDark ? 'bg-[#e8b84b]/20 border-[#e8b84b] text-[#e8b84b]' : 'bg-amber-100 border-amber-500 text-amber-900 font-bold',
-                      },
-                      {
-                        type: 'couple',
-                        label: 'Ghế đôi (💑)',
-                        activeClass: isDark ? 'bg-pink-500/20 border-pink-500 text-pink-400' : 'bg-pink-100 border-pink-500 text-pink-900 font-bold',
-                      },
-                      {
-                        type: 'kids',
-                        label: 'Ghế trẻ em (🎈)',
-                        activeClass: isDark ? 'bg-teal-500/20 border-teal-500 text-teal-300' : 'bg-teal-100 border-teal-500 text-teal-900 font-bold',
-                      },
-                      {
-                        type: 'inactive',
-                        label: 'Không sử dụng',
-                        icon: '🚫',
-                        activeClass: isDark ? 'bg-slate-700/50 border-slate-500 text-slate-300' : 'bg-slate-200 border-slate-400 text-slate-700',
-                      },
-                    ].map((tool) => (
-                      <button
-                        key={tool.type}
-                        type="button"
-                        onClick={() => setSelectedTool(tool.type as any)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
-                          selectedTool === tool.type
-                            ? `${tool.activeClass} shadow-md ring-2 ${isDark ? 'ring-[#e8b84b]/40' : 'ring-amber-400'}`
-                            : isDark
-                            ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:border-white/20'
-                            : 'bg-white border-slate-300 text-slate-700 hover:border-slate-400'
-                        }`}
-                      >
-                        {tool.icon && <span>{tool.icon}</span>}
-                        <span>{tool.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION 4: CAPACITY STATS BREAKDOWN */}
-              <div className={`p-4 rounded-2xl border flex flex-wrap items-center justify-between gap-4 text-xs ${
-                isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-50 border-slate-200'
-              }`}>
-                <div className="flex flex-wrap items-center gap-4">
-                  <span className="font-bold flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-slate-400"></span> Thường: <strong>{stats.standard}</strong>
-                  </span>
-                  <span className="font-bold flex items-center gap-1.5 text-amber-500">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span> VIP: <strong>{stats.vip}</strong>
-                  </span>
-                  <span className="font-bold flex items-center gap-1.5 text-pink-500">
-                    <span className="w-2.5 h-2.5 rounded-full bg-pink-400"></span> Ghế đôi: <strong>{stats.couple}</strong>
-                  </span>
-                  <span className="font-bold flex items-center gap-1.5 text-teal-500">
-                    <span className="w-2.5 h-2.5 rounded-full bg-teal-400"></span> Trẻ em: <strong>{stats.kids}</strong>
-                  </span>
-                  {stats.inactive > 0 && (
-                    <span className="font-bold flex items-center gap-1.5 text-slate-400">
-                      <span className="w-2.5 h-2.5 rounded-full bg-slate-500"></span> Tắt: <strong>{stats.inactive}</strong>
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span className="text-[11px] font-mono-data">
-                    Sức chứa 1 phòng: <strong className={isDark ? 'text-[#e8b84b]' : 'text-amber-800'}>{stats.activeTotal} ghế</strong>
-                  </span>
-                  <span className="text-slate-400">|</span>
-                  <span className="text-[11px] font-mono-data">
-                    Tổng cộng ({stats.totalSelected} phòng): <strong className={isDark ? 'text-[#e8b84b]' : 'text-amber-800'}>{stats.grandTotal} ghế</strong>
-                  </span>
-                </div>
-              </div>
-
-              {/* SECTION 5: INTERACTIVE SCREEN & SEAT MATRIX */}
-              <div className={`p-5 sm:p-8 rounded-2xl border flex flex-col items-center overflow-x-auto ${
-                isDark ? 'bg-[#09090e] border-white/10' : 'bg-slate-100/60 border-slate-200'
-              }`}>
-                {/* Screen Header Banner */}
-                <div className="w-full max-w-lg mb-8 text-center flex flex-col items-center">
-                  <div className="w-full h-2.5 bg-gradient-to-r from-transparent via-[#e8b84b] to-transparent rounded-full shadow-[0_0_16px_rgba(232,184,75,0.6)]"></div>
-                  <span className="text-[10px] uppercase font-mono-data tracking-widest text-[#a09e9a] mt-2">
-                    MÀN HÌNH CHIẾU (SCREEN)
-                  </span>
-                </div>
-
-                {/* Seat Matrix Grid */}
-                <div className="space-y-2.5 min-w-fit">
-                  {rowsMap.map(([rowLabel, rowSeats]) => (
-                    <div key={rowLabel} className="flex items-center gap-2">
-                      <span className={`w-5 text-center font-bold ${isDark ? 'text-[#e8b84b]' : 'text-slate-800 font-black'}`}>{rowLabel}</span>
-
-                      <div className="flex items-center gap-1.5">
-                        {rowSeats.map((s) => {
-                          const type = s.seat_type
-                          const isInactive = !s.is_active
-                          const isCouple = type === 'couple'
-                          const isVip = type === 'vip'
-                          const isKids = type === 'kids'
-
-                          return (
-                            <div
-                              key={`${rowLabel}-${s.col_number}`}
-                              onClick={() => handleSeatClick(rowLabel, s.col_number)}
-                              className={`h-8 rounded-lg border flex items-center justify-center text-[10px] font-bold shadow-xs transition-transform cursor-pointer hover:scale-115 hover:ring-2 ${
-                                isDark ? 'hover:ring-white' : 'hover:ring-slate-900'
-                              } ${
-                                isInactive
-                                  ? isDark
-                                    ? 'w-8 bg-slate-800/40 border-dashed border-slate-600/60 text-slate-500 opacity-50'
-                                    : 'w-8 bg-slate-200/60 border-dashed border-slate-400 text-slate-400 opacity-60'
-                                  : isCouple
-                                  ? isDark
-                                    ? 'w-[70px] bg-pink-500/15 border-pink-500/40 text-pink-400'
-                                    : 'w-[70px] bg-pink-100 border-pink-400 text-pink-950 font-black shadow-xs'
-                                  : isKids
-                                  ? isDark
-                                    ? 'w-8 bg-teal-500/15 border-teal-500/40 text-teal-300'
-                                    : 'w-8 bg-teal-100 border-teal-400 text-teal-950 font-black shadow-xs'
-                                  : isVip
-                                  ? isDark
-                                    ? 'w-8 bg-[#e8b84b]/15 border-[#e8b84b]/40 text-[#e8b84b]'
-                                    : 'w-8 bg-amber-100 border-amber-400 text-amber-950 font-black shadow-xs'
-                                  : isDark
-                                  ? 'w-8 bg-[#181824] border-white/15 text-[#f0ede8]'
-                                  : 'w-8 bg-slate-100 border-slate-300 text-slate-800 font-bold'
-                              }`}
-                              title={`Ghế ${rowLabel}${s.col_number} (${
-                                isInactive ? 'Không sử dụng' : isCouple ? 'Ghế đôi' : isKids ? 'Ghế trẻ em' : isVip ? 'Ghế VIP' : 'Ghế thường'
-                              }) - Click để đổi loại ghế`}
-                            >
-                              {isInactive ? `🚫 ${s.col_number}` : isCouple ? `💑 ${s.col_number}` : isKids ? `🎈 ${s.col_number}` : s.col_number}
-                            </div>
-                          )
-                        })}
-                      </div>
-
-                      <span className={`w-5 text-center font-bold ${isDark ? 'text-[#e8b84b]' : 'text-slate-800 font-black'}`}>{rowLabel}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
         </div>
 
-        {/* Modal Footer */}
-        <div className={`p-4 sm:p-5 border-t flex items-center justify-between gap-4 shrink-0 ${
-          isDark ? 'border-white/10 bg-[#0d0d14]' : 'border-slate-200 bg-slate-50'
-        }`}>
-          <div className="text-xs">
-            {selectedIds.size === 0 ? (
-              <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-500'}>
-                ⚠️ Chưa chọn phòng nào. Vui lòng tích chọn phòng ở danh sách phía trên.
+        {/* Scrollable Content Body */}
+        <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
+          {/* SECTION 1: GRID ROWS & COLS CONTROLS + SMART PRESETS */}
+          <div className={cn(
+            'p-3.5 rounded-xl border grid grid-cols-1 md:grid-cols-12 gap-3 items-center transition-colors',
+            isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-50 border-slate-200 shadow-xs'
+          )}>
+            <div className="md:col-span-5 flex flex-wrap gap-4 items-center">
+              <div>
+                <label className={cn('block text-xs font-semibold mb-1', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>
+                  Số Hàng Ghế (4–20)
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleDimensionChange(rows - 1, cols)}
+                    disabled={rows <= 4}
+                    className={cn(
+                      'w-8 h-8 rounded-lg border font-bold text-sm cursor-pointer disabled:opacity-40 transition-colors',
+                      isDark ? 'bg-white/10 border-white/10 hover:bg-white/20 text-white' : 'bg-white border-slate-300 hover:bg-slate-100 text-slate-800'
+                    )}
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min={4}
+                    max={20}
+                    value={rows}
+                    onChange={(e) => handleDimensionChange(Number(e.target.value), cols)}
+                    className={cn(
+                      'w-14 h-8 text-center rounded-lg border text-xs font-mono-data font-bold outline-none',
+                      isDark ? 'bg-[#111118] border-white/15 text-[#f0ede8] focus:border-[#e8b84b]' : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-xs'
+                    )}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleDimensionChange(rows + 1, cols)}
+                    disabled={rows >= 20}
+                    className={cn(
+                      'w-8 h-8 rounded-lg border font-bold text-sm cursor-pointer disabled:opacity-40 transition-colors',
+                      isDark ? 'bg-white/10 border-white/10 hover:bg-white/20 text-white' : 'bg-white border-slate-300 hover:bg-slate-100 text-slate-800'
+                    )}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className={cn('block text-xs font-semibold mb-1', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>
+                  Số Ghế/Hàng (4–25)
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleDimensionChange(rows, cols - 1)}
+                    disabled={cols <= 4}
+                    className={cn(
+                      'w-8 h-8 rounded-lg border font-bold text-sm cursor-pointer disabled:opacity-40 transition-colors',
+                      isDark ? 'bg-white/10 border-white/10 hover:bg-white/20 text-white' : 'bg-white border-slate-300 hover:bg-slate-100 text-slate-800'
+                    )}
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min={4}
+                    max={25}
+                    value={cols}
+                    onChange={(e) => handleDimensionChange(rows, Number(e.target.value))}
+                    className={cn(
+                      'w-14 h-8 text-center rounded-lg border text-xs font-mono-data font-bold outline-none',
+                      isDark ? 'bg-[#111118] border-white/15 text-[#f0ede8] focus:border-[#e8b84b]' : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-xs'
+                    )}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleDimensionChange(rows, cols + 1)}
+                    disabled={cols >= 25}
+                    className={cn(
+                      'w-8 h-8 rounded-lg border font-bold text-sm cursor-pointer disabled:opacity-40 transition-colors',
+                      isDark ? 'bg-white/10 border-white/10 hover:bg-white/20 text-white' : 'bg-white border-slate-300 hover:bg-slate-100 text-slate-800'
+                    )}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Smart Presets Bar */}
+            <div className="md:col-span-7 flex flex-wrap items-center justify-start md:justify-end gap-2 pt-1 md:pt-0">
+              <span className={cn('text-[11px] font-medium mr-1', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>Mẫu bố trí:</span>
+              <button
+                type="button"
+                onClick={applySmartVipRows}
+                className={cn(
+                  'px-2.5 py-1 rounded-lg border text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5',
+                  isDark ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20' : 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100 shadow-xs'
+                )}
+              >
+                <Crown className="w-3 h-3 text-amber-500" />
+                <span>Hàng VIP giữa</span>
+              </button>
+              <button
+                type="button"
+                onClick={applyCoupleBackRow}
+                className={cn(
+                  'px-2.5 py-1 rounded-lg border text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5',
+                  isDark ? 'bg-pink-500/10 border-pink-500/30 text-pink-400 hover:bg-pink-500/20' : 'bg-pink-50 border-pink-300 text-pink-900 hover:bg-pink-100 shadow-xs'
+                )}
+              >
+                <Heart className="w-3 h-3 text-pink-500" />
+                <span>Hàng Đôi cuối</span>
+              </button>
+              <button
+                type="button"
+                onClick={resetAllToStandard}
+                className={cn(
+                  'px-2.5 py-1 rounded-lg border text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5',
+                  isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:bg-white/10 hover:text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100 shadow-xs'
+                )}
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Tất cả Thường</span>
+              </button>
+            </div>
+          </div>
+
+          {/* SECTION 2: PAINTBRUSH PALETTE */}
+          <div className={cn(
+            'p-3.5 rounded-xl border transition-colors',
+            isDark ? 'bg-[#09090e] border-[#e8b84b]/20' : 'bg-amber-50/70 border-amber-200 shadow-xs'
+          )}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={cn('text-xs font-bold uppercase tracking-wider mr-1', isDark ? 'text-[#e8b84b]' : 'text-amber-900')}>
+                  Chọn loại ghế:
+                </span>
+                {[
+                  {
+                    type: 'standard',
+                    label: 'Ghế thường (1.0x)',
+                    icon: <Armchair className="w-3.5 h-3.5" />,
+                    activeClass: isDark ? 'bg-[#181824] border-white text-white' : 'bg-slate-800 text-white border-slate-900',
+                  },
+                  {
+                    type: 'vip',
+                    label: 'Ghế VIP (1.2x)',
+                    icon: <Crown className="w-3.5 h-3.5 text-amber-500" />,
+                    activeClass: isDark ? 'bg-amber-500/20 border-[#e8b84b] text-[#e8b84b]' : 'bg-amber-100 border-amber-500 text-amber-900 font-bold',
+                  },
+                  {
+                    type: 'couple',
+                    label: 'Ghế đôi (2.0x)',
+                    icon: <Heart className="w-3.5 h-3.5 text-pink-500" />,
+                    activeClass: isDark ? 'bg-pink-500/20 border-pink-500 text-pink-400' : 'bg-pink-100 border-pink-500 text-pink-900 font-bold',
+                  },
+                  {
+                    type: 'kids',
+                    label: 'Ghế trẻ em (0.8x)',
+                    icon: <Baby className="w-3.5 h-3.5 text-teal-400" />,
+                    activeClass: isDark ? 'bg-teal-500/20 border-teal-500 text-teal-300' : 'bg-teal-100 border-teal-500 text-teal-900 font-bold',
+                  },
+                  {
+                    type: 'inactive',
+                    label: 'Lối đi / Ẩn (0x)',
+                    icon: <Ban className="w-3.5 h-3.5 text-slate-400" />,
+                    activeClass: isDark ? 'bg-slate-700/50 border-slate-500 text-slate-300' : 'bg-slate-200 border-slate-400 text-slate-700',
+                  },
+                ].map((tool) => (
+                  <button
+                    key={tool.type}
+                    type="button"
+                    onClick={() => setSelectedTool(tool.type as any)}
+                    className={cn(
+                      'px-2.5 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5',
+                      selectedTool === tool.type
+                        ? `${tool.activeClass} shadow-xs ring-2 ${isDark ? 'ring-[#e8b84b]/40' : 'ring-amber-400'}`
+                        : isDark
+                        ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:border-white/20'
+                        : 'bg-white border-slate-300 text-slate-700 hover:border-slate-400'
+                    )}
+                  >
+                    {tool.icon}
+                    <span>{tool.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className={cn('text-[11px] flex items-center gap-1 font-medium', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                <Info className="w-3 h-3 text-amber-500 shrink-0" />
+                <span>Mẹo: Click chữ cái đầu hàng <strong>(A, B, C...)</strong> để gán cho cả hàng!</span>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 3: INTERACTIVE SCREEN & SEAT MATRIX */}
+          <div className={cn(
+            'p-6 sm:p-8 rounded-xl border flex flex-col items-center overflow-x-auto transition-colors',
+            isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-100/70 border-slate-200'
+          )}>
+            {/* Cinema Screen Curved Banner */}
+            <div className="w-full max-w-lg mb-7 text-center flex flex-col items-center select-none">
+              <div className="w-full h-2.5 bg-gradient-to-r from-transparent via-[#e8b84b] to-transparent rounded-full shadow-[0_0_20px_rgba(232,184,75,0.6)]"></div>
+              <span className={cn('text-[10px] uppercase tracking-[0.2em] font-bold mt-2', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                MÀN HÌNH CHIẾU · SCREEN
               </span>
-            ) : (
-              <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-600 font-medium'}>
-                💡 Sơ đồ này sẽ được áp dụng cho <strong className={isDark ? 'text-[#e8b84b]' : 'text-amber-800 font-bold'}>{selectedIds.size} phòng</strong> đã tích chọn.
+            </div>
+
+            {/* Seat Matrix Grid */}
+            <div className="space-y-2 min-w-fit select-none">
+              {rowsMap.map(([rowLabel, rowSeats]) => (
+                <div key={rowLabel} className="flex items-center gap-2.5">
+                  {/* Left Row Label (Clickable to paint row) */}
+                  <button
+                    type="button"
+                    onClick={() => handleRowLabelClick(rowLabel)}
+                    title={`Click để áp dụng loại ghế "${selectedTool.toUpperCase()}" cho toàn bộ hàng ${rowLabel}`}
+                    className={cn(
+                      'w-6 h-6 rounded flex items-center justify-center font-bold text-xs cursor-pointer transition-all hover:scale-110',
+                      isDark
+                        ? 'text-amber-400 hover:bg-amber-400/20 hover:text-white'
+                        : 'text-amber-800 hover:bg-amber-100 hover:text-amber-950 font-black'
+                    )}
+                  >
+                    {rowLabel}
+                  </button>
+
+                  {/* Row Seats */}
+                  <div className="flex items-center gap-1.5">
+                    {rowSeats.map((s) => {
+                      const type = s.seat_type
+                      const isInactive = !s.is_active
+                      const isCouple = type === 'couple'
+                      const isVip = type === 'vip'
+                      const isKids = type === 'kids'
+
+                      return (
+                        <div
+                          key={`${rowLabel}-${s.col_number}`}
+                          onClick={() => handleSeatClick(rowLabel, s.col_number)}
+                          className={cn(
+                            'h-8 rounded-lg border flex items-center justify-center text-[10px] font-bold shadow-xs transition-transform cursor-pointer hover:scale-110 hover:ring-2',
+                            isDark ? 'hover:ring-white' : 'hover:ring-slate-900',
+                            isInactive
+                              ? isDark
+                                ? 'w-8 bg-slate-800/30 border-dashed border-slate-600/50 text-slate-500 opacity-40'
+                                : 'w-8 bg-slate-200/50 border-dashed border-slate-400 text-slate-400 opacity-50'
+                              : isCouple
+                              ? isDark
+                                ? 'w-[70px] bg-pink-500/15 border-pink-500/40 text-pink-400'
+                                : 'w-[70px] bg-pink-100 border-pink-400 text-pink-950 font-black shadow-xs'
+                              : isKids
+                              ? isDark
+                                ? 'w-8 bg-teal-500/15 border-teal-500/40 text-teal-300'
+                                : 'w-8 bg-teal-100 border-teal-400 text-teal-950 font-black shadow-xs'
+                              : isVip
+                              ? isDark
+                                ? 'w-8 bg-amber-500/15 border-amber-500/40 text-amber-400'
+                                : 'w-8 bg-amber-100 border-amber-400 text-amber-950 font-black shadow-xs'
+                              : isDark
+                              ? 'w-8 bg-[#181824] border-white/15 text-[#f0ede8]'
+                              : 'w-8 bg-white border-slate-300 text-slate-800 font-bold'
+                          )}
+                          title={`Ghế ${rowLabel}${s.col_number} (${
+                            isInactive ? 'Không sử dụng' : isCouple ? 'Ghế đôi' : isKids ? 'Ghế trẻ em' : isVip ? 'Ghế VIP' : 'Ghế thường'
+                          }) - Click để đổi loại ghế`}
+                        >
+                          {isInactive ? (
+                            <Ban className="w-3 h-3 opacity-40" />
+                          ) : isCouple ? (
+                            <span className="flex items-center gap-0.5">
+                              <Heart className="w-2.5 h-2.5 text-pink-500 shrink-0" />
+                              <span>{s.col_number}</span>
+                            </span>
+                          ) : isKids ? (
+                            <span className="flex items-center gap-0.5">
+                              <Baby className="w-2.5 h-2.5 text-teal-400 shrink-0" />
+                              <span>{s.col_number}</span>
+                            </span>
+                          ) : isVip ? (
+                            <span className="flex items-center gap-0.5">
+                              <Crown className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                              <span>{s.col_number}</span>
+                            </span>
+                          ) : (
+                            s.col_number
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Right Row Label (Clickable to paint row) */}
+                  <button
+                    type="button"
+                    onClick={() => handleRowLabelClick(rowLabel)}
+                    title={`Click để áp dụng loại ghế "${selectedTool.toUpperCase()}" cho toàn bộ hàng ${rowLabel}`}
+                    className={cn(
+                      'w-6 h-6 rounded flex items-center justify-center font-bold text-xs cursor-pointer transition-all hover:scale-110',
+                      isDark
+                        ? 'text-amber-400 hover:bg-amber-400/20 hover:text-white'
+                        : 'text-amber-800 hover:bg-amber-100 hover:text-amber-950 font-black'
+                    )}
+                  >
+                    {rowLabel}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Footer Bar */}
+        <div className={cn(
+          'p-4 sm:p-5 border-t flex flex-wrap items-center justify-between gap-4 shrink-0 transition-colors',
+          isDark ? 'border-white/10 bg-[#0d0d14]' : 'border-slate-200 bg-slate-50'
+        )}>
+          {/* Capacity Breakdown */}
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <span className="font-semibold flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-slate-400"></span> Thường: <strong>{stats.standard}</strong>
+            </span>
+            <span className="font-semibold flex items-center gap-1.5 text-amber-500">
+              <span className="w-2 h-2 rounded-full bg-amber-400"></span> VIP: <strong>{stats.vip}</strong>
+            </span>
+            <span className="font-semibold flex items-center gap-1.5 text-pink-500">
+              <span className="w-2 h-2 rounded-full bg-pink-400"></span> Đôi: <strong>{stats.couple}</strong>
+            </span>
+            <span className="font-semibold flex items-center gap-1.5 text-teal-500">
+              <span className="w-2 h-2 rounded-full bg-teal-400"></span> Trẻ em: <strong>{stats.kids}</strong>
+            </span>
+            {stats.inactive > 0 && (
+              <span className="font-semibold flex items-center gap-1.5 text-slate-400">
+                <span className="w-2 h-2 rounded-full bg-slate-500"></span> Ẩn: <strong>{stats.inactive}</strong>
               </span>
             )}
+            <span className={isDark ? 'text-white/20' : 'text-slate-300'}>|</span>
+            <span className={cn('font-semibold', isDark ? 'text-[#e8b84b]' : 'text-amber-900')}>
+              Sức chứa: {stats.activeTotal} ghế ({selectedIds.size} phòng)
+            </span>
           </div>
 
           <div className="flex items-center gap-3">
@@ -1381,9 +2816,10 @@ function UnifiedRoomLayoutModal({
               type="button"
               onClick={onClose}
               disabled={saving}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
-                isDark ? 'bg-white/10 hover:bg-white/15 text-[#f0ede8]' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-              }`}
+              className={cn(
+                'px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors',
+                isDark ? 'bg-white/10 hover:bg-white/15 text-[#f0ede8]' : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+              )}
             >
               Hủy
             </button>
@@ -1392,9 +2828,19 @@ function UnifiedRoomLayoutModal({
               type="button"
               disabled={saving || selectedIds.size === 0}
               onClick={handleSave}
-              className="px-6 py-2.5 bg-[#e8b84b] hover:bg-[#f5c759] text-[#09090e] font-black text-xs rounded-xl cursor-pointer transition-all shadow-md flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-6 py-2.5 bg-[#e8b84b] hover:bg-[#d9a738] text-[#09090e] font-bold text-xs rounded-xl cursor-pointer transition-all shadow-md flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
             >
-              <span>{saving ? '⏳ Đang lưu...' : selectedIds.size === 0 ? '💾 Lưu & Áp Dụng (0 phòng)' : `💾 Lưu & Áp Dụng Cho (${selectedIds.size} Phòng)`}</span>
+              {saving ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Đang lưu...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>{selectedIds.size <= 1 ? 'Lưu Sơ Đồ Ghế' : `Lưu & Áp Dụng Cho (${selectedIds.size} Phòng)`}</span>
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -1403,329 +2849,528 @@ function UnifiedRoomLayoutModal({
   )
 }
 
+
 function ConcessionAdminTab({ isDark }: { isDark: boolean }) {
   const [concessions, setConcessions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [editId, setEditId] = useState<number | null>(null)
-  const [editForm, setEditForm] = useState<any>({})
-  const [creating, setCreating] = useState(false)
-  const [newForm, setNewForm] = useState({
-    name: '', description: '', price: '', category: 'popcorn', size: '', image_url: '', is_active: true,
-  })
-  const [addingSizeGroupKey, setAddingSizeGroupKey] = useState<string | null>(null)
-  const [newSizeForm, setNewSizeForm] = useState<{ size: string; price: string }>({ size: 'S', price: '' })
   const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState('')
-
-  // Categories that support size selection
-  const SIZE_CATEGORIES = ['popcorn', 'drink']
-  const SIZE_OPTIONS = [
-    { value: 'S', label: 'S — Nhỏ' },
-    { value: 'M', label: 'M — Vừa' },
-    { value: 'L', label: 'L — Lớn' },
-    { value: 'XL', label: 'XL — Cỡ Lớn' },
-  ]
-
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all')
+  const [notification, setNotification] = useState<{
+    text: string
+    type: 'success' | 'error'
+    undoAction?: () => Promise<void> | void
+  } | null>(null)
 
-  const categoryFilterTabs = [
-    { value: 'all', label: 'Tất cả', icon: '✨' },
-    { value: 'combo', label: 'Combo', icon: '🍿' },
-    { value: 'popcorn', label: 'Bắp Rang', icon: '🌽' },
-    { value: 'drink', label: 'Nước', icon: '🥤' },
-    { value: 'food', label: 'Đồ Ăn', icon: '🌭' },
-    { value: 'snack', label: 'Snack', icon: '🧀' },
-    { value: 'hidden', label: 'Đã ẩn', icon: '🙈' },
+  // Card Menu Popover State
+  const [activeMenuKey, setActiveMenuKey] = useState<string | null>(null)
+
+  // Slide-over Drawer State
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [drawerMode, setDrawerMode] = useState<'create' | 'edit' | 'duplicate'>('create')
+  const [originalGroup, setOriginalGroup] = useState<GroupedConcession | null>(null)
+  const [drawerForm, setDrawerForm] = useState<{
+    baseName: string
+    category: string
+    description: string
+    image_url: string
+    singlePrice: string
+    singleIsActive: boolean
+    variants: Array<{
+      id?: number
+      size: string
+      price: string
+      is_active: boolean
+    }>
+  }>({
+    baseName: '',
+    category: 'popcorn',
+    description: '',
+    image_url: '',
+    singlePrice: '',
+    singleIsActive: true,
+    variants: [],
+  })
+
+  const SIZE_CATEGORIES = ['popcorn', 'drink']
+  const ALL_SIZES = ['S', 'M', 'L', 'XL']
+
+  const CATEGORY_TABS = [
+    { value: 'all', label: 'Tất Cả', icon: Layers },
+    { value: 'combo', label: 'Combo F&B', icon: Sparkles },
+    { value: 'popcorn', label: 'Bắp Rang', icon: Popcorn },
+    { value: 'drink', label: 'Nước Uống', icon: CupSoda },
+    { value: 'food', label: 'Đồ Ăn Nóng', icon: Utensils },
+    { value: 'snack', label: 'Snack & Khác', icon: Cookie },
+    { value: 'hidden', label: 'Tạm Ẩn', icon: EyeOff },
   ]
 
-  const categoryOptions = [
-    { value: 'combo', label: '🍿 Combo' },
-    { value: 'popcorn', label: '🌽 Bắp Rang' },
-    { value: 'drink', label: '🥤 Nước' },
-    { value: 'food', label: '🌭 Đồ Ăn' },
-    { value: 'snack', label: '🧀 Snack' },
+  const CATEGORY_OPTIONS = [
+    { value: 'combo', label: 'Combo F&B' },
+    { value: 'popcorn', label: 'Bắp Rang' },
+    { value: 'drink', label: 'Nước Uống' },
+    { value: 'food', label: 'Đồ Ăn Nóng' },
+    { value: 'snack', label: 'Snack & Đồ Ăn Vặt' },
   ]
 
-  const filteredConcessions = useMemo(() => {
-    if (selectedCategoryFilter === 'all') {
-      return [
-        ...concessions.filter(item => item.is_active),
-        ...concessions.filter(item => !item.is_active),
-      ]
-    }
-
-    if (selectedCategoryFilter === 'hidden') {
-      return concessions.filter(item => !item.is_active)
-    }
-
-    const categoryItems = concessions.filter(item => item.category === selectedCategoryFilter)
-    return [
-      ...categoryItems.filter(item => item.is_active),
-      ...categoryItems.filter(item => !item.is_active),
-    ]
-  }, [concessions, selectedCategoryFilter])
+  const showToast = (
+    text: string,
+    type: 'success' | 'error' = 'success',
+    undoAction?: () => Promise<void> | void
+  ) => {
+    setNotification({ text, type, undoAction })
+    setTimeout(() => {
+      setNotification((curr) => (curr?.text === text ? null : curr))
+    }, 4500)
+  }
 
   async function fetchConcessions() {
     setLoading(true)
     try {
       const { data } = await apiClient.get('/api/v1/concessions/all')
-      setConcessions(data)
-    } catch (e) {
-      setMsg('Lỗi tải danh sách')
+      setConcessions(data || [])
+    } catch {
+      showToast('Không thể tải danh sách sản phẩm F&B', 'error')
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { fetchConcessions() }, [])
+  useEffect(() => {
+    fetchConcessions()
+  }, [])
 
-  async function handleToggleActive(item: any) {
-    setSaving(true)
+  // Close modal when pressing ESC
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && isDrawerOpen) {
+        setIsDrawerOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isDrawerOpen])
+
+  // Close card popover when clicking anywhere outside
+  useEffect(() => {
+    function handleWindowClick() {
+      setActiveMenuKey(null)
+    }
+    if (activeMenuKey) {
+      window.addEventListener('click', handleWindowClick)
+      return () => window.removeEventListener('click', handleWindowClick)
+    }
+  }, [activeMenuKey])
+
+  // Filtered Concessions by category tab
+  const filteredConcessions = useMemo(() => {
+    let result = concessions
+
+    if (selectedCategoryFilter === 'hidden') {
+      result = result.filter((item) => !item.is_active)
+    } else if (selectedCategoryFilter !== 'all') {
+      result = result.filter((item) => item.category === selectedCategoryFilter)
+    }
+
+    return [
+      ...result.filter((item) => item.is_active),
+      ...result.filter((item) => !item.is_active),
+    ]
+  }, [concessions, selectedCategoryFilter])
+
+  const groupedList = useMemo(() => {
+    return groupConcessions(filteredConcessions)
+  }, [filteredConcessions])
+
+  // Quick 1-Click Status Switch with Optimistic Feedback & Undo
+  async function handleToggleGroupActive(group: GroupedConcession, e?: React.MouseEvent) {
+    if (e) e.stopPropagation()
+    const nextActive = !group.is_active
+    const prevConcessions = [...concessions]
+
+    // Optimistic UI update
+    setConcessions((prev) =>
+      prev.map((item) => {
+        if (group.variants.some((v) => v.id === item.id)) {
+          return { ...item, is_active: nextActive }
+        }
+        return item
+      })
+    )
+
+    showToast(
+      `Đã ${nextActive ? 'mở bán' : 'tạm ngưng bán'} "${group.baseName}"`,
+      'success',
+      async () => {
+        // Undo action
+        setConcessions(prevConcessions)
+        for (const v of group.variants) {
+          try {
+            await apiClient.put(`/api/v1/concessions/${v.id}`, { is_active: !nextActive })
+          } catch {
+            // silent
+          }
+        }
+        await fetchConcessions()
+      }
+    )
+
     try {
-      await apiClient.put(`/api/v1/concessions/${item.id}`, { is_active: !item.is_active })
-      await fetchConcessions()
-      setMsg(`✓ Đã ${!item.is_active ? 'kích hoạt' : 'ẩn'} "${item.name}"`)
-      setTimeout(() => setMsg(''), 3000)
-    } catch { setMsg('Lỗi cập nhật') }
-    finally { setSaving(false) }
+      for (const v of group.variants) {
+        await apiClient.put(`/api/v1/concessions/${v.id}`, { is_active: nextActive })
+      }
+    } catch {
+      setConcessions(prevConcessions)
+      showToast('Không thể cập nhật trạng thái mặt hàng', 'error')
+    }
   }
 
-  async function handleAddSizeForGroup(group: GroupedConcession) {
-    if (!newSizeForm.price || !newSizeForm.size) return
+  // Open Drawer in Create Mode
+  function handleOpenCreate() {
+    setDrawerMode('create')
+    setOriginalGroup(null)
+    setDrawerForm({
+      baseName: '',
+      category: 'popcorn',
+      description: '',
+      image_url: '',
+      singlePrice: '75000',
+      singleIsActive: true,
+      variants: [
+        { size: 'M', price: '45000', is_active: true },
+        { size: 'L', price: '55000', is_active: true },
+      ],
+    })
+    setIsDrawerOpen(true)
+  }
+
+  // Open Drawer in Edit Mode
+  function handleOpenEdit(group: GroupedConcession) {
+    setDrawerMode('edit')
+    setOriginalGroup(group)
+    const isSizeCat = SIZE_CATEGORIES.includes(group.category)
+
+    if (isSizeCat) {
+      setDrawerForm({
+        baseName: group.baseName,
+        category: group.category,
+        description: group.description || '',
+        image_url: group.image_url || '',
+        singlePrice: '',
+        singleIsActive: true,
+        variants: group.variants.map((v) => ({
+          id: v.id,
+          size: v.size || 'M',
+          price: String(v.price),
+          is_active: v.is_active,
+        })),
+      })
+    } else {
+      setDrawerForm({
+        baseName: group.baseName,
+        category: group.category,
+        description: group.description || '',
+        image_url: group.image_url || '',
+        singlePrice: String(group.primaryConcession.price),
+        singleIsActive: group.primaryConcession.is_active,
+        variants: [],
+      })
+    }
+    setIsDrawerOpen(true)
+  }
+
+  // Open Drawer in Duplicate Mode
+  function handleOpenDuplicate(group: GroupedConcession) {
+    setDrawerMode('duplicate')
+    setOriginalGroup(null)
+    const isSizeCat = SIZE_CATEGORIES.includes(group.category)
+
+    if (isSizeCat) {
+      setDrawerForm({
+        baseName: `${group.baseName} (Bản sao)`,
+        category: group.category,
+        description: group.description || '',
+        image_url: group.image_url || '',
+        singlePrice: '',
+        singleIsActive: true,
+        variants: group.variants.map((v) => ({
+          size: v.size || 'M',
+          price: String(v.price),
+          is_active: true,
+        })),
+      })
+    } else {
+      setDrawerForm({
+        baseName: `${group.baseName} (Bản sao)`,
+        category: group.category,
+        description: group.description || '',
+        image_url: group.image_url || '',
+        singlePrice: String(group.primaryConcession.price),
+        singleIsActive: true,
+        variants: [],
+      })
+    }
+    setIsDrawerOpen(true)
+  }
+
+  // Add Size row to matrix in Drawer
+  function handleAddSizeToMatrix(size: string) {
+    setDrawerForm((prev) => ({
+      ...prev,
+      variants: [...prev.variants, { size, price: '', is_active: true }],
+    }))
+  }
+
+  // Remove Size row from matrix
+  function handleRemoveSizeFromMatrix(index: number) {
+    if (drawerForm.variants.length <= 1) return
+    setDrawerForm((prev) => ({
+      ...prev,
+      variants: prev.variants.filter((_, i) => i !== index),
+    }))
+  }
+
+  // Update Size row in matrix
+  function handleUpdateSizeInMatrix(index: number, patch: Partial<{ price: string; is_active: boolean }>) {
+    setDrawerForm((prev) => ({
+      ...prev,
+      variants: prev.variants.map((v, i) => (i === index ? { ...v, ...patch } : v)),
+    }))
+  }
+
+  // Submit Drawer Changes
+  async function handleSaveDrawer(e: React.FormEvent) {
+    e.preventDefault()
+    const name = drawerForm.baseName.trim()
+    if (!name) {
+      showToast('Vui lòng nhập tên món ăn / đồ uống', 'error')
+      return
+    }
+
+    const isSizeCat = SIZE_CATEGORIES.includes(drawerForm.category)
+
+    if (isSizeCat) {
+      if (drawerForm.variants.length === 0) {
+        showToast('Vui lòng cấu hình ít nhất 1 kích cỡ và giá bán', 'error')
+        return
+      }
+      for (const v of drawerForm.variants) {
+        if (!v.price || isNaN(Number(v.price)) || Number(v.price) <= 0) {
+          showToast(`Vui lòng nhập giá hợp lệ cho Size ${v.size}`, 'error')
+          return
+        }
+      }
+    } else {
+      if (!drawerForm.singlePrice || isNaN(Number(drawerForm.singlePrice)) || Number(drawerForm.singlePrice) <= 0) {
+        showToast('Vui lòng nhập giá bán hợp lệ', 'error')
+        return
+      }
+    }
+
     setSaving(true)
     try {
-      await apiClient.post('/api/v1/concessions/', {
-        name: group.baseName,
-        category: group.category,
-        size: newSizeForm.size,
-        price: parseFloat(newSizeForm.price),
-        description: group.description || undefined,
-        image_url: group.image_url || undefined,
-        is_active: true,
-      })
+      if (drawerMode === 'create' || drawerMode === 'duplicate') {
+        if (isSizeCat) {
+          for (const v of drawerForm.variants) {
+            await apiClient.post('/api/v1/concessions/', {
+              name: `${name} (${v.size})`,
+              category: drawerForm.category,
+              size: v.size,
+              price: parseFloat(v.price),
+              description: drawerForm.description.trim() || undefined,
+              image_url: drawerForm.image_url.trim() || undefined,
+              is_active: v.is_active,
+            })
+          }
+        } else {
+          await apiClient.post('/api/v1/concessions/', {
+            name,
+            category: drawerForm.category,
+            price: parseFloat(drawerForm.singlePrice),
+            description: drawerForm.description.trim() || undefined,
+            image_url: drawerForm.image_url.trim() || undefined,
+            is_active: drawerForm.singleIsActive,
+          })
+        }
+        showToast(`Đã thêm mới "${name}" thành công`)
+      } else if (drawerMode === 'edit') {
+        if (isSizeCat) {
+          // Update existing or add new variants
+          for (const v of drawerForm.variants) {
+            if (v.id) {
+              await apiClient.put(`/api/v1/concessions/${v.id}`, {
+                name: `${name} (${v.size})`,
+                category: drawerForm.category,
+                size: v.size,
+                price: parseFloat(v.price),
+                description: drawerForm.description.trim() || undefined,
+                image_url: drawerForm.image_url.trim() || undefined,
+                is_active: v.is_active,
+              })
+            } else {
+              await apiClient.post('/api/v1/concessions/', {
+                name: `${name} (${v.size})`,
+                category: drawerForm.category,
+                size: v.size,
+                price: parseFloat(v.price),
+                description: drawerForm.description.trim() || undefined,
+                image_url: drawerForm.image_url.trim() || undefined,
+                is_active: v.is_active,
+              })
+            }
+          }
+
+          // Soft-deactivate any removed variants
+          if (originalGroup) {
+            const currentIds = new Set(drawerForm.variants.map((v) => v.id).filter(Boolean))
+            for (const oldV of originalGroup.variants) {
+              if (!currentIds.has(oldV.id)) {
+                await apiClient.put(`/api/v1/concessions/${oldV.id}`, { is_active: false })
+              }
+            }
+          }
+        } else if (originalGroup) {
+          await apiClient.put(`/api/v1/concessions/${originalGroup.primaryConcession.id}`, {
+            name,
+            category: drawerForm.category,
+            price: parseFloat(drawerForm.singlePrice),
+            description: drawerForm.description.trim() || undefined,
+            image_url: drawerForm.image_url.trim() || undefined,
+            is_active: drawerForm.singleIsActive,
+          })
+        }
+        showToast(`Đã lưu thay đổi cho "${name}"`)
+      }
+
+      setIsDrawerOpen(false)
       await fetchConcessions()
-      setAddingSizeGroupKey(null)
-      setNewSizeForm({ size: 'S', price: '' })
-      setMsg(`✓ Đã thêm Size ${newSizeForm.size} cho "${group.baseName}" thành công`)
-      setTimeout(() => setMsg(''), 3000)
     } catch {
-      setMsg('Lỗi khi thêm kích cỡ mới')
+      showToast('Có lỗi xảy ra khi lưu dữ liệu', 'error')
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleSaveEdit() {
-    if (!editId) return
-    setSaving(true)
-    try {
-      await apiClient.put(`/api/v1/concessions/${editId}`, {
-        name: editForm.name,
-        description: editForm.description,
-        price: parseFloat(editForm.price),
-        category: editForm.category,
-        size: SIZE_CATEGORIES.includes(editForm.category) ? (editForm.size || null) : null,
-        image_url: editForm.image_url || undefined,
-      })
-      await fetchConcessions()
-      setEditId(null)
-      setMsg('✓ Đã cập nhật thành công')
-      setTimeout(() => setMsg(''), 3000)
-    } catch { setMsg('Lỗi lưu dữ liệu') }
-    finally { setSaving(false) }
-  }
-
-  async function handleCreate() {
-    setSaving(true)
-    try {
-      await apiClient.post('/api/v1/concessions/', {
-        name: newForm.name,
-        description: newForm.description || undefined,
-        price: parseFloat(newForm.price),
-        category: newForm.category,
-        size: SIZE_CATEGORIES.includes(newForm.category) ? (newForm.size || null) : null,
-        image_url: newForm.image_url || undefined,
-        is_active: newForm.is_active,
-      })
-      await fetchConcessions()
-      setCreating(false)
-      setNewForm({ name: '', description: '', price: '', category: 'popcorn', size: '', image_url: '', is_active: true })
-      setMsg('✓ Đã thêm combo mới thành công')
-      setTimeout(() => setMsg(''), 3000)
-    } catch { setMsg('Lỗi tạo combo') }
-    finally { setSaving(false) }
-  }
-
-  const card = isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
-  const input = isDark
-    ? 'bg-[#0d0d14] border-white/10 text-[#f0ede8] placeholder:text-[#6e6c68] focus:border-[#e8b84b]/50 focus:ring-1 focus:ring-[#e8b84b]/30'
-    : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-amber-400 focus:ring-1 focus:ring-amber-200'
+  const cardCls = isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+  const inputCls = isDark
+    ? 'bg-[#0d0d14] border-white/10 text-[#f0ede8] placeholder:text-[#6e6c68] focus:border-amber-400/50 focus:ring-1 focus:ring-amber-400/30'
+    : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-200'
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className={`font-display text-2xl font-black ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-            🍿 Quản Lý Bắp Rang & Nước
-          </h2>
-          <p className={`text-sm mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-            Quản lý danh sách combo đồ ăn kèm vé — khách sẽ thấy khi thanh toán
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => { setCreating(true); setEditId(null) }}
-          className="bg-[#e8b84b] text-[#09090e] px-4 py-2 rounded-xl text-sm font-bold hover:brightness-110 cursor-pointer transition-all"
-        >
-          + Thêm Combo Mới
-        </button>
-      </div>
+      {/* Toast Notification with Undo */}
+      {notification && (
+        <div className="fixed bottom-6 right-6 z-[9999] animate-in fade-in slide-in-from-bottom-4">
+          <div
+            className={cn(
+              'px-4 py-3 rounded-2xl border shadow-2xl flex items-center gap-3 text-xs font-semibold backdrop-blur-xl',
+              notification.type === 'success'
+                ? isDark
+                  ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200'
+                  : 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                : isDark
+                ? 'bg-rose-950/90 border-rose-500/40 text-rose-200'
+                : 'bg-rose-50 border-rose-300 text-rose-900'
+            )}
+          >
+            {notification.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            )}
+            <span>{notification.text}</span>
 
-      {msg && (
-        <div className={`text-sm px-4 py-2.5 rounded-xl border ${
-          msg.startsWith('✓')
-            ? isDark ? 'bg-green-900/20 border-green-500/30 text-green-400' : 'bg-green-50 border-green-200 text-green-700'
-            : isDark ? 'bg-red-900/20 border-red-500/30 text-red-400' : 'bg-red-50 border-red-200 text-red-700'
-        }`}>
-          {msg}
-        </div>
-      )}
-
-      {/* ── CREATE FORM ── */}
-      {creating && (
-        <div className={`rounded-2xl border p-5 space-y-4 ${card}`}>
-          <h3 className={`font-bold text-sm ${isDark ? 'text-[#e8b84b]' : 'text-amber-700'}`}>
-            ✨ Thêm Combo Mới
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Left column: image upload */}
-            <div className="sm:row-span-3">
-              <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                Ảnh combo
-              </label>
-              <ImageUploadField
-                value={newForm.image_url}
-                onChange={(url) => setNewForm(f => ({ ...f, image_url: url }))}
-                isDark={isDark}
-              />
-            </div>
-
-            {/* Right column: fields */}
-            <div>
-              <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Tên combo *</label>
-              <input value={newForm.name} onChange={e => setNewForm(f => ({ ...f, name: e.target.value }))}
-                className={`mt-1 w-full px-3 py-2 rounded-xl border text-sm outline-none transition-all ${input}`}
-                placeholder="Vd: Combo Đôi Bắp + 2 Nước" />
-            </div>
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Giá (VNĐ) *</label>
-                <input value={newForm.price} onChange={e => setNewForm(f => ({ ...f, price: e.target.value }))}
-                  type="number" min="0" className={`mt-1 w-full px-3 py-2 rounded-xl border text-sm outline-none transition-all ${input}`}
-                  placeholder="95000" />
-              </div>
-              <div className="flex-1">
-                <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Danh mục</label>
-                <select value={newForm.category} onChange={e => setNewForm(f => ({ ...f, category: e.target.value, size: '' }))}
-                  className={`mt-1 w-full px-3 py-2 rounded-xl border text-sm outline-none transition-all ${input}`}>
-                  {categoryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {/* Size picker — only for popcorn/drink/combo */}
-            {SIZE_CATEGORIES.includes(newForm.category) && (
-              <div className="sm:col-span-2">
-                <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                  Size (không bắt buộc)
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setNewForm(f => ({ ...f, size: '' }))}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all border ${
-                      newForm.size === ''
-                        ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
-                        : isDark ? 'border-white/15 text-[#6e6c68] hover:border-white/30' : 'border-slate-200 text-slate-400 hover:border-slate-300'
-                    }`}
-                  >
-                    Không chọn
-                  </button>
-                  {SIZE_OPTIONS.map(s => (
-                    <button
-                      key={s.value}
-                      type="button"
-                      onClick={() => setNewForm(f => ({ ...f, size: s.value }))}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all border ${
-                        newForm.size === s.value
-                          ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
-                          : isDark ? 'border-white/15 text-[#a09e9a] hover:border-white/30 hover:text-[#f0ede8]' : 'border-slate-200 text-slate-500 hover:border-slate-400'
-                      }`}
-                    >
-                      {s.value}
-                    </button>
-                  ))}
-                </div>
-                {newForm.size && (
-                  <p className={`text-[11px] mt-1 ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>
-                    Đã chọn: {SIZE_OPTIONS.find(s => s.value === newForm.size)?.label}
-                  </p>
-                )}
-              </div>
+            {notification.undoAction && (
+              <button
+                type="button"
+                onClick={() => {
+                  notification.undoAction?.()
+                  setNotification(null)
+                }}
+                className="ml-2 px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white font-bold cursor-pointer transition-all uppercase text-[10px] tracking-wider"
+              >
+                Hoàn tác
+              </button>
             )}
 
-            <div className="sm:col-span-2">
-              <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Mô tả</label>
-              <textarea value={newForm.description} onChange={e => setNewForm(f => ({ ...f, description: e.target.value }))}
-                rows={2} className={`mt-1 w-full px-3 py-2 rounded-xl border text-sm outline-none transition-all resize-none ${input}`}
-                placeholder="Mô tả ngắn..." />
-            </div>
-          </div>
-          <div className="flex gap-2 justify-end pt-1">
-            <button type="button" onClick={() => setCreating(false)}
-              className={`px-4 py-1.5 rounded-xl text-sm font-medium cursor-pointer transition-all ${isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>
-              Huỷ
-            </button>
-            <button type="button" disabled={!newForm.name || !newForm.price || saving}
-              onClick={handleCreate}
-              className="bg-[#e8b84b] text-[#09090e] px-5 py-1.5 rounded-xl text-sm font-bold hover:brightness-110 cursor-pointer disabled:opacity-50 transition-all">
-              {saving ? 'Đang lưu...' : '✓ Tạo Combo'}
+            <button
+              type="button"
+              onClick={() => setNotification(null)}
+              className="p-1 rounded-lg hover:bg-white/10 opacity-70 hover:opacity-100 transition-opacity ml-1"
+            >
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
       )}
 
-      {/* ── CATEGORY FILTER TABS ── */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-none">
-        {categoryFilterTabs.map((tab) => {
-          const count = tab.value === 'all'
-            ? concessions.length
-            : tab.value === 'hidden'
-              ? concessions.filter(c => !c.is_active).length
-              : concessions.filter(c => c.category === tab.value).length
+      {/* Top Header Card */}
+      <div className={cn('p-5 sm:p-6 rounded-2xl border transition-all shadow-xs', cardCls)}>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5">
+              <span className={cn('p-2 rounded-xl text-amber-500', isDark ? 'bg-amber-500/10' : 'bg-amber-50')}>
+                <Popcorn className="w-5 h-5 stroke-[2]" />
+              </span>
+              <h2 className={cn('font-display font-black text-xl tracking-tight', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                Quản Lý Bắp Nước & Combo F&B
+              </h2>
+            </div>
+            <p className={cn('text-xs pl-10 leading-relaxed', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+              Kiểm soát danh mục đồ ăn, nước uống, thiết lập các combo ưu đãi và kích cỡ bán kèm vé khi khán giả đặt chỗ.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 sm:self-auto self-start">
+            <button
+              type="button"
+              onClick={handleOpenCreate}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-[#e8b84b] hover:bg-[#dfad3e] text-[#09090e] shadow-md transition-all cursor-pointer select-none"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Thêm Món Mới</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Category Filter Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {CATEGORY_TABS.map((tab) => {
+          const Icon = tab.icon
+          const count =
+            tab.value === 'all'
+              ? concessions.length
+              : tab.value === 'hidden'
+              ? concessions.filter((c) => !c.is_active).length
+              : concessions.filter((c) => c.category === tab.value).length
           const isActive = selectedCategoryFilter === tab.value
+
           return (
             <button
               key={tab.value}
               type="button"
               onClick={() => setSelectedCategoryFilter(tab.value)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
+              className={cn(
+                'flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border select-none',
                 isActive
-                  ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-md'
+                  ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
                   : isDark
-                    ? 'bg-[#111118] text-[#a09e9a] border-white/10 hover:text-[#f0ede8] hover:border-white/20'
-                    : 'bg-white text-slate-600 border-slate-200 hover:text-slate-900 hover:border-slate-300'
-              }`}
+                  ? 'bg-[#111118] text-[#a09e9a] border-white/10 hover:text-[#f0ede8] hover:border-white/20'
+                  : 'bg-white text-slate-600 border-slate-200 hover:text-slate-900 hover:border-slate-300'
+              )}
             >
-              <span>{tab.icon} {tab.label}</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                isActive
-                  ? 'bg-black/20 text-[#09090e]'
-                  : isDark
+              <Icon className={cn('w-3.5 h-3.5', isActive ? 'text-[#09090e]' : 'text-amber-500')} />
+              <span>{tab.label}</span>
+              <span
+                className={cn(
+                  'px-1.5 py-0.5 rounded-full text-[10px] font-mono-data font-bold',
+                  isActive
+                    ? 'bg-black/20 text-[#09090e]'
+                    : isDark
                     ? 'bg-white/10 text-[#a09e9a]'
                     : 'bg-slate-100 text-slate-500'
-              }`}>
+                )}
+              >
                 {count}
               </span>
             </button>
@@ -1733,353 +3378,1676 @@ function ConcessionAdminTab({ isDark }: { isDark: boolean }) {
         })}
       </div>
 
-      {/* ── CONCESSIONS GRID (GROUPED SIZES) ── */}
+      {/* Main Concessions Grid */}
       {loading ? (
-        <div className={`p-10 text-center rounded-2xl border ${card}`}>
-          <div className="text-2xl animate-spin inline-block">⏳</div>
-          <p className={`mt-2 text-sm ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Đang tải...</p>
-        </div>
-      ) : filteredConcessions.length === 0 ? (
-        <div className={`p-10 text-center rounded-2xl border ${card}`}>
-          <span className="text-3xl">🍿</span>
-          <p className={`mt-2 text-sm font-semibold ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-            Không có sản phẩm nào trong danh mục này.
+        <div className={cn('p-12 text-center rounded-2xl border flex flex-col items-center justify-center gap-3', cardCls)}>
+          <RefreshCw className="w-7 h-7 animate-spin text-amber-500" />
+          <p className={cn('text-xs font-semibold', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+            Đang tải danh mục bắp nước & combo...
           </p>
         </div>
+      ) : groupedList.length === 0 ? (
+        <div className={cn('p-12 text-center rounded-2xl border flex flex-col items-center justify-center gap-3', cardCls)}>
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500">
+            <Popcorn className="w-6 h-6 stroke-[1.5]" />
+          </div>
+          <div>
+            <h4 className={cn('font-bold text-sm', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+              Không có sản phẩm F&B nào
+            </h4>
+            <p className={cn('text-xs mt-1 max-w-sm', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+              Chưa có sản phẩm nào trong danh mục này. Bấm nút "Thêm Món Mới" để bắt đầu tạo thực đơn.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleOpenCreate}
+            className="mt-1 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-[#e8b84b] text-[#09090e] hover:bg-[#dfad3e] transition-all cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>Tạo Món Mới Ngay</span>
+          </button>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {groupConcessions(filteredConcessions).map(group => {
-            const isEditing = group.variants.some(v => v.id === editId)
-            const editingItem = group.variants.find(v => v.id === editId)
-            const hasMultiple = group.variants.length > 1
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {groupedList.map((group) => {
+            const isSizeCategory = SIZE_CATEGORIES.includes(group.category)
+            const isGroupActive = group.variants.some((v) => v.is_active)
+            const isPopoverOpen = activeMenuKey === group.key
 
             return (
-              <div key={group.key} className={`rounded-2xl border overflow-hidden flex flex-col ${card} ${
-                !group.is_active ? 'opacity-55 grayscale' : ''
-              }`}>
-
-                {/* ── EDIT MODE ── */}
-                {isEditing && editingItem ? (
-                  <div className="p-4 space-y-3">
-                    <p className={`text-[11px] font-bold uppercase tracking-wide ${isDark ? 'text-[#e8b84b]' : 'text-amber-700'}`}>
-                      ✏️ Đang chỉnh sửa ({editingItem.size ? `Size ${editingItem.size}` : editingItem.name})
-                    </p>
-
-                    {/* Image upload */}
-                    <div>
-                      <label className={`text-xs font-medium block mb-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Ảnh</label>
-                      <ImageUploadField
-                        value={editForm.image_url}
-                        onChange={(url) => setEditForm((f: any) => ({ ...f, image_url: url }))}
-                        isDark={isDark}
-                        compact
-                      />
+              <div
+                key={group.key}
+                className={cn(
+                  'rounded-2xl border flex flex-col overflow-hidden transition-all duration-200 group relative',
+                  cardCls,
+                  !isGroupActive ? 'opacity-65 grayscale-[30%]' : 'hover:border-amber-500/30 hover:shadow-lg'
+                )}
+              >
+                {/* Image & Header Overlay */}
+                <div className={cn('h-48 relative overflow-hidden flex items-center justify-center select-none', isDark ? 'bg-[#0a0a0f]' : 'bg-slate-100')}>
+                  {group.image_url ? (
+                    <img
+                      src={group.image_url}
+                      alt={group.baseName}
+                      className="w-full h-full object-contain p-3 group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-[#a09e9a] opacity-30 gap-2">
+                      <Popcorn className="w-12 h-12 stroke-[1.2]" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Chưa có ảnh</span>
                     </div>
+                  )}
 
-                    <div>
-                      <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Tên</label>
-                      <input value={editForm.name} onChange={e => setEditForm((f: any) => ({ ...f, name: e.target.value }))}
-                        className={`mt-0.5 w-full px-2.5 py-1.5 rounded-lg border text-sm outline-none ${input}`} />
-                    </div>
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Giá</label>
-                        <input value={editForm.price} type="number" onChange={e => setEditForm((f: any) => ({ ...f, price: e.target.value }))}
-                          className={`mt-0.5 w-full px-2.5 py-1.5 rounded-lg border text-sm outline-none ${input}`} />
-                      </div>
-                      <div className="flex-1">
-                        <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Danh mục</label>
-                        <select value={editForm.category} onChange={e => setEditForm((f: any) => ({ ...f, category: e.target.value, size: '' }))}
-                          className={`mt-0.5 w-full px-2.5 py-1.5 rounded-lg border text-sm outline-none ${input}`}>
-                          {categoryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Size picker — popcorn/drink/combo only */}
-                    {SIZE_CATEGORIES.includes(editForm.category) && (
-                      <div>
-                        <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Size</label>
-                        <div className="flex gap-1.5 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={() => setEditForm((f: any) => ({ ...f, size: '' }))}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer transition-all border ${
-                              !editForm.size
-                                ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
-                                : isDark ? 'border-white/15 text-[#6e6c68] hover:border-white/30' : 'border-slate-200 text-slate-400'
-                            }`}
-                          >
-                            Không chọn
-                          </button>
-                          {SIZE_OPTIONS.map(s => (
-                            <button
-                              key={s.value}
-                              type="button"
-                              onClick={() => setEditForm((f: any) => ({ ...f, size: s.value }))}
-                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-all border ${
-                                editForm.size === s.value
-                                  ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
-                                  : isDark ? 'border-white/15 text-[#a09e9a] hover:text-[#f0ede8] hover:border-white/30' : 'border-slate-200 text-slate-500 hover:border-slate-400'
-                              }`}
-                            >
-                              {s.value}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div>
-                      <label className={`text-xs font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Mô tả</label>
-                      <textarea value={editForm.description} rows={2}
-                        onChange={e => setEditForm((f: any) => ({ ...f, description: e.target.value }))}
-                        className={`mt-0.5 w-full px-2.5 py-1.5 rounded-lg border text-sm outline-none resize-none ${input}`} />
-                    </div>
-                    <div className="flex gap-2 pt-1">
-                      <button type="button" onClick={() => setEditId(null)}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>
-                        Huỷ
-                      </button>
-                      <button type="button" disabled={saving} onClick={handleSaveEdit}
-                        className="flex-1 py-1.5 rounded-lg text-xs font-bold cursor-pointer bg-[#e8b84b] text-[#09090e] hover:brightness-110 disabled:opacity-50 transition-all">
-                        {saving ? '...' : '✓ Lưu'}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  /* ── VIEW MODE (GROUPED WITH SIZES) ── */
-                  <>
-                    {/* Image */}
-                    <div className={`h-52 overflow-hidden flex items-center justify-center ${isDark ? 'bg-[#0d0d14]' : 'bg-slate-100'}`}>
-                      {group.image_url ? (
-                        <img src={group.image_url} alt={group.baseName} className="max-w-full max-h-full w-full h-full object-contain" />
-                      ) : (
-                        <span className="text-5xl opacity-20">🍿</span>
+                  {/* Top-left Category Pill */}
+                  <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                    <span
+                      className={cn(
+                        'px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider backdrop-blur-md border shadow-xs flex items-center gap-1',
+                        isDark
+                          ? 'bg-[#09090e]/80 text-amber-400 border-white/10'
+                          : 'bg-white/90 text-amber-700 border-amber-200'
                       )}
-                    </div>
-                    <div className="p-4 flex flex-col gap-2.5 flex-1">
-                      <div>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${
-                            isDark ? 'bg-[#e8b84b]/15 text-[#e8b84b]' : 'bg-amber-50 text-amber-700'
-                          }`}>{group.category}</span>
-                          {hasMultiple && (
-                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-[#e8b84b] border border-[#e8b84b]/30">
-                              {group.variants.length} Kích cỡ ({group.variants.map(v => v.size || 'S').join(', ')})
-                            </span>
+                    >
+                      {group.category === 'combo' && <Sparkles className="w-2.5 h-2.5" />}
+                      {group.category === 'popcorn' && <Popcorn className="w-2.5 h-2.5" />}
+                      {group.category === 'drink' && <CupSoda className="w-2.5 h-2.5" />}
+                      {group.category === 'food' && <Utensils className="w-2.5 h-2.5" />}
+                      {group.category === 'snack' && <Cookie className="w-2.5 h-2.5" />}
+                      <span>
+                        {CATEGORY_OPTIONS.find((c) => c.value === group.category)?.label || group.category}
+                      </span>
+                    </span>
+                  </div>
+
+                  {/* Top-right Interactive Status Toggle Switch */}
+                  <div className="absolute top-3 right-3">
+                    <button
+                      type="button"
+                      onClick={(e) => handleToggleGroupActive(group, e)}
+                      title={isGroupActive ? 'Nhấp để tạm ngưng bán' : 'Nhấp để mở bán'}
+                      className={cn(
+                        'px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider backdrop-blur-md border shadow-xs flex items-center gap-1.5 cursor-pointer transition-all select-none',
+                        isGroupActive
+                          ? isDark
+                            ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40 hover:bg-emerald-900/80'
+                            : 'bg-emerald-50/90 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                          : isDark
+                          ? 'bg-[#181824]/90 text-slate-400 border-white/10 hover:bg-[#202030]'
+                          : 'bg-slate-100/95 text-slate-600 border-slate-300 hover:bg-slate-200'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'w-2 h-2 rounded-full transition-transform',
+                          isGroupActive ? 'bg-emerald-400' : 'bg-slate-400'
+                        )}
+                      />
+                      <span>{isGroupActive ? 'Đang bán' : 'Tạm ngưng'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Card Body */}
+                <div className="p-4 flex flex-col flex-1 gap-2.5">
+                  {/* Title & Description */}
+                  <div>
+                    <h3
+                      className={cn(
+                        'font-bold text-sm leading-snug group-hover:text-amber-500 transition-colors',
+                        isDark ? 'text-[#f0ede8]' : 'text-slate-900'
+                      )}
+                    >
+                      {group.baseName}
+                    </h3>
+                    <p className={cn('text-xs mt-1 line-clamp-2 min-h-[32px] leading-relaxed', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                      {group.description || 'Chưa có mô tả chi tiết cho mặt hàng này.'}
+                    </p>
+                  </div>
+
+                  {/* Size Pills Bar if Item has sizes */}
+                  {isSizeCategory && group.variants.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                      <span className={cn('text-[10px] font-bold uppercase tracking-wider', isDark ? 'text-[#6e6c68]' : 'text-slate-400')}>
+                        Kích cỡ:
+                      </span>
+                      {group.variants.map((v) => (
+                        <span
+                          key={v.id}
+                          title={`Size ${v.size}: ${Number(v.price).toLocaleString('vi-VN')}₫ ${!v.is_active ? '(Tạm hết)' : ''}`}
+                          className={cn(
+                            'px-2 py-0.5 rounded-md text-[10px] font-mono-data font-bold border transition-all',
+                            !v.is_active
+                              ? 'opacity-40 line-through border-transparent bg-black/20 text-slate-500'
+                              : v.size === 'L' || v.size === 'XL'
+                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                              : isDark
+                              ? 'bg-white/5 text-[#f0ede8] border-white/10'
+                              : 'bg-slate-100 text-slate-700 border-slate-200'
                           )}
-                        </div>
-                        <h4 className={`font-bold text-sm mt-1 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{group.baseName}</h4>
-                        {group.description && (
-                          <p className={`text-[11px] mt-0.5 line-clamp-2 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>{group.description}</p>
+                        >
+                          {v.size || 'M'}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Card Footer: Price on Left, Edit & Popover on Right */}
+                  <div className="mt-auto pt-3 border-t border-white/5 flex items-center justify-between">
+                    <div>
+                      <span className={cn('text-[10px] font-medium block', isDark ? 'text-[#a09e9a]' : 'text-slate-400')}>
+                        {isSizeCategory && group.variants.length > 1 ? 'Khoảng giá' : 'Giá niêm yết'}
+                      </span>
+                      <div className="font-mono-data font-black text-sm sm:text-base text-amber-500">
+                        {isSizeCategory && group.variants.length > 1 ? (
+                          <>
+                            {Number(group.minPrice).toLocaleString('vi-VN')}₫
+                            {group.minPrice !== group.maxPrice && ` – ${Number(group.maxPrice).toLocaleString('vi-VN')}₫`}
+                          </>
+                        ) : (
+                          `${Number(group.primaryConcession.price).toLocaleString('vi-VN')}₫`
                         )}
                       </div>
+                    </div>
 
-                      {/* Variants Breakdown if Multiple Sizes */}
-                      {hasMultiple ? (
-                        <div className="space-y-1.5 pt-1 border-t border-white/5">
-                          <div className="flex items-center justify-between">
-                            <span className={`text-[10px] font-bold uppercase tracking-wider block ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                              Kích cỡ & Giá bán:
-                            </span>
-                            {group.category !== 'combo' && SIZE_CATEGORIES.includes(group.category) && addingSizeGroupKey !== group.key && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setAddingSizeGroupKey(group.key)
-                                  const existingSizes = new Set(group.variants.map(v => v.size).filter(Boolean))
-                                  const availableSize = SIZE_OPTIONS.find(s => !existingSizes.has(s.value))?.value || 'XL'
-                                  setNewSizeForm({ size: availableSize, price: '' })
-                                }}
-                                className="text-[10px] font-bold text-[#e8b84b] hover:underline cursor-pointer flex items-center gap-1"
-                              >
-                                <span>+ Thêm size</span>
-                              </button>
+                    <div className="flex items-center gap-2 relative">
+                      {/* Primary Action Button: Edit */}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(group)}
+                        className={cn(
+                          'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border cursor-pointer transition-all shadow-xs select-none',
+                          isDark
+                            ? 'bg-white/5 hover:bg-[#e8b84b] text-[#f0ede8] hover:text-[#09090e] border-white/10 hover:border-[#e8b84b]'
+                            : 'bg-white hover:bg-amber-400 text-slate-700 hover:text-slate-950 border-slate-200 hover:border-amber-400'
+                        )}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        <span>Chỉnh sửa</span>
+                      </button>
+
+                      {/* Secondary Action: More Options Dropdown Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setActiveMenuKey((curr) => (curr === group.key ? null : group.key))
+                        }}
+                        className={cn(
+                          'p-1.5 rounded-xl border cursor-pointer transition-all select-none',
+                          isPopoverOpen
+                            ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                            : isDark
+                            ? 'bg-white/5 hover:bg-white/10 text-[#a09e9a] hover:text-[#f0ede8] border-white/10'
+                            : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200'
+                        )}
+                        aria-label="Tùy chọn mở rộng"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+
+                      {/* Popover Dropdown Menu */}
+                      {isPopoverOpen && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className={cn(
+                            'absolute right-0 bottom-full mb-2 w-44 rounded-2xl border shadow-xl p-1.5 z-50 animate-in fade-in zoom-in-95',
+                            isDark ? 'bg-[#161622] border-white/15 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-800'
+                          )}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMenuKey(null)
+                              handleOpenDuplicate(group)
+                            }}
+                            className={cn(
+                              'w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors text-left',
+                              isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'
                             )}
-                          </div>
+                          >
+                            <Copy className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Nhân bản món</span>
+                          </button>
 
-                          <div className="space-y-1">
-                            {group.variants.map(v => (
-                              <div key={v.id} className={`flex items-center justify-between p-1.5 px-2.5 rounded-xl border text-xs ${
-                                isDark ? 'bg-white/[0.02] border-white/5' : 'bg-slate-50 border-slate-200'
-                              } ${!v.is_active ? 'opacity-50' : ''}`}>
-                                <span className="font-bold text-[#e8b84b]">Size {v.size || 'Tiêu chuẩn'}</span>
-                                <span className="font-mono-data font-semibold">{Number(v.price).toLocaleString('vi-VN')}đ</span>
-                                <div className="flex gap-1.5">
-                                  <button type="button"
-                                    onClick={() => {
-                                      setEditId(v.id)
-                                      setCreating(false)
-                                      setAddingSizeGroupKey(null)
-                                      setEditForm({
-                                        name: v.name,
-                                        price: String(v.price),
-                                        category: v.category,
-                                        size: v.size || '',
-                                        description: v.description || '',
-                                        image_url: v.image_url || '',
-                                      })
-                                    }}
-                                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-200 hover:bg-slate-300 text-slate-700'}`}>
-                                    ✏️ Sửa
-                                  </button>
-                                  <button type="button" onClick={() => handleToggleActive(v)}
-                                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${
-                                      v.is_active
-                                        ? isDark ? 'bg-red-900/20 hover:bg-red-900/30 text-red-400' : 'bg-red-50 hover:bg-red-100 text-red-600'
-                                        : isDark ? 'bg-green-900/20 hover:bg-green-900/30 text-green-400' : 'bg-green-50 hover:bg-green-100 text-green-600'
-                                    }`}>
-                                    {v.is_active ? 'Ẩn' : 'Hiện'}
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        /* Single Variant View Controls */
-                        <div className="space-y-2 mt-auto pt-2 border-t border-white/5">
-                          <div className="flex items-center justify-between">
-                            <span className="font-mono-data font-bold text-[#e8b84b]">{Number(group.primaryConcession.price).toLocaleString('vi-VN')}đ</span>
-                            <div className="flex gap-1.5">
-                              {group.category !== 'combo' && SIZE_CATEGORIES.includes(group.category) && addingSizeGroupKey !== group.key && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setAddingSizeGroupKey(group.key)
-                                    const currSize = group.primaryConcession.size
-                                    const nextSize = currSize === 'S' ? 'M' : currSize === 'M' ? 'L' : 'M'
-                                    setNewSizeForm({ size: nextSize, price: '' })
-                                  }}
-                                  className={`px-2 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all border ${
-                                    isDark ? 'border-[#e8b84b]/30 bg-[#e8b84b]/10 text-[#e8b84b] hover:bg-[#e8b84b]/20' : 'border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100'
-                                  }`}
-                                >
-                                  + Thêm Size
-                                </button>
-                              )}
-                              <button type="button"
-                                onClick={() => {
-                                  setEditId(group.primaryConcession.id)
-                                  setCreating(false)
-                                  setAddingSizeGroupKey(null)
-                                  setEditForm({
-                                    name: group.primaryConcession.name,
-                                    price: String(group.primaryConcession.price),
-                                    category: group.primaryConcession.category,
-                                    size: group.primaryConcession.size || '',
-                                    description: group.primaryConcession.description || '',
-                                    image_url: group.primaryConcession.image_url || '',
-                                  })
-                                }}
-                                className={`px-2.5 py-1 rounded-lg text-xs cursor-pointer transition-all ${isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>
-                                ✏️ Sửa
-                              </button>
-                              <button type="button" onClick={() => handleToggleActive(group.primaryConcession)}
-                                className={`px-2.5 py-1 rounded-lg text-xs cursor-pointer transition-all ${
-                                  group.primaryConcession.is_active
-                                    ? isDark ? 'bg-red-900/20 hover:bg-red-900/30 text-red-400' : 'bg-red-50 hover:bg-red-100 text-red-600'
-                                    : isDark ? 'bg-green-900/20 hover:bg-green-900/30 text-green-400' : 'bg-green-50 hover:bg-green-100 text-green-600'
-                                }`}>
-                                {group.primaryConcession.is_active ? '🙈 Ẩn' : '👁️ Hiện'}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Inline Add Size Box */}
-                      {addingSizeGroupKey === group.key && (
-                        <div className={`p-3 rounded-xl border mt-2 space-y-2.5 animate-in fade-in duration-150 ${
-                          isDark ? 'bg-[#161622] border-[#e8b84b]/40' : 'bg-amber-50/80 border-amber-300'
-                        }`}>
-                          <div className="flex items-center justify-between">
-                            <span className={`text-[11px] font-bold uppercase tracking-wide ${isDark ? 'text-[#e8b84b]' : 'text-amber-800'}`}>
-                              + Thêm Size Mới cho "{group.baseName}"
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setAddingSizeGroupKey(null)}
-                              className="text-xs text-[#a09e9a] hover:text-red-400 cursor-pointer"
-                            >
-                              ✕
-                            </button>
-                          </div>
-
-                          <div>
-                            <label className={`text-[11px] font-medium block mb-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-                              Chọn kích cỡ:
-                            </label>
-                            <div className="flex gap-1 flex-wrap">
-                              {SIZE_OPTIONS.map(s => {
-                                const alreadyExists = group.variants.some(v => v.size === s.value)
-                                const isSelected = newSizeForm.size === s.value
-                                return (
-                                  <button
-                                    key={s.value}
-                                    type="button"
-                                    disabled={alreadyExists}
-                                    onClick={() => setNewSizeForm(f => ({ ...f, size: s.value }))}
-                                    className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
-                                      alreadyExists
-                                        ? 'opacity-40 cursor-not-allowed border-transparent bg-black/10 text-slate-500 line-through'
-                                        : isSelected
-                                        ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
-                                        : isDark
-                                        ? 'bg-white/5 text-[#a09e9a] border-white/10 hover:border-white/20'
-                                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                                    }`}
-                                  >
-                                    Size {s.value} {alreadyExists ? '(đã có)' : ''}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className={`text-[11px] font-medium block mb-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-                              Giá bán cho Size {newSizeForm.size} (VNĐ) *:
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              step="1000"
-                              placeholder="Vd: 55000"
-                              value={newSizeForm.price}
-                              onChange={e => setNewSizeForm(f => ({ ...f, price: e.target.value }))}
-                              className={`w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none transition-all ${input}`}
-                            />
-                          </div>
-
-                          <div className="flex gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => setAddingSizeGroupKey(null)}
-                              className={`flex-1 py-1 rounded-lg text-xs font-medium cursor-pointer transition-all ${
-                                isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
-                              }`}
-                            >
-                              Huỷ
-                            </button>
-                            <button
-                              type="button"
-                              disabled={!newSizeForm.price || saving}
-                              onClick={() => handleAddSizeForGroup(group)}
-                              className="flex-1 py-1 rounded-lg text-xs font-bold cursor-pointer bg-[#e8b84b] text-[#09090e] hover:brightness-110 disabled:opacity-50 transition-all shadow-sm"
-                            >
-                              {saving ? '...' : '✓ Thêm Size'}
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMenuKey(null)
+                              handleToggleGroupActive(group)
+                            }}
+                            className={cn(
+                              'w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors text-left',
+                              isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'
+                            )}
+                          >
+                            {isGroupActive ? (
+                              <>
+                                <EyeOff className="w-3.5 h-3.5 text-rose-400" />
+                                <span>Tạm ngưng bán</span>
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                                <span>Mở bán lại</span>
+                              </>
+                            )}
+                          </button>
                         </div>
                       )}
                     </div>
-                  </>
-                )}
+                  </div>
+                </div>
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* ── CENTERED MODAL (ENTERPRISE F&B MANAGEMENT) ── */}
+      {isDrawerOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 md:p-6 animate-in fade-in duration-200">
+          {/* Backdrop Overlay */}
+          <div
+            onClick={() => setIsDrawerOpen(false)}
+            className="fixed inset-0 bg-black/70 backdrop-blur-xs transition-opacity"
+          />
+
+          {/* Modal Container (Centered) */}
+          <div
+            className={cn(
+              'relative z-10 w-full max-w-2xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col border overflow-hidden animate-in zoom-in-95 fade-in duration-200',
+              isDark ? 'bg-[#111118] border-white/15 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+            )}
+          >
+            {/* Drawer Header (Sticky) */}
+            <div className="flex items-center justify-between p-5 sm:p-6 border-b border-white/10 shrink-0">
+              <div className="flex items-center gap-3">
+                <span className={cn('p-2.5 rounded-2xl text-amber-500', isDark ? 'bg-amber-500/10' : 'bg-amber-50')}>
+                  {drawerMode === 'create' ? (
+                    <Plus className="w-5 h-5 stroke-[2.5]" />
+                  ) : drawerMode === 'duplicate' ? (
+                    <Copy className="w-5 h-5" />
+                  ) : (
+                    <Pencil className="w-5 h-5" />
+                  )}
+                </span>
+                <div>
+                  <h3 className={cn('font-display font-black text-lg', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                    {drawerMode === 'create'
+                      ? 'Thêm Món F&B Mới'
+                      : drawerMode === 'duplicate'
+                      ? 'Nhân Bản Mặt Hàng F&B'
+                      : `Chỉnh Sửa: ${drawerForm.baseName || 'Mặt Hàng'}`}
+                  </h3>
+                  <p className={cn('text-xs mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                    Quản lý thông tin chi tiết, hình ảnh, phân loại và bảng giá kích cỡ
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsDrawerOpen(false)}
+                className={cn(
+                  'p-2 rounded-xl text-[#a09e9a] hover:text-[#f0ede8] transition-colors cursor-pointer',
+                  isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'
+                )}
+                aria-label="Đóng ngăn kéo"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Drawer Scrollable Content */}
+            <form id="concession-drawer-form" onSubmit={handleSaveDrawer} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
+              {/* Section 1: Basic Info & Image */}
+              <div className="space-y-4">
+                <h4 className={cn('text-xs font-bold uppercase tracking-wider pb-1 border-b border-white/5 flex items-center gap-2', isDark ? 'text-amber-400' : 'text-amber-700')}>
+                  <span>1. Thông Tin Nhận Diện & Hình Ảnh</span>
+                </h4>
+
+                <div>
+                  <label className={cn('text-xs font-bold block mb-1.5 uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                    Ảnh Đại Diện Món
+                  </label>
+                  <ImageUploadField
+                    value={drawerForm.image_url}
+                    onChange={(url) => setDrawerForm((f) => ({ ...f, image_url: url }))}
+                    isDark={isDark}
+                    compact
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className={cn('text-xs font-bold block mb-1.5 uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      Tên Mặt Hàng / Combo <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={drawerForm.baseName}
+                      onChange={(e) => setDrawerForm((f) => ({ ...f, baseName: e.target.value }))}
+                      placeholder="Vd: Cốc nước ngọt CocaCola, Combo 1 Bắp + 2 Nước..."
+                      className={cn('w-full px-3.5 py-2.5 rounded-xl border text-xs outline-none transition-all', inputCls)}
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className={cn('text-xs font-bold block mb-1.5 uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      Phân Loại Danh Mục <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={drawerForm.category}
+                      onChange={(e) => {
+                        const newCat = e.target.value
+                        setDrawerForm((f) => {
+                          const willBeSizeCat = SIZE_CATEGORIES.includes(newCat)
+                          return {
+                            ...f,
+                            category: newCat,
+                            variants: willBeSizeCat && f.variants.length === 0
+                              ? [
+                                  { size: 'M', price: f.singlePrice || '45000', is_active: true },
+                                  { size: 'L', price: '55000', is_active: true },
+                                ]
+                              : f.variants,
+                          }
+                        })
+                      }}
+                      className={cn('w-full px-3 py-2.5 rounded-xl border text-xs outline-none transition-all cursor-pointer', inputCls)}
+                    >
+                      {CATEGORY_OPTIONS.map((cat) => (
+                        <option key={cat.value} value={cat.value} className={isDark ? 'bg-[#111118]' : 'bg-white'}>
+                          {cat.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className={cn('text-xs font-bold block mb-1.5 uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      Mô Tả / Thành Phần Chi Tiết
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={drawerForm.description}
+                      onChange={(e) => setDrawerForm((f) => ({ ...f, description: e.target.value }))}
+                      className={cn('w-full px-3.5 py-2 rounded-xl border text-xs outline-none transition-all resize-none', inputCls)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Pricing & Variants Matrix */}
+              <div className="space-y-4 pt-2">
+                <h4 className={cn('text-xs font-bold uppercase tracking-wider pb-1 border-b border-white/5 flex items-center justify-between', isDark ? 'text-amber-400' : 'text-amber-700')}>
+                  <span>2. Quản Lý Kích Cỡ & Bảng Giá Niêm Yết</span>
+                  {SIZE_CATEGORIES.includes(drawerForm.category) && (
+                    <span className="text-[10px] font-normal text-[#a09e9a]">
+                      Đang có {drawerForm.variants.length} kích cỡ
+                    </span>
+                  )}
+                </h4>
+
+                {SIZE_CATEGORIES.includes(drawerForm.category) ? (
+                  /* Matrix Table for Popcorn & Drinks */
+                  <div className="space-y-3">
+                    <div className={cn('rounded-2xl border overflow-hidden', isDark ? 'border-white/10' : 'border-slate-200')}>
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className={cn('border-b text-[10px] uppercase tracking-wider font-bold', isDark ? 'bg-white/[0.03] border-white/10 text-[#a09e9a]' : 'bg-slate-50 border-slate-200 text-slate-600')}>
+                            <th className="py-2.5 px-3">Kích cỡ</th>
+                            <th className="py-2.5 px-3">Giá bán (VNĐ)</th>
+                            <th className="py-2.5 px-3 text-center">Trạng thái</th>
+                            <th className="py-2.5 px-3 text-right">Xóa</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {drawerForm.variants.map((v, idx) => (
+                            <tr key={idx} className={cn('transition-colors', !v.is_active && 'opacity-60')}>
+                              {/* Size Badge */}
+                              <td className="py-2.5 px-3">
+                                <span className={cn('px-2.5 py-1 rounded-lg text-xs font-mono-data font-bold border', isDark ? 'bg-white/5 border-white/10 text-[#f0ede8]' : 'bg-slate-100 border-slate-200 text-slate-800')}>
+                                  Size {v.size}
+                                </span>
+                              </td>
+
+                              {/* Price Input */}
+                              <td className="py-2.5 px-3">
+                                <div className="relative max-w-[140px]">
+                                  <input
+                                    type="number"
+                                    required
+                                    min="0"
+                                    step="1000"
+                                    value={v.price}
+                                    onChange={(e) => handleUpdateSizeInMatrix(idx, { price: e.target.value })}
+                                    className={cn('w-full px-2.5 py-1.5 pr-6 rounded-lg border text-xs font-mono-data font-bold outline-none', inputCls)}
+                                    placeholder="50000"
+                                  />
+                                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[#a09e9a]">₫</span>
+                                </div>
+                              </td>
+
+                              {/* Toggle active switch for single size */}
+                              <td className="py-2.5 px-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateSizeInMatrix(idx, { is_active: !v.is_active })}
+                                  className={cn(
+                                    'px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border cursor-pointer transition-all',
+                                    v.is_active
+                                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                      : 'bg-white/5 text-slate-400 border-white/10'
+                                  )}
+                                >
+                                  {v.is_active ? 'Đang bán' : 'Tạm hết'}
+                                </button>
+                              </td>
+
+                              {/* Delete row */}
+                              <td className="py-2.5 px-3 text-right">
+                                <button
+                                  type="button"
+                                  disabled={drawerForm.variants.length <= 1}
+                                  onClick={() => handleRemoveSizeFromMatrix(idx)}
+                                  className={cn(
+                                    'p-1.5 rounded-lg text-[#a09e9a] hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed transition-all'
+                                  )}
+                                  title="Xóa kích cỡ này"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Add Missing Size Buttons */}
+                    {ALL_SIZES.filter((s) => !drawerForm.variants.some((v) => v.size === s)).length > 0 && (
+                      <div className="pt-1 flex items-center gap-2 flex-wrap">
+                        <span className={cn('text-[11px] font-semibold', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                          Bổ sung kích cỡ:
+                        </span>
+                        {ALL_SIZES.filter((s) => !drawerForm.variants.some((v) => v.size === s)).map((s) => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => handleAddSizeToMatrix(s)}
+                            className={cn(
+                              'px-2.5 py-1 rounded-xl text-xs font-bold border border-dashed flex items-center gap-1 cursor-pointer transition-all',
+                              isDark
+                                ? 'border-amber-500/30 text-amber-400 hover:bg-amber-500/10'
+                                : 'border-amber-400 text-amber-800 hover:bg-amber-50'
+                            )}
+                          >
+                            <Plus className="w-3 h-3 stroke-[2.5]" />
+                            <span>Size {s}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Single Price & Status for Combo / Food / Snack */
+                  <div className="space-y-4">
+                    <div>
+                      <label className={cn('text-xs font-bold block mb-1.5 uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                        Giá Bán Niêm Yết (VNĐ) <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          required
+                          min="0"
+                          step="1000"
+                          value={drawerForm.singlePrice}
+                          onChange={(e) => setDrawerForm((f) => ({ ...f, singlePrice: e.target.value }))}
+                          placeholder="85000"
+                          className={cn('w-full px-3.5 py-2.5 pr-8 rounded-xl border text-xs font-mono-data font-bold outline-none transition-all', inputCls)}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#a09e9a]">₫</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-white/[0.02]">
+                      <div>
+                        <span className={cn('text-xs font-bold block', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>
+                          Trạng Thái Kinh Doanh
+                        </span>
+                        <span className={cn('text-[11px]', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                          {drawerForm.singleIsActive ? 'Hiển thị ngay cho khách hàng đặt mua' : 'Tạm ẩn không bán'}
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setDrawerForm((f) => ({ ...f, singleIsActive: !f.singleIsActive }))}
+                        className={cn(
+                          'px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5',
+                          drawerForm.singleIsActive
+                            ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                            : isDark
+                            ? 'bg-white/5 border-white/10 text-slate-400'
+                            : 'bg-slate-100 border-slate-200 text-slate-600'
+                        )}
+                      >
+                        <span className={cn('w-2 h-2 rounded-full', drawerForm.singleIsActive ? 'bg-emerald-400' : 'bg-slate-400')} />
+                        <span>{drawerForm.singleIsActive ? 'Đang bán' : 'Tạm ẩn'}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </form>
+
+            {/* Drawer Sticky Footer */}
+            <div className="p-4 sm:p-5 border-t border-white/10 shrink-0 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDrawerOpen(false)}
+                className={cn(
+                  'px-5 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all',
+                  isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                )}
+              >
+                Hủy Bỏ
+              </button>
+
+              <button
+                form="concession-drawer-form"
+                type="submit"
+                disabled={saving}
+                className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-[#e8b84b] hover:bg-[#dfad3e] text-[#09090e] transition-all cursor-pointer shadow-md disabled:opacity-50"
+              >
+                {saving ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Đang lưu...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4 stroke-[2.5]" />
+                    <span>
+                      {drawerMode === 'create'
+                        ? 'Tạo Món Mới'
+                        : drawerMode === 'duplicate'
+                        ? 'Lưu Bản Sao Mới'
+                        : 'Lưu Thay Đổi'}
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+// ─────────────────────────────────────────
+// VoucherAdminTab — Enterprise Promotion & Voucher Management
+// ─────────────────────────────────────────
+function VoucherAdminTab({ isDark }: { isDark: boolean }) {
+  const [vouchers, setVouchers] = useState<VoucherAdminItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedScopeTab, setSelectedScopeTab] = useState<'all' | 'rooms' | 'concessions' | 'loyalty' | 'expired'>('all')
+  const [notification, setNotification] = useState<{ text: string; type: 'success' | 'error' | 'warning' } | null>(null)
+  const [copiedCode, setCopiedCode] = useState<string | null>(null)
+
+  // Drawer State
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [drawerMode, setDrawerMode] = useState<'create' | 'edit'>('create')
+  const [formData, setFormData] = useState<{
+    id?: number
+    code: string
+    discount_type: 'percent' | 'fixed'
+    discount_value: string
+    min_spend: string
+    max_discount: string
+    applicable_scope: 'all' | 'rooms' | 'concessions' | 'loyalty'
+    target_room_type: string
+    target_category: string
+    min_loyalty_tier: string
+    expiry_date: string
+    is_first_booking_only: boolean
+    max_uses_per_user: string
+    is_active: boolean
+  }>({
+    code: '',
+    discount_type: 'percent',
+    discount_value: '10',
+    min_spend: '0',
+    max_discount: '50000',
+    applicable_scope: 'all',
+    target_room_type: 'VIP',
+    target_category: 'combo',
+    min_loyalty_tier: '',
+    expiry_date: '2026-12-31',
+    is_first_booking_only: false,
+    max_uses_per_user: '1',
+    is_active: true,
+  })
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 8
+
+  const showToast = (text: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setNotification({ text, type })
+    setTimeout(() => {
+      setNotification((curr) => (curr?.text === text ? null : curr))
+    }, 3500)
+  }
+
+  async function fetchVouchers() {
+    setLoading(true)
+    try {
+      const { data } = await apiClient.get('/api/v1/vouchers/admin/all')
+      setVouchers(data || [])
+    } catch {
+      showToast('Không thể tải danh sách mã khuyến mãi', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchVouchers()
+  }, [])
+
+  // Close modal when pressing ESC
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && isDrawerOpen) {
+        setIsDrawerOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isDrawerOpen])
+
+  // Scope Tabs definition
+  const SCOPE_TABS = [
+    { value: 'all', label: 'Tất Cả Voucher', icon: Layers, count: vouchers.length },
+    {
+      value: 'rooms',
+      label: 'Phòng Chiếu (VIP / IMAX)',
+      icon: Building2,
+      count: vouchers.filter((v) => v.applicable_scope === 'rooms' || Boolean(v.target_room_type) || v.code.includes('VIP')).length,
+    },
+    {
+      value: 'concessions',
+      label: 'Bắp Nước & F&B',
+      icon: Popcorn,
+      count: vouchers.filter((v) => v.applicable_scope === 'concessions' || Boolean(v.target_category)).length,
+    },
+    {
+      value: 'loyalty',
+      label: 'Hạng Thành Viên',
+      icon: Crown,
+      count: vouchers.filter((v) => Boolean(v.min_loyalty_tier) || v.applicable_scope === 'loyalty').length,
+    },
+    {
+      value: 'expired',
+      label: 'Hết Hạn / Tạm Khóa',
+      icon: Clock,
+      count: vouchers.filter((v) => !v.is_active || (v.expiry_date && new Date(v.expiry_date) < new Date())).length,
+    },
+  ]
+
+  // Filtered Vouchers
+  const filteredVouchers = useMemo(() => {
+    let result = vouchers
+
+    if (selectedScopeTab === 'rooms') {
+      result = result.filter((v) => v.applicable_scope === 'rooms' || Boolean(v.target_room_type) || v.code.includes('VIP'))
+    } else if (selectedScopeTab === 'concessions') {
+      result = result.filter((v) => v.applicable_scope === 'concessions' || Boolean(v.target_category))
+    } else if (selectedScopeTab === 'loyalty') {
+      result = result.filter((v) => Boolean(v.min_loyalty_tier) || v.applicable_scope === 'loyalty')
+    } else if (selectedScopeTab === 'expired') {
+      const now = new Date()
+      result = result.filter((v) => !v.is_active || (v.expiry_date && new Date(v.expiry_date) < now))
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toUpperCase()
+      result = result.filter((v) => v.code.includes(q))
+    }
+
+    return result
+  }, [vouchers, selectedScopeTab, searchQuery])
+
+  // Open Drawer in Create Mode
+  function handleOpenCreate() {
+    setDrawerMode('create')
+    let defaultScope: 'all' | 'rooms' | 'concessions' | 'loyalty' = 'all'
+    if (selectedScopeTab === 'rooms') defaultScope = 'rooms'
+    else if (selectedScopeTab === 'concessions') defaultScope = 'concessions'
+    else if (selectedScopeTab === 'loyalty') defaultScope = 'loyalty'
+
+    setFormData({
+      code: '',
+      discount_type: 'percent',
+      discount_value: '10',
+      min_spend: '0',
+      max_discount: '50000',
+      applicable_scope: defaultScope,
+      target_room_type: 'VIP',
+      target_category: 'combo',
+      min_loyalty_tier: defaultScope === 'loyalty' ? 'gold' : '',
+      expiry_date: '2026-12-31',
+      is_first_booking_only: false,
+      max_uses_per_user: '1',
+      is_active: true,
+    })
+    setIsDrawerOpen(true)
+  }
+
+  // Open Drawer in Edit Mode
+  function handleOpenEdit(voucher: VoucherAdminItem) {
+    setDrawerMode('edit')
+    setFormData({
+      id: voucher.id,
+      code: voucher.code,
+      discount_type: voucher.discount_type,
+      discount_value: String(voucher.discount_value),
+      min_spend: String(voucher.min_spend || 0),
+      max_discount: voucher.max_discount ? String(voucher.max_discount) : '',
+      applicable_scope: (voucher.applicable_scope as any) || (voucher.min_loyalty_tier ? 'loyalty' : voucher.target_room_type ? 'rooms' : voucher.target_category ? 'concessions' : 'all'),
+      target_room_type: voucher.target_room_type || 'VIP',
+      target_category: voucher.target_category || 'combo',
+      min_loyalty_tier: voucher.min_loyalty_tier || '',
+      expiry_date: voucher.expiry_date || '',
+      is_first_booking_only: voucher.is_first_booking_only ?? false,
+      max_uses_per_user: String(voucher.max_uses_per_user || 1),
+      is_active: voucher.is_active,
+    })
+    setIsDrawerOpen(true)
+  }
+
+  // Quick Toggle Voucher Active Status
+  async function handleToggleActive(voucher: VoucherAdminItem) {
+    try {
+      await apiClient.put(`/api/v1/vouchers/${voucher.id}`, {
+        is_active: !voucher.is_active,
+      })
+      showToast(`Đã ${!voucher.is_active ? 'kích hoạt' : 'tạm khóa'} mã voucher "${voucher.code}"`)
+      await fetchVouchers()
+    } catch {
+      showToast('Lỗi khi cập nhật trạng thái voucher', 'error')
+    }
+  }
+
+  // Delete Voucher
+  async function handleDeleteVoucher(voucher: VoucherAdminItem) {
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn voucher "${voucher.code}"?`)) return
+    try {
+      await apiClient.delete(`/api/v1/vouchers/${voucher.id}`)
+      showToast(`Đã xóa voucher "${voucher.code}" thành công`)
+      await fetchVouchers()
+    } catch {
+      showToast('Không thể xóa voucher này', 'error')
+    }
+  }
+
+  // Copy code to clipboard
+  function handleCopyCode(code: string) {
+    navigator.clipboard.writeText(code)
+    setCopiedCode(code)
+    setTimeout(() => setCopiedCode(null), 2000)
+  }
+
+  // Submit Drawer Form
+  async function handleSaveDrawer(e: React.FormEvent) {
+    e.preventDefault()
+    const code = formData.code.trim().toUpperCase()
+    if (!code) {
+      showToast('Vui lòng nhập mã voucher', 'error')
+      return
+    }
+
+    const discountVal = parseFloat(formData.discount_value)
+    if (isNaN(discountVal) || discountVal <= 0) {
+      showToast('Giá trị giảm giá không hợp lệ', 'error')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const payload: any = {
+        code,
+        discount_type: formData.discount_type,
+        discount_value: discountVal,
+        min_spend: parseFloat(formData.min_spend || '0'),
+        max_discount: formData.discount_type === 'percent' && formData.max_discount ? parseFloat(formData.max_discount) : null,
+        applicable_scope: formData.applicable_scope,
+        target_room_type: formData.applicable_scope === 'rooms' ? formData.target_room_type : null,
+        target_category: formData.applicable_scope === 'concessions' ? formData.target_category : null,
+        min_loyalty_tier: formData.applicable_scope === 'loyalty' || formData.min_loyalty_tier ? (formData.min_loyalty_tier || null) : null,
+        expiry_date: formData.expiry_date || null,
+        is_first_booking_only: formData.is_first_booking_only,
+        max_uses_per_user: parseInt(formData.max_uses_per_user || '1'),
+        is_active: formData.is_active,
+      }
+
+      if (drawerMode === 'create') {
+        await apiClient.post('/api/v1/vouchers/', payload)
+        showToast(`Đã tạo thành công voucher "${code}"`)
+      } else if (formData.id) {
+        await apiClient.put(`/api/v1/vouchers/${formData.id}`, payload)
+        showToast(`Đã cập nhật thông tin voucher "${code}"`)
+      }
+
+      setIsDrawerOpen(false)
+      await fetchVouchers()
+    } catch (err: any) {
+      const errMsg = err.response?.data?.detail || 'Lỗi khi lưu voucher'
+      showToast(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg), 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const cardCls = isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+  const inputCls = isDark
+    ? 'bg-[#0d0d14] border-white/10 text-[#f0ede8] placeholder:text-[#6e6c68] focus:border-amber-400/50 focus:ring-1 focus:ring-amber-400/30'
+    : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-200'
+
+  return (
+    <div className="space-y-6">
+      {/* Toast Notification */}
+      {notification && (
+        <div className="fixed bottom-6 right-6 z-[9999] animate-in fade-in slide-in-from-bottom-4">
+          <div
+            className={cn(
+              'px-4 py-3 rounded-2xl border shadow-2xl flex items-center gap-3 text-xs font-semibold backdrop-blur-xl',
+              notification.type === 'success'
+                ? isDark
+                  ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200'
+                  : 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                : notification.type === 'warning'
+                ? isDark
+                  ? 'bg-amber-950/90 border-amber-500/40 text-amber-200'
+                  : 'bg-amber-50 border-amber-300 text-amber-900'
+                : isDark
+                ? 'bg-rose-950/90 border-rose-500/40 text-rose-200'
+                : 'bg-rose-50 border-rose-300 text-rose-900'
+            )}
+          >
+            {notification.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : notification.type === 'warning' ? (
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            )}
+            <span>{notification.text}</span>
+            <button
+              type="button"
+              onClick={() => setNotification(null)}
+              className="p-1 rounded-lg hover:bg-white/10 opacity-70 hover:opacity-100 transition-opacity ml-2"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Top Header Card */}
+      <div className={cn('p-5 sm:p-6 rounded-2xl border transition-all shadow-xs', cardCls)}>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5">
+              <span className={cn('p-2 rounded-xl text-amber-500', isDark ? 'bg-amber-500/10' : 'bg-amber-50')}>
+                <Ticket className="w-5 h-5 stroke-[2]" />
+              </span>
+              <h2 className={cn('font-display font-black text-xl tracking-tight', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                Quản Lý Mã Khuyến Mãi & Voucher
+              </h2>
+            </div>
+            <p className={cn('text-xs pl-10 leading-relaxed', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+              Thiết lập các chương trình ưu đãi, phân loại voucher riêng cho từng phòng chiếu, bắp nước, hạng thành viên và kiểm soát thời hạn áp dụng.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 sm:self-auto self-start">
+            <button
+              type="button"
+              onClick={handleOpenCreate}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-[#e8b84b] hover:bg-[#dfad3e] text-[#09090e] shadow-md transition-all cursor-pointer select-none"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Tạo Voucher Mới</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Scope Toolbar & Search Bar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Scope Tabs */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {SCOPE_TABS.map((tab) => {
+            const Icon = tab.icon
+            const isActive = selectedScopeTab === tab.value
+
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => {
+                  setSelectedScopeTab(tab.value as any)
+                  setCurrentPage(1)
+                }}
+                className={cn(
+                  'flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border select-none',
+                  isActive
+                    ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
+                    : isDark
+                    ? 'bg-[#111118] text-[#a09e9a] border-white/10 hover:text-[#f0ede8] hover:border-white/20'
+                    : 'bg-white text-slate-600 border-slate-200 hover:text-slate-900 hover:border-slate-300'
+                )}
+              >
+                <Icon className={cn('w-3.5 h-3.5', isActive ? 'text-[#09090e]' : 'text-amber-500')} />
+                <span>{tab.label}</span>
+                <span
+                  className={cn(
+                    'px-1.5 py-0.5 rounded-full text-[10px] font-mono-data font-bold',
+                    isActive
+                      ? 'bg-black/20 text-[#09090e]'
+                      : isDark
+                      ? 'bg-white/10 text-[#a09e9a]'
+                      : 'bg-slate-100 text-slate-500'
+                  )}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Quick Search */}
+        <div className="relative min-w-[220px] md:w-64">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#a09e9a]" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value)
+              setCurrentPage(1)
+            }}
+            placeholder="Tìm theo mã voucher..."
+            className={cn('w-full pl-9 pr-8 py-2 rounded-xl border text-xs outline-none transition-all uppercase font-mono-data', inputCls)}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#a09e9a] hover:text-[#f0ede8] p-0.5 rounded"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Vouchers Table Card (Full-width Spacious Enterprise Table) */}
+      <div className={cn('border rounded-2xl p-5 sm:p-6 shadow-xl space-y-4', cardCls)}>
+        {loading ? (
+          <div className="p-12 text-center flex flex-col items-center justify-center gap-3">
+            <RefreshCw className="w-7 h-7 animate-spin text-amber-500" />
+            <p className={cn('text-xs font-semibold', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+              Đang tải danh sách mã voucher...
+            </p>
+          </div>
+        ) : filteredVouchers.length === 0 ? (
+          <div className="p-12 text-center flex flex-col items-center justify-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500">
+              <Ticket className="w-6 h-6 stroke-[1.5]" />
+            </div>
+            <div>
+              <h4 className={cn('font-bold text-sm', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                Không tìm thấy mã voucher nào
+              </h4>
+              <p className={cn('text-xs mt-1 max-w-sm', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                {searchQuery
+                  ? `Không có mã nào khớp với từ khóa "${searchQuery}".`
+                  : 'Chưa có voucher nào trong phần này. Hãy bấm "Tạo Voucher Mới" để thiết lập mã ưu đãi.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleOpenCreate}
+              className="mt-1 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-[#e8b84b] text-[#09090e] hover:bg-[#dfad3e] transition-all cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Tạo Voucher Ngay</span>
+            </button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className={cn('border-b text-[10px] uppercase font-bold tracking-wider', isDark ? 'border-white/10 text-[#a09e9a]' : 'border-slate-200 text-slate-600')}>
+                  <th className="py-3 px-3">Mã Voucher</th>
+                  <th className="py-3 px-3">Mức Giảm & Điều Kiện</th>
+                  <th className="py-3 px-3">Phạm Vi Áp Dụng</th>
+                  <th className="py-3 px-3">Thời Hạn Sử Dụng</th>
+                  <th className="py-3 px-3 text-center">Trạng Thái</th>
+                  <th className="py-3 px-3 text-right">Thao Tác</th>
+                </tr>
+              </thead>
+              <tbody className={isDark ? 'divide-y divide-white/5' : 'divide-y divide-slate-200'}>
+                {filteredVouchers
+                  .slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+                  .map((v) => {
+                    const isExpired = v.expiry_date && new Date(v.expiry_date) < new Date()
+
+                    return (
+                      <tr key={v.id} className={cn('transition-colors group', !v.is_active ? 'opacity-60' : 'hover:bg-white/[0.02]')}>
+                        {/* Code Column */}
+                        <td className="py-3.5 px-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono-data font-black text-sm text-[#e8b84b] tracking-wider">
+                              {v.code}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyCode(v.code)}
+                              title="Sao chép mã"
+                              className={cn(
+                                'p-1 rounded-md text-[#a09e9a] hover:text-[#f0ede8] transition-colors cursor-pointer',
+                                isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'
+                              )}
+                            >
+                              {copiedCode === v.code ? (
+                                <Check className="w-3 h-3 text-emerald-400" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                          {v.is_first_booking_only && (
+                            <span className="inline-block mt-1 text-[10px] font-semibold text-sky-400 bg-sky-500/10 border border-sky-500/25 px-2 py-0.5 rounded-md">
+                              Đơn đầu tiên
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Discount & Spend */}
+                        <td className="py-3.5 px-3">
+                          <div className="font-bold text-sm text-emerald-400">
+                            {v.discount_type === 'percent' ? (
+                              <>
+                                Giảm <span className="font-mono-data">{v.discount_value}%</span>
+                                {v.max_discount && (
+                                  <span className="text-[11px] font-normal text-[#a09e9a] block">
+                                    Tối đa <span className="font-mono-data">{Number(v.max_discount).toLocaleString('vi-VN')}₫</span>
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <>Giảm <span className="font-mono-data">{Number(v.discount_value).toLocaleString('vi-VN')}₫</span></>
+                            )}
+                          </div>
+                          {v.min_spend > 0 && (
+                            <span className="text-[11px] text-[#a09e9a] block mt-0.5">
+                              Đơn tối thiểu {Number(v.min_spend).toLocaleString('vi-VN')}₫
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Scope Column */}
+                        <td className="py-3.5 px-3">
+                          {v.applicable_scope === 'rooms' || v.target_room_type || v.code.includes('VIP') ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                              <Building2 className="w-3.5 h-3.5" />
+                              <span>Phòng {v.target_room_type || 'VIP / Đặc biệt'}</span>
+                            </span>
+                          ) : v.applicable_scope === 'concessions' || v.target_category ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-orange-500/10 border border-orange-500/30 text-orange-400">
+                              <Popcorn className="w-3.5 h-3.5" />
+                              <span>Bắp Nước F&B</span>
+                            </span>
+                          ) : v.min_loyalty_tier || v.applicable_scope === 'loyalty' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-500/10 border border-purple-500/30 text-purple-400 capitalize">
+                              <Crown className="w-3.5 h-3.5" />
+                              <span>
+                                {v.min_loyalty_tier === 'diamond'
+                                  ? 'Hạng Kim Cương'
+                                  : v.min_loyalty_tier === 'gold'
+                                  ? 'Hạng Vàng+'
+                                  : v.min_loyalty_tier === 'silver'
+                                  ? 'Hạng Bạc+'
+                                  : 'Hạng Đồng+'}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-white/5 border border-white/10 text-[#a09e9a]">
+                              <Layers className="w-3.5 h-3.5" />
+                              <span>Toàn hệ thống</span>
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Expiry Column */}
+                        <td className="py-3.5 px-3">
+                          <div className="text-xs font-semibold">
+                            {v.expiry_date ? formatVNFullDate(v.expiry_date) : 'Vô thời hạn'}
+                          </div>
+                          <span
+                            className={cn(
+                              'text-[10px] font-bold uppercase tracking-wider block mt-0.5',
+                              isExpired ? 'text-rose-400' : 'text-emerald-400'
+                            )}
+                          >
+                            {isExpired ? 'Đã hết hạn' : 'Còn hiệu lực'}
+                          </span>
+                        </td>
+
+                        {/* Active Toggle Switch Column */}
+                        <td className="py-3.5 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleActive(v)}
+                            title={v.is_active ? 'Nhấp để tạm khóa mã này' : 'Nhấp để kích hoạt lại'}
+                            className={cn(
+                              'px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border cursor-pointer transition-all inline-flex items-center gap-1.5',
+                              v.is_active
+                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'
+                                : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
+                            )}
+                          >
+                            <span className={cn('w-1.5 h-1.5 rounded-full', v.is_active ? 'bg-emerald-400' : 'bg-slate-400')} />
+                            <span>{v.is_active ? 'Đang bật' : 'Đã khóa'}</span>
+                          </button>
+                        </td>
+
+                        {/* Action Buttons Column */}
+                        <td className="py-3.5 px-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(v)}
+                              title="Chỉnh sửa voucher"
+                              className={cn(
+                                'flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold border cursor-pointer transition-all',
+                                isDark
+                                  ? 'bg-white/5 hover:bg-white/10 text-[#f0ede8] border-white/10'
+                                  : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                              )}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              <span>Sửa</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteVoucher(v)}
+                              title="Xóa voucher"
+                              className="p-1.5 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 cursor-pointer transition-all"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {filteredVouchers.length > PAGE_SIZE && (
+          <PaginationControl
+            currentPage={currentPage}
+            totalItems={filteredVouchers.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
+        )}
+      </div>
+
+      {/* ── CENTERED MODAL: CREATE / EDIT VOUCHER ── */}
+      {isDrawerOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 md:p-6 animate-in fade-in duration-200">
+          <div onClick={() => setIsDrawerOpen(false)} className="fixed inset-0 bg-black/70 backdrop-blur-xs transition-opacity" />
+
+          <div
+            className={cn(
+              'relative z-10 w-full max-w-2xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col border overflow-hidden animate-in zoom-in-95 fade-in duration-200',
+              isDark ? 'bg-[#111118] border-white/15 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+            )}
+          >
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between p-5 sm:p-6 border-b border-white/10 shrink-0">
+              <div className="flex items-center gap-3">
+                <span className={cn('p-2.5 rounded-2xl text-amber-500', isDark ? 'bg-amber-500/10' : 'bg-amber-50')}>
+                  {drawerMode === 'create' ? <Plus className="w-5 h-5 stroke-[2.5]" /> : <Pencil className="w-5 h-5" />}
+                </span>
+                <div>
+                  <h3 className={cn('font-display font-black text-lg', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                    {drawerMode === 'create' ? 'Tạo Mã Khuyến Mãi Mới' : `Chỉnh Sửa Voucher: ${formData.code}`}
+                  </h3>
+                  <p className={cn('text-xs mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                    Thiết lập quy tắc giảm giá, phân loại phạm vi áp dụng và thời hạn hiệu lực
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsDrawerOpen(false)}
+                className={cn('p-2 rounded-xl text-[#a09e9a] hover:text-[#f0ede8] transition-colors cursor-pointer', isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100')}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Drawer Form Body */}
+            <form id="voucher-drawer-form" onSubmit={handleSaveDrawer} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
+              {/* Section 1: Code & Discount */}
+              <div className="space-y-4">
+                <h4 className={cn('text-xs font-bold uppercase tracking-wider pb-1 border-b border-white/5 flex items-center gap-2', isDark ? 'text-amber-400' : 'text-amber-700')}>
+                  <span>1. Mã Khuyến Mãi & Mức Giảm Giá</span>
+                </h4>
+
+                <div>
+                  <label className={cn('text-xs font-bold block mb-1.5 uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                    Mã Giảm Giá (Code) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.code}
+                    onChange={(e) => setFormData((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
+                    placeholder="Vd: SUMMER2026, VIP50K, POPCORNFREE..."
+                    className={cn('w-full px-3.5 py-2.5 rounded-xl border text-xs font-mono-data font-bold uppercase outline-none transition-all', inputCls)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={cn('text-xs font-bold block mb-1.5 uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      Loại Giảm Giá <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={formData.discount_type}
+                      onChange={(e) => setFormData((f) => ({ ...f, discount_type: e.target.value as any }))}
+                      className={cn('w-full px-3 py-2.5 rounded-xl border text-xs outline-none transition-all cursor-pointer', inputCls)}
+                    >
+                      <option value="percent">Theo Phần Trăm (%)</option>
+                      <option value="fixed">Số Tiền Cố Định (VNĐ)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={cn('text-xs font-bold block mb-1.5 uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      Giá Trị Giảm {formData.discount_type === 'percent' ? '(%)' : '(VNĐ)'} <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      step={formData.discount_type === 'percent' ? 1 : 1000}
+                      value={formData.discount_value}
+                      onChange={(e) => setFormData((f) => ({ ...f, discount_value: e.target.value }))}
+                      placeholder={formData.discount_type === 'percent' ? '15' : '50000'}
+                      className={cn('w-full px-3.5 py-2.5 rounded-xl border text-xs font-mono-data font-bold outline-none transition-all', inputCls)}
+                    />
+                  </div>
+                </div>
+
+                {formData.discount_type === 'percent' && (
+                  <div>
+                    <label className={cn('text-xs font-bold block mb-1.5 uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      Giảm Tối Đa (VNĐ) <span className="text-[11px] font-normal text-[#a09e9a]">(Tùy chọn)</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={5000}
+                      value={formData.max_discount}
+                      onChange={(e) => setFormData((f) => ({ ...f, max_discount: e.target.value }))}
+                      placeholder="Vd: 50000 (Để trống nếu không giới hạn trần)"
+                      className={cn('w-full px-3.5 py-2.5 rounded-xl border text-xs font-mono-data outline-none transition-all', inputCls)}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Section 2: Dedicated Scope Selection (User Requirement) */}
+              <div className="space-y-4 pt-2">
+                <h4 className={cn('text-xs font-bold uppercase tracking-wider pb-1 border-b border-white/5 flex items-center justify-between', isDark ? 'text-amber-400' : 'text-amber-700')}>
+                  <span>2. Phạm Vi Áp Dụng Riêng Biệt</span>
+                  <span className="text-[10px] font-normal text-[#a09e9a]">Phòng chiếu / F&B / Hạng thẻ</span>
+                </h4>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData((f) => ({ ...f, applicable_scope: 'all' }))}
+                    className={cn(
+                      'p-3 rounded-xl border text-left cursor-pointer transition-all flex items-start gap-2.5',
+                      formData.applicable_scope === 'all'
+                        ? 'bg-amber-500/15 border-amber-500 text-[#e8b84b]'
+                        : isDark
+                        ? 'bg-white/[0.02] border-white/10 text-[#a09e9a] hover:border-white/20'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
+                    )}
+                  >
+                    <Layers className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
+                    <div>
+                      <div className="font-bold text-xs">Toàn Hệ Thống</div>
+                      <div className="text-[10px] opacity-75 mt-0.5">Áp dụng cho mọi loại đơn hàng</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormData((f) => ({ ...f, applicable_scope: 'rooms' }))}
+                    className={cn(
+                      'p-3 rounded-xl border text-left cursor-pointer transition-all flex items-start gap-2.5',
+                      formData.applicable_scope === 'rooms'
+                        ? 'bg-amber-500/15 border-amber-500 text-[#e8b84b]'
+                        : isDark
+                        ? 'bg-white/[0.02] border-white/10 text-[#a09e9a] hover:border-white/20'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
+                    )}
+                  >
+                    <Building2 className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
+                    <div>
+                      <div className="font-bold text-xs">Phòng Chiếu</div>
+                      <div className="text-[10px] opacity-75 mt-0.5">Chỉ áp dụng cho vé phòng VIP, IMAX...</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormData((f) => ({ ...f, applicable_scope: 'concessions' }))}
+                    className={cn(
+                      'p-3 rounded-xl border text-left cursor-pointer transition-all flex items-start gap-2.5',
+                      formData.applicable_scope === 'concessions'
+                        ? 'bg-amber-500/15 border-amber-500 text-[#e8b84b]'
+                        : isDark
+                        ? 'bg-white/[0.02] border-white/10 text-[#a09e9a] hover:border-white/20'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
+                    )}
+                  >
+                    <Popcorn className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
+                    <div>
+                      <div className="font-bold text-xs">Bắp Nước & F&B</div>
+                      <div className="text-[10px] opacity-75 mt-0.5">Chỉ áp dụng cho các món đồ ăn, uống</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormData((f) => ({ ...f, applicable_scope: 'loyalty' }))}
+                    className={cn(
+                      'p-3 rounded-xl border text-left cursor-pointer transition-all flex items-start gap-2.5',
+                      formData.applicable_scope === 'loyalty'
+                        ? 'bg-amber-500/15 border-amber-500 text-[#e8b84b]'
+                        : isDark
+                        ? 'bg-white/[0.02] border-white/10 text-[#a09e9a] hover:border-white/20'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
+                    )}
+                  >
+                    <Crown className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
+                    <div>
+                      <div className="font-bold text-xs">Hạng Thành Viên</div>
+                      <div className="text-[10px] opacity-75 mt-0.5">Dành riêng cho hạng thẻ thành viên</div>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Sub-options for Room Types */}
+                {formData.applicable_scope === 'rooms' && (
+                  <div className="p-3.5 rounded-xl border border-white/10 bg-white/[0.02] space-y-2">
+                    <label className={cn('text-xs font-bold block uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      Chọn Loại Phòng Chiếu Áp Dụng:
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { value: 'VIP', label: 'Phòng VIP (Sofa cao cấp)' },
+                        { value: 'IMAX', label: 'Phòng IMAX (Màn hình lớn)' },
+                        { value: '3D', label: 'Phòng Chiếu 3D' },
+                        { value: 'STANDARD', label: 'Phòng Tiêu Chuẩn (2D)' },
+                      ].map((r) => (
+                        <button
+                          key={r.value}
+                          type="button"
+                          onClick={() => setFormData((f) => ({ ...f, target_room_type: r.value }))}
+                          className={cn(
+                            'p-2.5 rounded-xl border text-xs font-bold transition-all text-left cursor-pointer',
+                            formData.target_room_type === r.value
+                              ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
+                              : isDark
+                              ? 'bg-white/5 text-[#f0ede8] border-white/10 hover:border-white/20'
+                              : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300'
+                          )}
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-options for Concessions Category */}
+                {formData.applicable_scope === 'concessions' && (
+                  <div className="p-3.5 rounded-xl border border-white/10 bg-white/[0.02] space-y-2">
+                    <label className={cn('text-xs font-bold block uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      Chọn Danh Mục Bắp Nước Áp Dụng:
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { value: 'all', label: 'Toàn bộ đồ ăn & uống' },
+                        { value: 'combo', label: 'Chỉ các Combo F&B' },
+                        { value: 'popcorn', label: 'Chỉ các loại Bắp Rang' },
+                        { value: 'drink', label: 'Chỉ Nước Giải Khát' },
+                      ].map((c) => (
+                        <button
+                          key={c.value}
+                          type="button"
+                          onClick={() => setFormData((f) => ({ ...f, target_category: c.value }))}
+                          className={cn(
+                            'p-2.5 rounded-xl border text-xs font-bold transition-all text-left cursor-pointer',
+                            formData.target_category === c.value
+                              ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
+                              : isDark
+                              ? 'bg-white/5 text-[#f0ede8] border-white/10 hover:border-white/20'
+                              : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300'
+                          )}
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-options for Loyalty Tiers */}
+                {(formData.applicable_scope === 'loyalty' || formData.min_loyalty_tier) && (
+                  <div className="p-3.5 rounded-xl border border-white/10 bg-white/[0.02] space-y-2">
+                    <label className={cn('text-xs font-bold block uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      Hạng Thành Viên Tối Thiểu (Loyalty Tier):
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { value: '', label: 'Tất cả thành viên' },
+                        { value: 'bronze', label: 'Hạng Đồng trở lên (Bronze+)' },
+                        { value: 'silver', label: 'Hạng Bạc trở lên (Silver+)' },
+                        { value: 'gold', label: 'Hạng Vàng trở lên (Gold+)' },
+                        { value: 'diamond', label: 'Hạng Kim Cương (Diamond)' },
+                      ].map((tier) => (
+                        <button
+                          key={tier.value}
+                          type="button"
+                          onClick={() => setFormData((f) => ({ ...f, min_loyalty_tier: tier.value }))}
+                          className={cn(
+                            'p-2.5 rounded-xl border text-xs font-bold transition-all text-left cursor-pointer',
+                            formData.min_loyalty_tier === tier.value
+                              ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b]'
+                              : isDark
+                              ? 'bg-white/5 text-[#f0ede8] border-white/10 hover:border-white/20'
+                              : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300'
+                          )}
+                        >
+                          {tier.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Section 3: Conditions & Limits */}
+              <div className="space-y-4 pt-2">
+                <h4 className={cn('text-xs font-bold uppercase tracking-wider pb-1 border-b border-white/5 flex items-center gap-2', isDark ? 'text-amber-400' : 'text-amber-700')}>
+                  <span>3. Điều Kiện Áp Dụng & Giới Hạn</span>
+                </h4>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={cn('text-xs font-bold block mb-1.5 uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      Đơn Hàng Tối Thiểu (VNĐ)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={10000}
+                      value={formData.min_spend}
+                      onChange={(e) => setFormData((f) => ({ ...f, min_spend: e.target.value }))}
+                      placeholder="0"
+                      className={cn('w-full px-3.5 py-2.5 rounded-xl border text-xs font-mono-data outline-none transition-all', inputCls)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={cn('text-xs font-bold block mb-1.5 uppercase tracking-wider', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                      Số Lần Dùng / Người
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={formData.max_uses_per_user}
+                      onChange={(e) => setFormData((f) => ({ ...f, max_uses_per_user: e.target.value }))}
+                      placeholder="1"
+                      className={cn('w-full px-3.5 py-2.5 rounded-xl border text-xs font-mono-data outline-none transition-all', inputCls)}
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl border border-white/5 bg-white/[0.02] flex items-center justify-between">
+                  <div>
+                    <span className={cn('text-xs font-bold block', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>
+                      Đơn Hàng Đầu Tiên
+                    </span>
+                    <span className={cn('text-[11px]', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                      Chỉ cho phép tài khoản chưa từng đặt vé áp dụng
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={formData.is_first_booking_only}
+                    onChange={(e) => setFormData((f) => ({ ...f, is_first_booking_only: e.target.checked }))}
+                    className="w-4 h-4 rounded border-white/20 accent-[#e8b84b] cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Section 4: Expiry Calendar (Using CleanDatePicker as requested) */}
+              <div className="space-y-4 pt-2">
+                <h4 className={cn('text-xs font-bold uppercase tracking-wider pb-1 border-b border-white/5 flex items-center gap-2', isDark ? 'text-amber-400' : 'text-amber-700')}>
+                  <span>4. Thời Hạn Hiệu Lực & Kích Hoạt</span>
+                </h4>
+
+                <div>
+                  <CleanDatePicker
+                    label="Ngày Hết Hạn (Expiry Date)"
+                    value={formData.expiry_date}
+                    minDate={toLocalYYYYMMDD(new Date())}
+                    onChange={(dateStr) => setFormData((f) => ({ ...f, expiry_date: dateStr }))}
+                    isDark={isDark}
+                    placeholder="Chọn ngày kết thúc hiệu lực..."
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-white/[0.02]">
+                  <div>
+                    <span className={cn('text-xs font-bold block', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>
+                      Trạng Thái Áp Dụng
+                    </span>
+                    <span className={cn('text-[11px]', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                      {formData.is_active ? 'Khách hàng có thể nhập mã ngay bây giờ' : 'Tạm khóa mã, chưa cho phép sử dụng'}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormData((f) => ({ ...f, is_active: !f.is_active }))}
+                    className={cn(
+                      'px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5',
+                      formData.is_active
+                        ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                        : isDark
+                        ? 'bg-white/5 border-white/10 text-slate-400'
+                        : 'bg-slate-100 border-slate-200 text-slate-600'
+                    )}
+                  >
+                    <span className={cn('w-2 h-2 rounded-full', formData.is_active ? 'bg-emerald-400' : 'bg-slate-400')} />
+                    <span>{formData.is_active ? 'Đang bật' : 'Đang khóa'}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            {/* Drawer Sticky Footer */}
+            <div className="p-4 sm:p-5 border-t border-white/10 shrink-0 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDrawerOpen(false)}
+                className={cn(
+                  'px-5 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all',
+                  isDark ? 'bg-white/10 hover:bg-white/15 text-[#a09e9a]' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                )}
+              >
+                Hủy Bỏ
+              </button>
+
+              <button
+                form="voucher-drawer-form"
+                type="submit"
+                disabled={saving}
+                className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-[#e8b84b] hover:bg-[#dfad3e] text-[#09090e] transition-all cursor-pointer shadow-md disabled:opacity-50"
+              >
+                {saving ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Đang lưu...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4 stroke-[2.5]" />
+                    <span>{drawerMode === 'create' ? 'Tạo Voucher' : 'Lưu Thay Đổi'}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -2254,11 +5222,6 @@ export default function AdminView() {
   const [vMinLoyaltyTier, setVMinLoyaltyTier] = useState<string>('')
   const [vLoading, setVLoading] = useState(false)
 
-  // Analytics Date Filter States (FEAT-04)
-  const [analyticsStartDate, setAnalyticsStartDate] = useState<string>('')
-  const [analyticsEndDate, setAnalyticsEndDate] = useState<string>('')
-  const [analyticsPreset, setAnalyticsPreset] = useState<'all' | 'today' | '7days' | '30days' | 'month'>('all')
-  const [analyticsLoading, setAnalyticsLoading] = useState<boolean>(false)
 
 
   // Create Showtime Form State
@@ -2333,7 +5296,7 @@ export default function AdminView() {
       setScannerResult({
         valid: false,
         status_code: 'CHECKED_IN',
-        message: resData.message || '✅ Check-in thành công! Khán giả đã vào rạp.',
+        message: resData.message || 'Check-in thành công! Khán giả đã vào rạp.',
         reservation: resData.reservation,
       })
 
@@ -2369,6 +5332,8 @@ export default function AdminView() {
     roomType?: string | null
     roomIds?: number[]
   }>({ isOpen: false, roomType: null, roomIds: [] })
+  const [roomCategoryFilter, setRoomCategoryFilter] = useState<string>('all')
+  const [roomSearchQuery, setRoomSearchQuery] = useState<string>('')
 
   const safeRooms = useMemo(() => (Array.isArray(rooms) ? rooms : []), [rooms])
 
@@ -2648,22 +5613,7 @@ export default function AdminView() {
     }
   }
 
-  // FEAT-04: Filter Analytics by Date Range
-  async function fetchFilteredAnalytics(startDate?: string, endDate?: string) {
-    setAnalyticsLoading(true)
-    try {
-      const params: any = {}
-      if (startDate) params.start_date = startDate
-      if (endDate) params.end_date = endDate
-      const { data } = await apiClient.get('/api/v1/analytics/dashboard', { params })
-      if (data) setLiveAnalytics(data)
-    } catch (err) {
-      console.error('Failed to load filtered analytics:', err)
-      notify('error', 'Không thể lọc dữ liệu báo cáo theo ngày.')
-    } finally {
-      setAnalyticsLoading(false)
-    }
-  }
+
 
   async function handleViewMovieDetail(movie: MovieItem) {
     setDetailMovieModal(movie)
@@ -2851,17 +5801,17 @@ export default function AdminView() {
 
   async function handleGenerateAutoPreview() {
     if (autoStartDate > autoEndDate) {
-      notify('error', '⚠ Ngày bắt đầu (Start Date) không thể lớn hơn Ngày kết thúc (End Date). Vui lòng chọn lại khoảng ngày hợp lệ.')
+      notify('error', 'Ngày bắt đầu (Start Date) không thể lớn hơn Ngày kết thúc (End Date). Vui lòng chọn lại khoảng ngày hợp lệ.')
       return
     }
 
     if (autoMovieSelectionMode === 'custom' && autoSelectedMovieIds.length === 0) {
-      notify('error', '⚠ Vui lòng tích chọn ít nhất 1 bộ phim để xếp lịch chiếu tự động.')
+      notify('error', 'Vui lòng tích chọn ít nhất 1 bộ phim để xếp lịch chiếu tự động.')
       return
     }
 
     if (autoRoomSelectionMode === 'custom' && autoSelectedRoomIds.length === 0) {
-      notify('error', '⚠ Vui lòng tích chọn ít nhất 1 phòng chiếu để xếp lịch chiếu tự động.')
+      notify('error', 'Vui lòng tích chọn ít nhất 1 phòng chiếu để xếp lịch chiếu tự động.')
       return
     }
 
@@ -2946,7 +5896,7 @@ export default function AdminView() {
 
         notify(
           'warning',
-          `Đã tạo ${count} suất chiếu. ⚠️ Bỏ qua ${skipped.length} suất do phòng không có ghế active nào: ${skippedSummary}${extraMsg}`
+          `Đã tạo ${count} suất chiếu. Bỏ qua ${skipped.length} suất do phòng không có ghế active nào: ${skippedSummary}${extraMsg}`
         )
       } else {
         notify('success', `Đã xếp thành công ${count} suất chiếu cho phim ${movieStr}`)
@@ -3079,7 +6029,7 @@ export default function AdminView() {
       return
     }
 
-    if (!window.confirm(`⚠️ CẢNH BÁO: Bạn có chắc chắn muốn HỦY TẤT CẢ ${upcomingSts.length} suất chiếu SẮP CHIẾU trên toàn hệ thống không?\n\n(Lưu ý: Các suất đã chiếu và đang chiếu sẽ KHÔNG bị ảnh hưởng).`)) {
+    if (!window.confirm(`CẢNH BÁO: Bạn có chắc chắn muốn HỦY TẤT CẢ ${upcomingSts.length} suất chiếu SẮP CHIẾU trên toàn hệ thống không?\n\n(Lưu ý: Các suất đã chiếu và đang chiếu sẽ KHÔNG bị ảnh hưởng).`)) {
       return
     }
     try {
@@ -3113,7 +6063,7 @@ export default function AdminView() {
     return (
       <div className="max-w-[1280px] mx-auto px-6 py-24 text-center">
         <div className="bg-[#111118] border border-white/10 rounded-2xl p-12 max-w-md mx-auto shadow-2xl space-y-4">
-          <span className="text-5xl block">🛑</span>
+          <ShieldAlert className="w-16 h-16 text-rose-500 mx-auto" />
           <h2 className="font-display font-bold text-2xl text-[#f0ede8]">Truy Cập Bị Từ Chối</h2>
           <p className="text-xs text-[#a09e9a] leading-relaxed">
             Trang Quản trị (Admin Panel) chỉ dành riêng cho tài khoản có quyền Quản trị viên (Role: Admin).
@@ -3131,109 +6081,12 @@ export default function AdminView() {
     )
   }
 
-  // ─────────────────────────────────────────
-  // Refunds Management State & Actions
-  // ─────────────────────────────────────────
-  const [refunds, setRefunds] = useState<RefundItem[]>([])
-  const [refundLoading, setRefundLoading] = useState(false)
-  const [refundStatusFilter, setRefundStatusFilter] = useState<string>('all')
-  const [refundPmFilter, setRefundPmFilter] = useState<string>('all')
-  const [refundStartDate, setRefundStartDate] = useState<string>('')
-  const [refundEndDate, setRefundEndDate] = useState<string>('')
-  const [refundPage, setRefundPage] = useState(1)
-  const [refundTotal, setRefundTotal] = useState(0)
-
-  // Manual Resolve Refund Modal State
-  const [resolveModalOpen, setResolveModalOpen] = useState(false)
-  const [selectedRefund, setSelectedRefund] = useState<RefundItem | null>(null)
-  const [resolveAdminNote, setResolveAdminNote] = useState('Đã chuyển khoản ngân hàng ngoài hệ thống')
-  const [resolvingLoading, setResolvingLoading] = useState(false)
-
   // Compulsory Password Change State for Admin
   const [oldPwd, setOldPwd] = useState('')
   const [newPwd, setNewPwd] = useState('')
   const [confirmPwd, setConfirmPwd] = useState('')
   const [changePwdLoading, setChangePwdLoading] = useState(false)
   const [changePwdErr, setChangePwdErr] = useState('')
-
-  function setRefundDatePreset(preset: 'today' | '7days' | '30days' | 'all') {
-    const today = new Date()
-    const formatDate = (d: Date) => toLocalYYYYMMDD(d)
-
-    if (preset === 'all') {
-      setRefundStartDate('')
-      setRefundEndDate('')
-    } else if (preset === 'today') {
-      const dateStr = formatDate(today)
-      setRefundStartDate(dateStr)
-      setRefundEndDate(dateStr)
-    } else if (preset === '7days') {
-      const past = new Date()
-      past.setDate(today.getDate() - 7)
-      setRefundStartDate(formatDate(past))
-      setRefundEndDate(formatDate(today))
-    } else if (preset === '30days') {
-      const past = new Date()
-      past.setDate(today.getDate() - 30)
-      setRefundStartDate(formatDate(past))
-      setRefundEndDate(formatDate(today))
-    }
-    setRefundPage(1)
-  }
-
-  async function fetchRefunds() {
-    setRefundLoading(true)
-    try {
-      const res = await apiClient.get<{ items: RefundItem[]; total: number }>(
-        `/api/v1/admin/refunds?status=${refundStatusFilter}&payment_method=${refundPmFilter}&start_date=${refundStartDate}&end_date=${refundEndDate}&page=${refundPage}&page_size=15`
-      )
-      setRefunds(res.data.items || [])
-      setRefundTotal(res.data.total || 0)
-    } catch (err: any) {
-      console.error('Failed to load refunds:', err)
-      notify('error', 'Không thể tải danh sách yêu cầu hoàn tiền từ máy chủ.')
-    } finally {
-      setRefundLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    if (activeTab === 'refunds') {
-      fetchRefunds()
-    }
-  }, [activeTab, refundStatusFilter, refundPmFilter, refundStartDate, refundEndDate, refundPage])
-
-  async function handleResolveRefundManually() {
-    if (!selectedRefund) return
-    setResolvingLoading(true)
-    try {
-      await apiClient.post(`/api/v1/admin/refunds/${selectedRefund.id}/resolve`, {
-        admin_note: resolveAdminNote,
-      })
-      notify('success', `Đã đánh dấu hoàn tiền thủ công cho đơn vé ${selectedRefund.ticket_code || `#${selectedRefund.reservation_id}`}`)
-      setResolveModalOpen(false)
-      setSelectedRefund(null)
-      await fetchRefunds()
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Không thể cập nhật trạng thái hoàn tiền.')
-    } finally {
-      setResolvingLoading(false)
-    }
-  }
-
-  async function handleRetryRefund(refund: RefundItem) {
-    try {
-      const res = await apiClient.post<RefundItem>(`/api/v1/admin/refunds/${refund.id}/retry`)
-      if (res.data.status === 'success') {
-        notify('success', `Thử lại hoàn tiền tự động qua VNPay thành công!`)
-      } else {
-        notify('error', res.data.vnpay_response_message || 'VNPay từ chối hoàn tiền tự động.')
-      }
-      await fetchRefunds()
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Lỗi gọi lại API VNPay.')
-    }
-  }
 
   async function handleChangePwdSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -3270,7 +6123,9 @@ export default function AdminView() {
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[9999] p-4">
           <div className="max-w-md w-full bg-[#111118] border border-amber-500/40 rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="text-center">
-              <span className="text-4xl block mb-2">🔐</span>
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-3 text-amber-400">
+                <Lock className="w-6 h-6" />
+              </div>
               <h3 className="text-lg font-bold text-[#f0ede8]">Yêu Cầu Đổi Mật Khẩu Khẩn Cấp</h3>
               <p className="text-xs text-[#a09e9a] mt-1">
                 Tài khoản Admin của bạn đang ở trạng thái bắt buộc đổi mật khẩu. Vui lòng đổi mật khẩu mới để bảo mật hệ thống.
@@ -3278,8 +6133,9 @@ export default function AdminView() {
             </div>
 
             {changePwdErr && (
-              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 text-xs font-semibold">
-                ⚠️ {changePwdErr}
+              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 text-xs font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{changePwdErr}</span>
               </div>
             )}
 
@@ -3320,9 +6176,19 @@ export default function AdminView() {
               <button
                 type="submit"
                 disabled={changePwdLoading}
-                className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold transition-all disabled:opacity-50 cursor-pointer text-sm shadow-lg mt-2"
+                className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold transition-all disabled:opacity-50 cursor-pointer text-sm shadow-lg mt-2 flex items-center justify-center gap-2"
               >
-                {changePwdLoading ? 'Đang cập nhật...' : '🔑 Đổi Mật Khẩu & Tiếp Tục'}
+                {changePwdLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Đang cập nhật...</span>
+                  </>
+                ) : (
+                  <>
+                    <Key className="w-4 h-4" />
+                    <span>Đổi Mật Khẩu & Tiếp Tục</span>
+                  </>
+                )}
               </button>
             </form>
           </div>
@@ -3346,8 +6212,14 @@ export default function AdminView() {
             }`}
           >
             <div className="flex items-start gap-3 min-w-0 flex-1">
-              <span className="text-base shrink-0 mt-0.5">
-                {actionMsg.type === 'success' ? '✓' : actionMsg.type === 'warning' ? '⚠️' : '✕'}
+              <span className="shrink-0 mt-0.5">
+                {actionMsg.type === 'success' ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                ) : actionMsg.type === 'warning' ? (
+                  <AlertTriangle className="w-5 h-5 text-amber-400" />
+                ) : (
+                  <XCircle className="w-5 h-5 text-rose-400" />
+                )}
               </span>
               <div className="space-y-1 min-w-0">
                 <div className="font-bold text-xs uppercase tracking-wider">
@@ -3364,7 +6236,7 @@ export default function AdminView() {
               className="p-1.5 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer shrink-0 font-bold"
               aria-label="Đóng thông báo"
             >
-              ✕
+              <X className="w-4 h-4" />
             </button>
           </div>
         </aside>
@@ -3848,7 +6720,7 @@ export default function AdminView() {
                             </td>
 
                             {/* Thời lượng / Ngày ra mắt */}
-                            <td className="py-3.5 px-4 font-mono-data">
+                            <td className="py-3.5 px-4 text-xs">
                               <div className="space-y-1">
                                 <div className="flex items-center gap-1.5 text-[11px]">
                                   <Clock className="w-3 h-3 text-amber-500 shrink-0" />
@@ -4361,7 +7233,7 @@ export default function AdminView() {
                               <Film className="w-3.5 h-3.5 text-amber-500" />
                               <span>
                                 Chọn phim cần hủy suất{' '}
-                                <span className="text-amber-500 font-mono-data font-bold">
+                                <span className="text-amber-500 font-semibold">
                                   ({cancelMovieIds.length}/{moviesWithUpcomingShowtimes.length} phim)
                                 </span>:
                               </span>
@@ -4800,13 +7672,13 @@ export default function AdminView() {
 
                                 {isPast ? (
                                   <span className={cn(
-                                    'text-[10px] font-mono-data px-2 py-0.5 rounded-md font-semibold border',
+                                    'text-[10px] font-semibold px-2 py-0.5 rounded-md border',
                                     isDark ? 'bg-white/5 border-white/5 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-500'
                                   )}>
                                     Đã chiếu
                                   </span>
                                 ) : (
-                                  <span className="text-[10px] font-mono-data px-2 py-0.5 rounded-md font-semibold bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 flex items-center gap-1">
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 flex items-center gap-1">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                                     Sắp chiếu
                                   </span>
@@ -4821,7 +7693,7 @@ export default function AdminView() {
                                 {st.movie?.title ?? `Phim #${st.movie_id}`}
                               </h4>
 
-                              <div className={cn('flex items-center gap-2 text-xs font-mono-data', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+                              <div className={cn('flex items-center gap-2 text-xs', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
                                 <span>Giá:</span>
                                 <strong className="text-amber-500 font-bold">{fmt(Number(st.base_price))}</strong>
                                 <span className="opacity-50">/</span>
@@ -4878,484 +7750,437 @@ export default function AdminView() {
       )}
 
       {/* TAB 3: ROOMS MANAGEMENT */}
-      {activeTab === 'rooms' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Form Create Room */}
-          <div className={`lg:col-span-5 border rounded-2xl p-6 shadow-xl h-fit transition-colors ${
-            isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
-          }`}>
-            <h3 className={`font-display font-bold text-lg mb-1 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-              Tạo Phòng Chiếu Mới
-            </h3>
-            <p className={`text-xs mb-5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-              Hệ thống sẽ tự động sinh sơ đồ ghế VIP và Thường tương ứng theo loại phòng.
-            </p>
+            {/* TAB 3: ROOMS MANAGEMENT */}
+      {activeTab === 'rooms' && (() => {
+        const totalAuditoriumSeats = safeRooms.reduce((sum, r) => sum + (r.total_seats || r.total_rows * r.total_cols || 0), 0)
+        const standardCount = safeRooms.filter((r) => (r.room_type || 'standard') === 'standard').length
+        const imaxCount = safeRooms.filter((r) => r.room_type === 'imax').length
+        const vipCount = safeRooms.filter((r) => r.room_type === 'vip').length
+        const threeDCount = safeRooms.filter((r) => r.room_type === '3d').length
+        const fourDCount = safeRooms.filter((r) => r.room_type === '4d').length
+        const kidsCount = safeRooms.filter((r) => r.room_type === 'kids').length
 
-            <form onSubmit={handleCreateRoom} className="space-y-4">
-              <div>
-                <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-                  Tên Phòng Chiếu (Để trống coi như tự động đặt)
-                </label>
-                <input
-                  type="text"
-                  value={rName}
-                  onChange={(e) => setRName(e.target.value)}
-                  placeholder={`Ví dụ: ${
-                    rType === 'standard' ? 'Standard' : rType === 'vip' ? 'VIP' : rType === 'imax' ? 'IMAX' : rType === '4d' ? '4DX' : rType === 'kids' ? 'Kids' : '3D'
-                  } ${nextRoomNum}`}
-                  className={`w-full px-3 py-2.5 border rounded-lg text-sm outline-none transition-colors ${
-                    isDark
-                      ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
-                      : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500'
-                  }`}
-                />
-                <span className={`text-[11px] font-mono-data mt-1 block ${isDark ? 'text-[#e8b84b]' : 'text-amber-700 font-semibold'}`}>
-                  💡Đây sẽ là phòng thứ {nextRoomNum} của loại phòng {' '}
-                  {rType === 'standard'
-                    ? 'Standard'
-                    : rType === 'imax'
-                    ? 'IMAX 3D Laser'
-                    : rType === 'vip'
-                    ? 'VIP Gold Lounge'
-                    : rType === '4d'
-                    ? '4DX Motion'
-                    : rType === 'kids'
-                    ? 'Kids / Gia Đình'
-                    : '3D Surround'}
-                  .
-                </span>
-              </div>
+        // Filtered rooms (pure category filter, search by room name removed)
+        const filteredRooms = safeRooms.filter((r) => {
+          if (!r) return false
+          return roomCategoryFilter === 'all' || (r.room_type || 'standard') === roomCategoryFilter
+        })
 
-              <div>
-                <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-                  Loại Phòng
-                </label>
-                <select
-                  value={rType}
-                  onChange={(e) => {
-                    const newType = e.target.value
-                    setRType(newType)
-                    const targetRooms = (rooms || []).filter((r) => r.room_type === newType)
-                    const maxNum = targetRooms.reduce((max, r) => Math.max(max, r.room_number || 1), 0)
-                    const nextNum = maxNum + 1
-                    const label =
-                      newType === 'standard'
-                        ? 'Standard'
-                        : newType === 'imax'
-                        ? 'IMAX'
-                        : newType === 'vip'
-                        ? 'VIP'
-                        : newType === '4d'
-                        ? '4DX'
-                        : newType === 'kids'
-                        ? 'Kids'
-                        : '3D'
-                    setRName(`${label} ${nextNum}`)
-                    if (targetRooms.length > 0) {
-                      setRRows(targetRooms[0].total_rows || 8)
-                      setRCols(targetRooms[0].total_cols || 10)
-                    }
-                  }}
-                  className={`w-full px-3 py-2.5 border rounded-lg text-sm outline-none cursor-pointer ${
-                    isDark
-                      ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
-                      : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500'
-                  }`}
-                >
-                  <option value="standard">Standard</option>
-                  <option value="imax">IMAX 3D Laser</option>
-                  <option value="vip">VIP Lounge</option>
-                  <option value="4d">4DX Motion</option>
-                  <option value="3d">3D Surround</option>
-                  <option value="kids">Kids / Gia Đình</option>
-                </select>
-              </div>
+        const suggestedName = `${
+          rType === 'standard' ? 'Standard' : rType === 'vip' ? 'VIP' : rType === 'imax' ? 'IMAX' : rType === '4d' ? '4DX' : rType === 'kids' ? 'Kids' : '3D'
+        } ${nextRoomNum}`
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-                    Số Hàng Ghế (Rows)
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={4}
-                    max={20}
-                    value={rRows}
-                    onChange={(e) => setRRows(Number(e.target.value))}
-                    className={`w-full px-3 py-2 border rounded-lg text-sm outline-none font-mono-data ${
-                      isDark
-                        ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
-                        : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500'
-                    }`}
-                  />
-                </div>
-                <div>
-                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-                    Số Ghế/Hàng (Cols)
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={4}
-                    max={25}
-                    value={rCols}
-                    onChange={(e) => setRCols(Number(e.target.value))}
-                    className={`w-full px-3 py-2 border rounded-lg text-sm outline-none font-mono-data ${
-                      isDark
-                        ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-[#e8b84b]'
-                        : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500'
-                    }`}
-                  />
-                </div>
-              </div>
+        return (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Main Content Grid: Left Form (4 cols) & Right Auditoriums (8 cols) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left Column: Create Room Form */}
+              <div className="lg:col-span-4">
+                {/* Form Create Room Card */}
+                <div className={cn(
+                  'border rounded-2xl p-5 sm:p-6 shadow-xl transition-colors',
+                  isDark ? 'bg-[#111118] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900'
+                )}>
+                  <div className="flex items-center gap-2.5 mb-1">
+                    <span className={cn(
+                      'p-2 rounded-xl shrink-0',
+                      isDark ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-50 text-amber-700'
+                    )}>
+                      <Plus className="w-4 h-4 stroke-[2.2]" />
+                    </span>
+                    <h3 className={cn('font-display font-bold text-lg', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                      Tạo Phòng Chiếu Mới
+                    </h3>
+                  </div>
+                  <p className={cn('text-xs mb-5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                    Thiết lập loại phòng và số lượng hàng/cột ghế ban đầu cho phòng rạp mới.
+                  </p>
 
-              <button
-                type="submit"
-                disabled={rLoading}
-                className="w-full bg-[#e8b84b] text-[#09090e] border-0 rounded-lg py-3 font-bold text-xs cursor-pointer hover:shadow-[0_4px_16px_rgba(232,184,75,0.35)] transition-all disabled:opacity-50 mt-2"
-              >
-                {rLoading ? 'Đang tạo...' : 'Tạo Phòng Chiếu Mới →'}
-              </button>
-            </form>
-          </div>
-
-          {/* Rooms Grid Grouped By Room Type */}
-          <div className="lg:col-span-7 space-y-6">
-            {/* Unified Master Config Button Header */}
-            <div className={`p-5 rounded-2xl border flex flex-wrap items-center justify-between gap-4 shadow-md transition-colors ${
-              isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
-            }`}>
-              <div>
-                <h3 className={`font-display font-black text-lg ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                  🏛️ Quản Lý Bố Trí & Sơ Đồ Ghế
-                </h3>
-                <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                  Hiện có <strong>{safeRooms.length} phòng chiếu</strong> đang hoạt động trong toàn hệ thống rạp.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setLayoutModalConfig({
-                    isOpen: true,
-                    roomType: 'standard',
-                    roomIds: [],
-                  })
-                }
-                className="px-5 py-2.5 bg-[#e8b84b] hover:bg-[#f5c759] text-[#09090e] font-black text-xs rounded-xl cursor-pointer transition-all shadow-md flex items-center gap-2 hover:shadow-[0_4px_16px_rgba(232,184,75,0.35)]"
-              >
-                <span>⚙️</span>
-                <span>Chỉnh Hàng, Cột & Sơ Đồ Ghế</span>
-              </button>
-            </div>
-
-            {['standard', 'vip', 'imax', '3d', '4d', 'kids'].map((typeKey) => {
-              const typeRooms = (rooms || []).filter((r) => (r?.room_type || 'standard') === typeKey)
-              if (typeRooms.length === 0) return null
-
-              const typeInfo =
-                typeKey === 'standard'
-                  ? { title: 'Standard', icon: '🎬' }
-                  : typeKey === 'vip'
-                  ? { title: 'VIP Gold Lounge', icon: '👑' }
-                  : typeKey === 'imax'
-                  ? { title: 'IMAX 3D Laser', icon: '📽️' }
-                  : typeKey === '3d'
-                  ? { title: '3D Surround', icon: '🔊' }
-                  : typeKey === '4d'
-                  ? { title: '4DX Motion', icon: '⚡' }
-                  : { title: 'Kids / Gia Đình', icon: '🎈' }
-
-              const sampleRoom = typeRooms[0]
-
-              return (
-                <div key={typeKey} className="space-y-3">
-                  <div className={`flex flex-wrap items-center justify-between gap-3 border-b pb-2.5 ${
-                    isDark ? 'border-white/10' : 'border-slate-200'
-                  }`}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{typeInfo.icon}</span>
-                      <h4 className={`font-display font-bold text-base ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                        {typeInfo.title}{' '}
-                        <span className={`text-xs font-mono-data font-semibold ${isDark ? 'text-[#e8b84b]' : 'text-amber-700 font-bold'}`}>
-                          ({typeRooms.length} phòng)
-                        </span>
-                      </h4>
+                  <form onSubmit={handleCreateRoom} className="space-y-4 text-xs">
+                    <div>
+                      <label className={cn('block font-semibold mb-1.5', isDark ? 'text-[#a09e9a]' : 'text-slate-700')}>
+                        Loại Phòng Chiếu
+                      </label>
+                      <select
+                        value={rType}
+                        onChange={(e) => {
+                          const newType = e.target.value
+                          setRType(newType)
+                          const targetRooms = safeRooms.filter((r) => (r.room_type || 'standard') === newType)
+                          const maxNum = targetRooms.reduce((max, r) => Math.max(max, Number(r.room_number) || 1), 0)
+                          const nextNum = maxNum + 1
+                          const label =
+                            newType === 'standard'
+                              ? 'Standard'
+                              : newType === 'imax'
+                              ? 'IMAX'
+                              : newType === 'vip'
+                              ? 'VIP'
+                              : newType === '4d'
+                              ? '4DX'
+                              : newType === 'kids'
+                              ? 'Kids'
+                              : '3D'
+                          setRName(`${label} ${nextNum}`)
+                          if (targetRooms.length > 0) {
+                            setRRows(targetRooms[0].total_rows || 8)
+                            setRCols(targetRooms[0].total_cols || 10)
+                          }
+                        }}
+                        className={cn(
+                          'w-full px-3 py-2.5 border rounded-xl outline-none cursor-pointer font-semibold transition-colors',
+                          isDark
+                            ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-amber-500/50'
+                            : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-xs'
+                        )}
+                      >
+                        <option value="standard">Standard (Tiêu chuẩn 2D)</option>
+                        <option value="imax">IMAX 3D Laser Cinema</option>
+                        <option value="vip">VIP Gold Lounge</option>
+                        <option value="3d">3D Surround</option>
+                        <option value="4d">4DX Motion Cinema</option>
+                        <option value="kids">Kids & Family Studio</option>
+                      </select>
                     </div>
 
-                    {sampleRoom && (
-                      <span className={`text-[11px] font-mono-data px-2.5 py-1 rounded-lg border ${
-                        isDark ? 'bg-white/5 border-white/10 text-[#a09e9a]' : 'bg-slate-100 border-slate-300 text-slate-600'
-                      }`}>
-                        📐 {sampleRoom.total_rows} hàng × {sampleRoom.total_cols} cột ({sampleRoom.total_seats} ghế / phòng)
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3">
-                    {typeRooms.map((r) => (
-                      <div
-                        key={r.id}
-                        className={`border rounded-2xl p-4 shadow-xl flex flex-wrap justify-between items-center gap-3 transition-colors ${
+                    <div>
+                      <label className={cn('block font-semibold mb-1.5', isDark ? 'text-[#a09e9a]' : 'text-slate-700')}>
+                        Tên Phòng Chiếu (Tùy chọn)
+                      </label>
+                      <input
+                        type="text"
+                        value={rName}
+                        onChange={(e) => setRName(e.target.value)}
+                        placeholder={`Ví dụ: ${suggestedName}`}
+                        className={cn(
+                          'w-full px-3 py-2.5 border rounded-xl outline-none transition-colors font-semibold',
                           isDark
-                            ? 'bg-[#111118] border-white/10 hover:border-white/20'
-                            : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <h5 className={`font-display font-bold text-base ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>{r.name}</h5>
-                            <span className={`text-[10px] font-mono-data uppercase px-2 py-0.5 rounded border ${
-                              isDark ? 'text-[#e8b84b] bg-[#e8b84b]/10 border-[#e8b84b]/20' : 'text-amber-800 bg-amber-50 border-amber-300 font-bold'
-                            }`}>
-                              Phòng #{r.room_number ?? 1}
-                            </span>
-                          </div>
-                          <p className={`text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                            Bố trí: <strong className={isDark ? 'text-[#f0ede8]' : 'text-slate-800'}>{r.total_rows} hàng × {r.total_cols} cột</strong> · Sức chứa: <strong className={isDark ? 'text-[#e8b84b]' : 'text-amber-700 font-bold'}>{r.total_seats} ghế</strong>
-                          </p>
-                        </div>
+                            ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-amber-500/50'
+                            : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-xs'
+                        )}
+                      />
+                      <div className={cn(
+                        'mt-1.5 p-2 rounded-lg border text-[11px] flex items-center gap-1.5',
+                        isDark ? 'bg-amber-500/5 border-amber-500/20 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-900 font-medium'
+                      )}>
+                        <Info className="w-3.5 h-3.5 shrink-0" />
+                        <span>Gợi ý tên kế tiếp: <strong>{suggestedName}</strong></span>
+                      </div>
+                    </div>
 
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-mono-data font-semibold px-3 py-1.5 rounded-xl border ${
-                            isDark ? 'bg-white/5 border-white/10 text-[#e8b84b]' : 'bg-amber-50 border-amber-200 text-amber-900 font-bold'
-                          }`}>
-                            ✓ {r.total_seats} ghế khả dụng
-                          </span>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className={cn('font-semibold', isDark ? 'text-[#a09e9a]' : 'text-slate-700')}>
+                          Kích Thước Hàng & Cột
+                        </label>
+                        <span className={cn(
+                          'font-mono-data font-bold text-[11px] px-2 py-0.5 rounded-md border',
+                          isDark ? 'bg-white/5 border-white/10 text-[#e8b84b]' : 'bg-amber-50 border-amber-200 text-amber-900'
+                        )}>
+                          Sức chứa: {rRows * rCols} ghế
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <span className={cn('text-[11px] block mb-1', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>Số hàng (Rows)</span>
+                          <input
+                            type="number"
+                            required
+                            min={4}
+                            max={20}
+                            value={rRows}
+                            onChange={(e) => setRRows(Number(e.target.value))}
+                            className={cn(
+                              'w-full px-3 py-2 border rounded-xl outline-none font-mono-data font-semibold transition-colors',
+                              isDark
+                                ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-amber-500/50'
+                                : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-xs'
+                            )}
+                          />
+                        </div>
+                        <div>
+                          <span className={cn('text-[11px] block mb-1', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>Số cột (Cols)</span>
+                          <input
+                            type="number"
+                            required
+                            min={4}
+                            max={25}
+                            value={rCols}
+                            onChange={(e) => setRCols(Number(e.target.value))}
+                            className={cn(
+                              'w-full px-3 py-2 border rounded-xl outline-none font-mono-data font-semibold transition-colors',
+                              isDark
+                                ? 'bg-[#09090e] border-white/10 text-[#f0ede8] focus:border-amber-500/50'
+                                : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-xs'
+                            )}
+                          />
                         </div>
                       </div>
-                    ))}
+
+                      {/* Quick Size Presets */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        <span className={cn('text-[11px]', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>Cỡ mẫu:</span>
+                        {[
+                          { label: 'Chuẩn 10×16', r: 10, c: 16 },
+                          { label: 'Vừa 8×12', r: 8, c: 12 },
+                          { label: 'Lớn 12×18', r: 12, c: 18 },
+                        ].map((preset) => (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            onClick={() => {
+                              setRRows(preset.r)
+                              setRCols(preset.c)
+                            }}
+                            className={cn(
+                              'px-2 py-0.5 rounded-md border text-[11px] font-mono-data cursor-pointer transition-all',
+                              rRows === preset.r && rCols === preset.c
+                                ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] font-bold shadow-xs'
+                                : isDark
+                                ? 'bg-white/5 text-[#a09e9a] border-white/10 hover:text-white'
+                                : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                            )}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={rLoading}
+                      className="w-full bg-[#e8b84b] hover:bg-[#d9a738] text-[#09090e] border-0 rounded-xl py-3 font-bold text-xs cursor-pointer transition-all shadow-sm flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50 mt-3"
+                    >
+                      {rLoading ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Đang khởi tạo phòng chiếu...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>Tạo Phòng Chiếu Mới</span>
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </div>
+
+              </div>
+
+              {/* Right Column: Auditoriums Management Grid & Actions */}
+              <div className="lg:col-span-8 space-y-4">
+                {/* Header Management Card & Batch Config Button */}
+                <div className={cn(
+                  'p-5 rounded-2xl border flex flex-wrap items-center justify-between gap-4 transition-colors shadow-xs',
+                  isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
+                )}>
+                  <div>
+                    <div className="flex items-center gap-2.5">
+                      <span className={cn(
+                        'p-2 rounded-xl shrink-0',
+                        isDark ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-50 text-amber-700'
+                      )}>
+                        <Building2 className="w-4 h-4 stroke-[2.2]" />
+                      </span>
+                      <div>
+                        <h3 className={cn('font-display font-bold text-base sm:text-lg', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                          Quản Lý Phòng & Sơ Đồ Ghế
+                        </h3>
+                        <p className={cn('text-xs mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                          Hiện có <strong>{safeRooms.length} phòng chiếu</strong> ({totalAuditoriumSeats.toLocaleString('vi-VN')} ghế) đang hoạt động trong toàn hệ thống rạp.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setLayoutModalConfig({
+                        isOpen: true,
+                        roomType: roomCategoryFilter !== 'all' ? roomCategoryFilter : 'standard',
+                        roomIds: [],
+                      })
+                    }
+                    className="px-4 py-2.5 bg-[#e8b84b] hover:bg-[#d9a738] text-[#09090e] font-bold text-xs rounded-xl cursor-pointer transition-all shadow-sm flex items-center gap-2 active:scale-[0.98]"
+                  >
+                    <SlidersHorizontal className="w-4 h-4 stroke-[2.2]" />
+                    <span>Cấu Hình Sơ Đồ Toàn Rạp</span>
+                  </button>
+                </div>
+
+                {/* Filter Tabs Toolbar */}
+                <div className={cn(
+                  'p-3.5 rounded-2xl border flex items-center justify-between gap-3 transition-colors',
+                  isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-xs'
+                )}>
+                  {/* Category Filter Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none text-xs flex-1">
+                    {[
+                      { key: 'all', label: 'Tất Cả', count: safeRooms.length },
+                      { key: 'standard', label: 'Standard', count: standardCount },
+                      { key: 'imax', label: 'IMAX', count: imaxCount },
+                      { key: 'vip', label: 'VIP', count: vipCount },
+                      { key: '3d', label: '3D', count: threeDCount },
+                      { key: '4d', label: '4DX', count: fourDCount },
+                      { key: 'kids', label: 'Kids', count: kidsCount },
+                    ].map((tab) => {
+                      const isActive = roomCategoryFilter === tab.key
+                      return (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => setRoomCategoryFilter(tab.key)}
+                          className={cn(
+                            'px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer border flex items-center gap-1.5 text-xs',
+                            isActive
+                              ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-xs'
+                              : isDark
+                              ? 'bg-white/5 text-[#a09e9a] border-white/10 hover:border-white/20'
+                              : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:text-slate-900'
+                          )}
+                        >
+                          <span>{tab.label}</span>
+                          <span className={cn('text-[10px] font-mono-data opacity-80', isActive ? 'text-[#09090e]' : '')}>
+                            ({tab.count})
+                          </span>
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
 
-      {/* TAB: VOUCHERS MANAGEMENT */}
-      {activeTab === 'vouchers' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Form Create Voucher */}
-          <div className="lg:col-span-5 bg-[#111118] border border-white/10 rounded-2xl p-6 shadow-xl h-fit">
-            <h3 className="font-display font-bold text-lg text-[#f0ede8] mb-1">Tạo Mã Khuyến Mãi Mới</h3>
-            <p className="text-xs text-[#a09e9a] mb-5">Voucher sẽ được lưu vào CSDL và kiểm tra quy tắc tự động khi khách áp dụng.</p>
+                {/* Rooms Grid Cards (Responsive 2 columns) */}
+                {filteredRooms.length === 0 ? (
+                  <div className={cn(
+                    'p-12 text-center rounded-2xl border space-y-3',
+                    isDark ? 'bg-[#111118] border-white/10 text-[#a09e9a]' : 'bg-white border-slate-200 text-slate-500'
+                  )}>
+                    <Building2 className="w-10 h-10 mx-auto text-slate-500/40" />
+                    <p className="font-semibold text-sm">Chưa có phòng chiếu nào thuộc danh mục này.</p>
+                    <p className="text-xs max-w-sm mx-auto">Bạn có thể tạo phòng mới ở cột bên trái hoặc bấm nút bên dưới để xem toàn bộ phòng.</p>
+                    <button
+                      type="button"
+                      onClick={() => setRoomCategoryFilter('all')}
+                      className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-[#e8b84b] font-bold text-xs rounded-xl border border-amber-500/30 cursor-pointer transition-colors"
+                    >
+                      Xem Tất Cả Phòng
+                    </button>
+                  </div>
+                ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {filteredRooms.map((r) => {
+                      const typeKey = r?.room_type || 'standard'
+                      const typeUpper = typeKey.toUpperCase()
+                      const rawName = r?.name || `Phòng #${r?.room_number || r?.id || 1}`
+                      const cleanName = rawName.replace(new RegExp(`\\(${r?.room_type || ''}\\)`, 'gi'), '').trim() || rawName
 
-            <form onSubmit={handleCreateVoucher} className="space-y-4">
-              <div>
-                <label className="block text-xs text-[#a09e9a] mb-1.5 font-medium">Mã Giảm Giá (Code)</label>
-                <input
-                  type="text"
-                  required
-                  value={vCode}
-                  onChange={(e) => setVCode(e.target.value)}
-                  placeholder="Ví dụ: SUMMER2026"
-                  className={`w-full px-3 py-2.5 border rounded-lg text-sm uppercase font-mono-data focus:border-[#e8b84b] outline-none ${
-                    isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
-                />
-              </div>
+                      const typeBadgeStyle =
+                        typeKey === 'imax'
+                          ? 'text-amber-500 bg-amber-500/10 border-amber-500/30'
+                          : typeKey === 'vip'
+                          ? 'text-purple-500 bg-purple-500/10 border-purple-500/30'
+                          : typeKey === '4d'
+                          ? 'text-blue-500 bg-blue-500/10 border-blue-500/30'
+                          : typeKey === '3d'
+                          ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/30'
+                          : typeKey === 'kids'
+                          ? 'text-pink-500 bg-pink-500/10 border-pink-500/30'
+                          : 'text-slate-400 bg-slate-500/10 border-slate-500/20'
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Loại Giảm Giá</label>
-                  <select
-                    value={vType}
-                    onChange={(e) => setVType(e.target.value as 'percent' | 'fixed')}
-                    className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:border-[#e8b84b] outline-none cursor-pointer ${
-                      isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
-                    }`}
-                  >
-                    <option value="percent">Phần Trăm (%)</option>
-                    <option value="fixed">Số Tiền Cố Định (VNĐ)</option>
-                  </select>
-                </div>
+                      return (
+                        <div
+                          key={r.id}
+                          className={cn(
+                            'border rounded-2xl p-4 sm:p-5 shadow-xs transition-all flex flex-col justify-between gap-3 group',
+                            isDark
+                              ? 'bg-[#111118] border-white/10 hover:border-white/20'
+                              : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
+                          )}
+                        >
+                          {/* Top: Name & Badges & Delete */}
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-2.5">
+                              <h5 className={cn('font-display font-bold text-base truncate', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
+                                {cleanName}
+                              </h5>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className={cn('text-[10px] font-mono-data uppercase px-2 py-0.5 rounded-lg border font-bold', typeBadgeStyle)}>
+                                  {typeUpper}
+                                </span>
+                                <span className={cn(
+                                  'text-[10px] font-mono-data px-2 py-0.5 rounded-lg border font-medium',
+                                  isDark ? 'text-white/60 bg-white/5 border-white/10' : 'text-slate-600 bg-slate-100 border-slate-200'
+                                )}>
+                                  #{r.room_number ?? 1}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteRoom(r.id, r.name)}
+                                  title={`Xóa phòng ${r.name}`}
+                                  className={cn(
+                                    'p-1.5 rounded-lg border text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer transition-all ml-1',
+                                    isDark ? 'border-white/5 hover:border-rose-500/30' : 'border-slate-200 hover:border-rose-300'
+                                  )}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
 
-                <div>
-                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>
-                    Giá Trị Giảm {vType === 'percent' ? '(%)' : '(VNĐ)'}
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    value={vValue}
-                    onChange={(e) => setVValue(Number(e.target.value))}
-                    className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:border-[#e8b84b] outline-none font-mono-data ${
-                      isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
-                    }`}
-                  />
-                </div>
-              </div>
+                            {/* Middle: Metrics */}
+                            <div className={cn('space-y-1.5 text-xs pt-2.5 border-t', isDark ? 'border-white/5 text-[#a09e9a]' : 'border-slate-100 text-slate-600')}>
+                              <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-1.5">
+                                  <Grid3X3 className="w-3.5 h-3.5 text-amber-500" />
+                                  <span>Bố trí ghế:</span>
+                                </span>
+                                <strong className={cn('font-semibold', isDark ? 'text-[#f0ede8]' : 'text-slate-800')}>
+                                  {r.total_rows} hàng × {r.total_cols} cột
+                                </strong>
+                              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Đơn Hóa Đơn Tối Thiểu (VNĐ)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={10000}
-                    value={vMinSpend}
-                    onChange={(e) => setVMinSpend(Number(e.target.value))}
-                    className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:border-[#e8b84b] outline-none font-mono-data ${
-                      isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
-                    }`}
-                  />
-                </div>
+                              <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-1.5">
+                                  <Armchair className="w-3.5 h-3.5 text-amber-500" />
+                                  <span>Sức chứa:</span>
+                                </span>
+                                <span className={cn(
+                                  'font-semibold text-xs px-2 py-0.5 rounded-md border',
+                                  isDark ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-amber-50 text-amber-900 border-amber-200'
+                                )}>
+                                  {r.total_seats || r.total_rows * r.total_cols} ghế khả dụng
+                                </span>
+                              </div>
 
-                {vType === 'percent' && (
-                  <div>
-                    <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Giảm Tối Đa (VNĐ)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={10000}
-                      value={vMaxDiscount}
-                      onChange={(e) => setVMaxDiscount(Number(e.target.value))}
-                      className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:border-[#e8b84b] outline-none font-mono-data ${
-                        isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
-                      }`}
-                    />
+                              <div className="flex items-center justify-between pt-0.5">
+                                <span className="flex items-center gap-1.5">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                                  <span>Trạng thái:</span>
+                                </span>
+                                <span className="text-emerald-500 font-semibold text-[11px]">
+                                  Sẵn sàng chiếu
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
-
-              <div>
-                <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Hạng Thành Viên Yêu Cầu (Loyalty Tier)</label>
-                <select
-                  value={vMinLoyaltyTier}
-                  onChange={(e) => setVMinLoyaltyTier(e.target.value)}
-                  className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:border-[#e8b84b] outline-none cursor-pointer ${
-                    isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-300 text-slate-900'
-                  }`}
-                >
-                  <option value="">🌟 Mọi hạng thành viên (Tất cả)</option>
-                  <option value="bronze">🥉 Hạng Đồng trở lên (Bronze+)</option>
-                  <option value="silver">🥈 Hạng Bạc trở lên (Silver+)</option>
-                  <option value="gold">🥇 Hạng Vàng trở lên (Gold+)</option>
-                  <option value="diamond">💎 Hạng Kim Cương (Diamond)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className={`block text-xs mb-1.5 font-medium ${isDark ? 'text-[#a09e9a]' : 'text-slate-700'}`}>Ngày Hết Hạn (Expiry Date)</label>
-                <input
-                  type="date"
-                  value={vExpiry}
-                  min={toLocalYYYYMMDD(new Date())}
-                  onChange={(e) => setVExpiry(e.target.value)}
-                  onClick={(e) => e.currentTarget.showPicker?.()}
-                  className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:border-[#e8b84b] outline-none font-mono-data cursor-pointer ${
-                    isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8] [color-scheme:dark]' : 'bg-slate-50 border-slate-300 text-slate-900 [color-scheme:light]'
-                  }`}
-                />
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <label className={`flex items-center gap-2 cursor-pointer text-xs ${isDark ? 'text-[#f0ede8]' : 'text-slate-800 font-medium'}`}>
-                  <input
-                    type="checkbox"
-                    checked={vFirstOnly}
-                    onChange={(e) => setVFirstOnly(e.target.checked)}
-                    className="w-4 h-4 rounded border-white/20 accent-[#e8b84b] cursor-pointer"
-                  />
-                  <span>Chỉ áp dụng cho đơn hàng đầu tiên của User</span>
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                disabled={vLoading}
-                className="w-full bg-[#e8b84b] text-[#09090e] border-0 rounded-lg py-3 font-bold text-xs cursor-pointer hover:shadow-[0_4px_16px_rgba(232,184,75,0.35)] transition-all disabled:opacity-50 mt-2"
-              >
-                {vLoading ? 'Đang tạo...' : 'Tạo Mã Khuyến Mãi Mới →'}
-              </button>
-            </form>
-          </div>
-
-          {/* Vouchers List Table */}
-          <div className={`lg:col-span-7 border rounded-2xl p-6 shadow-xl space-y-4 ${
-            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
-          }`}>
-            <h3 className={`font-display font-bold text-lg ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Danh Sách Mã Khuyến Mãi Hợp Lệ</h3>
-
-            <div className="overflow-x-auto">
-              <table className={`w-full text-left text-xs ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-                <thead className={`font-mono-data uppercase border-b ${
-                  isDark ? 'bg-[#161622] text-[#f0ede8] border-white/10' : 'bg-slate-50 text-slate-800 border-slate-200'
-                }`}>
-                  <tr>
-                    <th className="p-3">Mã Voucher</th>
-                    <th className="p-3">Mức Giảm</th>
-                    <th className="p-3">Hạng Áp Dụng</th>
-                    <th className="p-3">Hạn Dùng</th>
-                    <th className="p-3">Trạng Thái</th>
-                    <th className="p-3 text-right">Thao Tác</th>
-                  </tr>
-                </thead>
-                <tbody className={isDark ? 'divide-y divide-white/5' : 'divide-y divide-slate-200'}>
-                  {vouchers
-                    .slice((voucherPage - 1) * PAGE_SIZE, voucherPage * PAGE_SIZE)
-                    .map((v) => (
-                      <tr key={v.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="p-3 font-mono-data font-bold text-sm text-[#e8b84b]">
-                          {v.code}
-                          {v.is_first_booking_only && (
-                            <span className="block text-[9px] text-[#a09e9a] font-normal">Đơn đầu tiên</span>
-                          )}
-                        </td>
-                        <td className="p-3 font-mono-data">
-                          {v.discount_type === 'percent' ? `${v.discount_value}%` : fmt(v.discount_value)}
-                          {v.min_spend > 0 && (
-                            <span className="block text-[9px] text-[#6e6c68]">Đơn từ {fmt(v.min_spend)}</span>
-                          )}
-                        </td>
-                        <td className="p-3">
-                          {v.min_loyalty_tier ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 border border-amber-500/30 text-amber-400 capitalize">
-                              {v.min_loyalty_tier === 'diamond' ? '💎 Kim Cương' : v.min_loyalty_tier === 'gold' ? '🥇 Vàng+' : v.min_loyalty_tier === 'silver' ? '🥈 Bạc+' : '🥉 Đồng+'}
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-[#6e6c68]">Tất cả</span>
-                          )}
-                        </td>
-                        <td className="p-3 font-mono-data">{v.expiry_date || 'Vĩnh viễn'}</td>
-                        <td className="p-3">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              v.is_active
-                                ? 'bg-[rgba(46,204,113,0.15)] text-[#2ecc71] border border-[rgba(46,204,113,0.3)]'
-                                : 'bg-white/5 text-[#6e6c68] border border-white/10'
-                            }`}
-                          >
-                            {v.is_active ? '● Hoạt động' : '○ Tắt'}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleVoucherActive(v)}
-                            className="bg-white/5 hover:bg-white/10 text-[#f0ede8] border border-white/10 rounded px-2.5 py-1 text-[11px] font-bold cursor-pointer transition-all"
-                          >
-                            {v.is_active ? 'Khóa' : 'Kích hoạt'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
             </div>
-
-            <PaginationControl
-              currentPage={voucherPage}
-              totalItems={vouchers.length}
-              pageSize={PAGE_SIZE}
-              onPageChange={setVoucherPage}
-            />
           </div>
-        </div>
+        )
+      })()}
+
+
+      {activeTab === 'vouchers' && (
+        <VoucherAdminTab isDark={isDark} />
       )}
 
       {/* TAB: CONCESSIONS MANAGEMENT */}
@@ -5374,8 +8199,9 @@ export default function AdminView() {
             isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
           }`}>
             <div className="space-y-1.5 border-b pb-4 border-white/10">
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/30 rounded-full text-xs text-amber-400 font-semibold font-mono-data">
-                <span>🔍 QR Code Ticket Scanner</span>
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/30 rounded-full text-xs text-amber-400 font-semibold">
+                <QrCode className="w-3.5 h-3.5" />
+                <span>QR Code Ticket Scanner</span>
               </div>
               <h3 className={`font-display font-bold text-2xl ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Soát Vé & Check-in</h3>
               <p className={`text-xs leading-relaxed ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
@@ -5410,9 +8236,19 @@ export default function AdminView() {
                   <button
                     type="submit"
                     disabled={scannerLoading || !scannerTicketCode.trim()}
-                    className="bg-[#e8b84b] hover:bg-[#f0c868] text-[#09090e] font-bold px-5 py-3 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-50 shadow-md shrink-0"
+                    className="bg-[#e8b84b] hover:bg-[#f0c868] text-[#09090e] font-bold px-5 py-3 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-50 shadow-md shrink-0 flex items-center justify-center gap-1.5"
                   >
-                    {scannerLoading ? 'Đang quét...' : '🔍 Kiểm Tra Vé'}
+                    {scannerLoading ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Đang quét...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-3.5 h-3.5" />
+                        <span>Kiểm Tra Vé</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -5420,8 +8256,9 @@ export default function AdminView() {
 
             {/* Recent Sample Ticket Chips */}
             <div className="space-y-2 pt-2 border-t border-white/10">
-              <span className={`text-[11px] font-mono-data block ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
-                💡 Thử mã vé mẫu từ danh sách vé hệ thống:
+              <span className={`text-[11px] font-semibold flex items-center gap-1.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>
+                <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
+                <span>Thử mã vé mẫu từ danh sách vé hệ thống:</span>
               </span>
               <div className="flex flex-wrap gap-1.5">
                 {showtimes.slice(0, 4).map((st, idx) => {
@@ -5461,12 +8298,14 @@ export default function AdminView() {
                 {/* Result Header Badge */}
                 <div className="flex justify-between items-center border-b border-current/20 pb-4">
                   <div className="flex items-center gap-3">
-                    <span className="text-3xl">
-                      {scannerResult.status_code === 'VALID'
-                        ? '✅'
-                        : scannerResult.status_code === 'CHECKED_IN'
-                        ? '⚠️'
-                        : '⛔'}
+                    <span className="shrink-0">
+                      {scannerResult.status_code === 'VALID' ? (
+                        <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+                      ) : scannerResult.status_code === 'CHECKED_IN' ? (
+                        <AlertTriangle className="w-8 h-8 text-amber-400" />
+                      ) : (
+                        <ShieldAlert className="w-8 h-8 text-rose-400" />
+                      )}
                     </span>
                     <div>
                       <h4 className="font-display font-extrabold text-lg leading-tight uppercase">
@@ -5476,7 +8315,7 @@ export default function AdminView() {
                           ? 'VÉ NÀY ĐÃ ĐƯỢC CHECK-IN LÚC TRƯỚC'
                           : 'VÉ KHÔNG HỢP LỆ HOẶC ĐÃ HỦY'}
                       </h4>
-                      <p className="text-xs font-mono-data opacity-90 mt-0.5">{scannerResult.message}</p>
+                      <p className="text-xs font-semibold opacity-90 mt-0.5">{scannerResult.message}</p>
                     </div>
                   </div>
 
@@ -5487,7 +8326,7 @@ export default function AdminView() {
 
                 {/* Ticket Details Box */}
                 {scannerResult.reservation && (
-                  <div className={`p-4 rounded-xl border space-y-3 text-xs font-mono-data ${
+                  <div className={`p-4 rounded-xl border space-y-3 text-xs ${
                     isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-white border-slate-200 text-slate-900 shadow-sm'
                   }`}>
                     <div className="grid grid-cols-2 gap-4 pb-3 border-b border-white/10">
@@ -5534,7 +8373,11 @@ export default function AdminView() {
                     onClick={handlePerformCheckIn}
                     className="w-full bg-emerald-500 hover:bg-emerald-600 text-black font-extrabold py-4 rounded-xl text-sm cursor-pointer transition-all shadow-xl uppercase tracking-wider flex items-center justify-center gap-2"
                   >
-                    <span>✅</span>
+                    {checkInLoading ? (
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="w-5 h-5" />
+                    )}
                     <span>{checkInLoading ? 'Đang check-in...' : 'ĐÁNH DẤU ĐÃ VÀO RẠP (CHECK-IN VÉ)'}</span>
                   </button>
                 )}
@@ -5543,7 +8386,7 @@ export default function AdminView() {
               <div className={`p-12 rounded-2xl border text-center space-y-3 transition-colors ${
                 isDark ? 'bg-[#111118] border-white/10 text-[#a09e9a]' : 'bg-white border-slate-200 text-slate-500 shadow-md'
               }`}>
-                <span className="text-5xl block">📱</span>
+                <Smartphone className="w-14 h-14 mx-auto text-amber-400/50" />
                 <h4 className={`font-display font-bold text-lg ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>Sẵn Sàng Quét Mã QR</h4>
                 <p className="text-xs max-w-sm mx-auto">
                   Nhập mã vé hoặc chọn mã vé mẫu ở cột bên trái để kiểm tra thông tin vé điện tử của khán giả.
@@ -5557,10 +8400,10 @@ export default function AdminView() {
                 isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-md'
               }`}>
                 <h4 className={`font-display font-bold text-sm flex items-center gap-2 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                  <span>📋</span>
+                  <ClipboardList className="w-4 h-4 text-amber-400" />
                   <span>Nhật Ký Check-in Gần Đây ({recentCheckIns.length})</span>
                 </h4>
-                <div className="space-y-2 font-mono-data text-xs">
+                <div className="space-y-2 text-xs">
                   {recentCheckIns.map((item, idx) => (
                     <div key={idx} className={`p-2.5 rounded-xl border flex justify-between items-center ${
                       isDark ? 'bg-[#09090e] border-white/5' : 'bg-slate-50 border-slate-200'
@@ -5570,7 +8413,10 @@ export default function AdminView() {
                         <span className="mx-2 opacity-50">·</span>
                         <span className={isDark ? 'text-[#f0ede8]' : 'text-slate-900'}>{item.movie_title}</span>
                       </div>
-                      <span className="text-[11px] text-[#a09e9a]">🕒 {item.checked_in_at}</span>
+                      <span className="text-[11px] text-[#a09e9a] flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-[#a09e9a]" />
+                        <span>{item.checked_in_at}</span>
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -5580,846 +8426,24 @@ export default function AdminView() {
         </div>
       )}
 
-      {/* TAB 5: ANALYTICS & REPORTS (FEAT-04) */}
+      {/* TAB 5: ANALYTICS & REPORTS */}
       {activeTab === 'analytics' && (
-        <div className="space-y-8">
-          {/* Date Range Filter Bar (FEAT-04) */}
-          <div className={`p-5 rounded-2xl border shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-colors ${
-            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
-          }`}>
-            <div>
-              <h3 className={`font-display font-bold text-lg flex items-center gap-2 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                <span>📅</span>
-                <span>Bộ Lọc Báo Cáo & Thống Kê Theo Ngày</span>
-              </h3>
-              <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                {liveAnalytics?.start_date || liveAnalytics?.end_date
-                  ? `Đang hiển thị dữ liệu từ ${liveAnalytics.start_date || 'đầu'} đến ${liveAnalytics.end_date || 'nay'}`
-                  : 'Đang hiển thị toàn bộ lịch sử giao dịch từ trước đến nay.'}
-              </p>
-            </div>
-
-            {/* Quick Presets & Date Inputs */}
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setAnalyticsPreset('all')
-                  setAnalyticsStartDate('')
-                  setAnalyticsEndDate('')
-                  fetchFilteredAnalytics()
-                }}
-                className={`px-3 py-1.5 rounded-lg border font-bold transition-all cursor-pointer ${
-                  analyticsPreset === 'all'
-                    ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
-                    : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                Toàn bộ
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const todayStr = toLocalYYYYMMDD(new Date())
-                  setAnalyticsPreset('today')
-                  setAnalyticsStartDate(todayStr)
-                  setAnalyticsEndDate(todayStr)
-                  fetchFilteredAnalytics(todayStr, todayStr)
-                }}
-                className={`px-3 py-1.5 rounded-lg border font-bold transition-all cursor-pointer ${
-                  analyticsPreset === 'today'
-                    ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
-                    : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                Hôm nay
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const end = new Date()
-                  const start = new Date(Date.now() - 7 * 86400000)
-                  const startStr = toLocalYYYYMMDD(start)
-                  const endStr = toLocalYYYYMMDD(end)
-                  setAnalyticsPreset('7days')
-                  setAnalyticsStartDate(startStr)
-                  setAnalyticsEndDate(endStr)
-                  fetchFilteredAnalytics(startStr, endStr)
-                }}
-                className={`px-3 py-1.5 rounded-lg border font-bold transition-all cursor-pointer ${
-                  analyticsPreset === '7days'
-                    ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
-                    : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                7 Ngày qua
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const end = new Date()
-                  const start = new Date(Date.now() - 30 * 86400000)
-                  const startStr = toLocalYYYYMMDD(start)
-                  const endStr = toLocalYYYYMMDD(end)
-                  setAnalyticsPreset('30days')
-                  setAnalyticsStartDate(startStr)
-                  setAnalyticsEndDate(endStr)
-                  fetchFilteredAnalytics(startStr, endStr)
-                }}
-                className={`px-3 py-1.5 rounded-lg border font-bold transition-all cursor-pointer ${
-                  analyticsPreset === '30days'
-                    ? 'bg-[#e8b84b] text-[#09090e] border-[#e8b84b] shadow-sm'
-                    : isDark ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                30 Ngày qua
-              </button>
-
-              {/* Custom Date Pickers */}
-              <div className="flex items-center gap-1.5 pl-2 border-l border-white/10">
-                <input
-                  type="date"
-                  value={analyticsStartDate}
-                  onChange={(e) => {
-                    setAnalyticsStartDate(e.target.value)
-                    setAnalyticsPreset('all')
-                  }}
-                  className={`px-2 py-1 rounded-lg border text-xs outline-none font-mono-data ${
-                    isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-200 text-slate-900'
-                  }`}
-                />
-                <span className={isDark ? 'text-[#a09e9a]' : 'text-slate-400'}>➔</span>
-                <input
-                  type="date"
-                  value={analyticsEndDate}
-                  onChange={(e) => {
-                    setAnalyticsEndDate(e.target.value)
-                    setAnalyticsPreset('all')
-                  }}
-                  className={`px-2 py-1 rounded-lg border text-xs outline-none font-mono-data ${
-                    isDark ? 'bg-[#09090e] border-white/10 text-[#f0ede8]' : 'bg-slate-50 border-slate-200 text-slate-900'
-                  }`}
-                />
-                <button
-                  type="button"
-                  disabled={analyticsLoading}
-                  onClick={() => fetchFilteredAnalytics(analyticsStartDate || undefined, analyticsEndDate || undefined)}
-                  className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg cursor-pointer transition-all disabled:opacity-50"
-                >
-                  {analyticsLoading ? 'Đang lọc...' : 'Lọc'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Summary Stat Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className={`border rounded-2xl p-6 shadow-xl relative overflow-hidden ${
-              isDark ? 'bg-[#111118] border-[#e8b84b]/30' : 'bg-amber-50/60 border-amber-300'
-            }`}>
-              <div className="absolute top-0 right-0 p-4 opacity-15 text-3xl">💰</div>
-              <span className={`text-xs font-mono-data block mb-1 uppercase tracking-wider ${isDark ? 'text-[#a09e9a]' : 'text-amber-900 font-semibold'}`}>Tổng Doanh Thu Hóa Đơn</span>
-              <h3 className="font-display font-black text-2xl text-[#e8b84b]">
-                {liveAnalytics ? fmt(liveAnalytics.total_revenue) : '0 VNĐ'}
-              </h3>
-              <p className="text-[10px] text-[#2ecc71] font-mono-data mt-2 font-bold flex items-center gap-1">
-                <span>↑ Live Database</span>
-                <span className={`font-normal ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>từ đơn hàng thực tế</span>
-              </p>
-            </div>
-
-            <div className={`border rounded-2xl p-6 shadow-xl relative overflow-hidden ${
-              isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-sm'
-            }`}>
-              <div className="absolute top-0 right-0 p-4 opacity-15 text-3xl">🎟️</div>
-              <span className={`text-xs font-mono-data block mb-1 uppercase tracking-wider ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>Vé Đã Bán Ra</span>
-              <h3 className={`font-display font-black text-2xl ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                {liveAnalytics ? `${liveAnalytics.total_reservations} Vé` : '0 Vé'}
-              </h3>
-              <p className="text-[10px] text-[#2ecc71] font-mono-data mt-2 font-bold">
-                Suất chiếu: {liveAnalytics?.total_showtimes_count ?? 0} suất
-              </p>
-            </div>
-
-            <div className={`border rounded-2xl p-6 shadow-xl relative overflow-hidden ${
-              isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-sm'
-            }`}>
-              <div className="absolute top-0 right-0 p-4 opacity-15 text-3xl">🎬</div>
-              <span className={`text-xs font-mono-data block mb-1 uppercase tracking-wider ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>Phim Đang Chiếu</span>
-              <h3 className={`font-display font-black text-2xl ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                {liveAnalytics ? `${liveAnalytics.active_movies_count} Phim` : `${movies.length} Phim`}
-              </h3>
-              <p className="text-[10px] text-[#e8b84b] font-mono-data mt-2 font-bold">Dữ liệu thời gian thực</p>
-            </div>
-
-            <div className={`border rounded-2xl p-6 shadow-xl relative overflow-hidden ${
-              isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-sm'
-            }`}>
-              <div className="absolute top-0 right-0 p-4 opacity-15 text-3xl">👥</div>
-              <span className={`text-xs font-mono-data block mb-1 uppercase tracking-wider ${isDark ? 'text-[#a09e9a]' : 'text-slate-600'}`}>Tài Khoản Đăng Ký</span>
-              <h3 className={`font-display font-black text-2xl ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                {liveAnalytics ? `${liveAnalytics.total_users_count} Thành Viên` : '0 Thành Viên'}
-              </h3>
-              <p className="text-[10px] text-[#2ecc71] font-mono-data mt-2 font-bold">100% trong PostgreSQL</p>
-            </div>
-          </div>
-
-          {/* Chart Section 1: Revenue & Ticket Sales Trend */}
-          <div className={`border rounded-2xl p-6 shadow-xl ${
-            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
-          }`}>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-              <div>
-                <h3 className={`font-display font-bold text-xl flex items-center gap-2 ${
-                  isDark ? 'text-[#f0ede8]' : 'text-slate-900'
-                }`}>
-                  <span>📈</span> Biểu Đồ Tăng Trưởng Doanh Thu Theo Tháng (2026)
-                </h3>
-                <p className={`text-xs mt-0.5 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Phân tích xu hướng doanh thu vé và tăng trưởng khách hàng trong 8 tháng qua.</p>
-              </div>
-
-              <div className="flex items-center gap-4 text-xs font-mono-data">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded bg-[#e8b84b]" />
-                  <span className="text-[#a09e9a]">Doanh Thu (VNĐ)</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded bg-[#3498db]" />
-                  <span className="text-[#a09e9a]">Số Vé Bán (Vé)</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Monthly Bar Visualizer */}
-            {(() => {
-              const monthlyData = (liveAnalytics?.monthly_revenue && liveAnalytics.monthly_revenue.length > 0)
-                ? liveAnalytics.monthly_revenue.map((r) => {
-                    const parts = r.month.split('-')
-                    const mStr = parts.length > 1 ? `Tháng ${parseInt(parts[1], 10)}` : r.month
-                    return { month: mStr, rev: Math.round(r.revenue / 100000) / 10, rawRev: r.revenue, tickets: r.tickets }
-                  })
-                : []
-
-              if (monthlyData.length === 0) {
-                return (
-                  <div className="h-64 flex flex-col items-center justify-center text-[#a09e9a] text-sm gap-2 border-b border-white/10">
-                    <span className="text-2xl">📊</span>
-                    <span>Chưa có đủ dữ liệu doanh thu để hiển thị biểu đồ.</span>
-                  </div>
-                )
-              }
-
-              const maxRev = Math.max(...monthlyData.map((d) => d.rev), 1)
-
-              return (
-                <>
-                  <div className="h-64 flex items-end justify-between gap-3 sm:gap-6 pt-8 pb-4 border-b border-white/10 px-4">
-                    {monthlyData.map((item) => {
-                      const heightPct = Math.min(100, Math.max(15, Math.round((item.rev / maxRev) * 100)))
-                      return (
-                        <div key={item.month} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
-                          {/* Tooltip on hover */}
-                          <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-[#09090e] border border-[#e8b84b]/40 rounded px-2 py-1 text-[10px] font-mono-data text-center pointer-events-none shadow-xl mb-1">
-                            <p className="text-[#e8b84b] font-bold">{item.rawRev.toLocaleString('vi-VN')} VNĐ</p>
-                            <p className="text-[#a09e9a]">{item.tickets} vé đã bán</p>
-                          </div>
-
-                          <div className="w-full max-w-[40px] flex items-end justify-center gap-1 h-full">
-                            {/* Revenue Bar */}
-                            <div
-                              className="w-1/2 bg-gradient-to-t from-[#d4a338] to-[#e8b84b] rounded-t transition-all duration-500 group-hover:brightness-125"
-                              style={{ height: `${heightPct}%` }}
-                            />
-                            {/* Tickets Bar */}
-                            <div
-                              className="w-1/2 bg-gradient-to-t from-[#2980b9] to-[#3498db] rounded-t transition-all duration-500 group-hover:brightness-125"
-                              style={{ height: `${Math.max(10, heightPct * 0.8)}%` }}
-                            />
-                          </div>
-
-                          <span className="text-xs font-mono-data text-[#a09e9a] font-bold mt-1 group-hover:text-[#e8b84b]">
-                            {item.month}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  <div className="flex justify-between items-center pt-4 text-xs text-[#a09e9a] font-mono-data">
-                    <span>Thống kê từ PostgreSQL DB (Thời gian thực)</span>
-                    <span className="text-[#2ecc71] font-bold">Tổng doanh thu: {fmt(liveAnalytics?.total_revenue || 0)}</span>
-                  </div>
-                </>
-              )
-            })()}
-          </div>
-
-          {/* Chart Section 2: Movie Revenue Distribution & Room Occupancy */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Top Grossing Movies Breakdown */}
-            <div className="lg:col-span-7 bg-[#111118] border border-white/10 rounded-2xl p-6 shadow-xl">
-              <h3 className="font-display font-bold text-xl text-[#f0ede8] mb-1 flex items-center gap-2">
-                <span>🎬</span> Top Phim Chiếm Tỷ Trọng Doanh Thu Cao Nhất
-              </h3>
-              <p className="text-xs text-[#a09e9a] mb-6">Thống kê doanh thu đóng góp thực tế theo từng tựa phim trong cơ sở dữ liệu.</p>
-
-              <div className="space-y-4">
-                {(() => {
-                  const movieData = (liveAnalytics?.movie_revenue_breakdown && liveAnalytics.movie_revenue_breakdown.length > 0)
-                    ? liveAnalytics.movie_revenue_breakdown.map((m, idx) => {
-                        const colors = [
-                          'bg-gradient-to-r from-amber-500 to-yellow-400',
-                          'bg-gradient-to-r from-red-600 to-amber-500',
-                          'bg-gradient-to-r from-blue-600 to-indigo-400',
-                          'bg-gradient-to-r from-purple-600 to-pink-500',
-                          'bg-gradient-to-r from-emerald-600 to-teal-400',
-                        ]
-                        return {
-                          title: m.movie_title,
-                          rev: `${m.revenue.toLocaleString('vi-VN')} VNĐ`,
-                          pct: m.percentage,
-                          color: colors[idx % colors.length]
-                        }
-                      })
-                    : []
-
-                  if (movieData.length === 0) {
-                    return (
-                      <div className="py-8 flex flex-col items-center justify-center text-[#a09e9a] text-xs gap-2">
-                        <span>🎬</span>
-                        <span>Chưa có dữ liệu phân rã doanh thu phim.</span>
-                      </div>
-                    )
-                  }
-
-                  return movieData.map((m) => (
-                    <div key={m.title} className="space-y-1.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="font-bold text-[#f0ede8]">{m.title}</span>
-                        <span className="font-mono-data text-[#e8b84b] font-bold">{m.rev} ({m.pct}%)</span>
-                      </div>
-                      <div className="w-full bg-[#09090e] h-3 rounded-full overflow-hidden border border-white/5">
-                        <div
-                          className={`h-full ${m.color} rounded-full transition-all duration-700`}
-                          style={{ width: `${Math.min(100, Math.max(5, m.pct))}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))
-                })()}
-              </div>
-            </div>
-
-            {/* Room Occupancy & Capacity Utilization */}
-            <div className="lg:col-span-5 bg-[#111118] border border-white/10 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
-              <div>
-                <h3 className="font-display font-bold text-xl text-[#f0ede8] mb-1 flex items-center gap-2">
-                  <span>🏛️</span> Tỷ Lệ Lấp Đầy Theo Phòng Chiếu
-                </h3>
-                <p className="text-xs text-[#a09e9a] mb-6">Hiệu suất khai thác ghế ngồi theo công nghệ phòng chiếu.</p>
-
-                <div className="space-y-5">
-                  {(() => {
-                    const roomData = (liveAnalytics?.room_occupancy && liveAnalytics.room_occupancy.length > 0)
-                      ? liveAnalytics.room_occupancy.map((r) => ({
-                          room: `${r.room_name} (${r.booked_seats}/${r.total_seats} ghế)`,
-                          occ: r.occupancy_rate,
-                          color: r.occupancy_rate >= 80 ? 'text-[#e8b84b]' : r.occupancy_rate >= 50 ? 'text-[#2ecc71]' : 'text-[#3498db]'
-                        }))
-                      : capacityReport.length > 0
-                        ? capacityReport.slice(0, 5).map((c) => ({
-                            room: `${c.room_name} - ${c.movie_title}`,
-                            occ: Math.round(c.occupancy_rate * 10) / 10,
-                            color: c.occupancy_rate >= 80 ? 'text-[#e8b84b]' : c.occupancy_rate >= 50 ? 'text-[#2ecc71]' : 'text-[#3498db]'
-                          }))
-                        : []
-
-                    if (roomData.length === 0) {
-                      return (
-                        <div className="py-8 flex flex-col items-center justify-center text-[#a09e9a] text-xs gap-2">
-                          <span>🏛️</span>
-                          <span>Chưa có dữ liệu tỷ lệ lấp đầy phòng chiếu.</span>
-                        </div>
-                      )
-                    }
-
-                    return roomData.map((r) => (
-                      <div key={r.room} className="bg-[#09090e] p-3.5 rounded-xl border border-white/5 space-y-2">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-bold text-[#f0ede8] truncate max-w-[240px]" title={r.room}>
-                            {r.room}
-                          </span>
-                          <span className={`font-mono-data font-bold ${r.color}`}>{r.occ}% Lấp Đầy</span>
-                        </div>
-                        <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
-                          <div
-                            className="bg-[#e8b84b] h-full rounded-full transition-all duration-500"
-                            style={{ width: `${Math.min(100, Math.max(0, r.occ))}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))
-                  })()}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Chart Section 3: Seat Class Share & Payment Methods Breakdown */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Seat Class Preference */}
-            <div className="bg-[#111118] border border-white/10 rounded-2xl p-6 shadow-xl">
-              <h3 className="font-display font-bold text-lg text-[#f0ede8] mb-4 flex items-center gap-2">
-                <span>💺</span> Phân Phối Tỷ Lệ Đặt Ghế Víp vs Ghế Thường
-              </h3>
-
-              <div className="flex items-center gap-6">
-                <div className="relative w-32 h-32 rounded-full bg-conic from-[#e8b84b] via-[#e8b84b] to-[#3498db] flex items-center justify-center shrink-0 shadow-lg">
-                  <div className="w-20 h-20 rounded-full bg-[#111118] flex flex-col items-center justify-center">
-                    <span className="font-mono-data text-xs font-bold text-[#e8b84b]">68% VIP</span>
-                  </div>
-                </div>
-
-                <div className="space-y-3 text-xs flex-1">
-                  <div className="flex justify-between items-center bg-[#09090e] p-2.5 rounded-lg border border-white/5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-[#e8b84b]" />
-                      <span>Ghế VIP Trung Tâm</span>
-                    </div>
-                    <span className="font-mono-data font-bold text-[#e8b84b]">68% (261 vé)</span>
-                  </div>
-
-                  <div className="flex justify-between items-center bg-[#09090e] p-2.5 rounded-lg border border-white/5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-[#3498db]" />
-                      <span>Ghế Tiêu Chuẩn</span>
-                    </div>
-                    <span className="font-mono-data font-bold text-[#3498db]">32% (123 vé)</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Gateways Share */}
-            <div className="bg-[#111118] border border-white/10 rounded-2xl p-6 shadow-xl">
-              <h3 className="font-display font-bold text-lg text-[#f0ede8] mb-4 flex items-center gap-2">
-                <span>💳</span> Phương Thức Thanh Toán Ưa Thích
-              </h3>
-
-              <div className="space-y-3 text-xs">
-                {[
-                  { name: 'Ví Điện Tử MoMo', pct: 42, color: 'bg-pink-500', count: '161 đơn' },
-                  { name: 'Thẻ Ngân Hàng (ATM / Visa)', pct: 35, color: 'bg-blue-500', count: '134 đơn' },
-                  { name: 'Ví ZaloPay', pct: 15, color: 'bg-emerald-500', count: '58 đơn' },
-                  { name: 'Tiền Mặt Tại Rạp', pct: 8, color: 'bg-amber-500', count: '31 đơn' },
-                ].map((p) => (
-                  <div key={p.name} className="bg-[#09090e] p-2.5 rounded-lg border border-white/5 space-y-1.5">
-                    <div className="flex justify-between">
-                      <span className="font-bold text-[#f0ede8]">{p.name}</span>
-                      <span className="font-mono-data text-[#e8b84b] font-bold">{p.pct}% ({p.count})</span>
-                    </div>
-                    <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
-                      <div className={`h-full ${p.color} rounded-full`} style={{ width: `${p.pct}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Section 4: Live Recent Transactions List from PostgreSQL */}
-          {liveAnalytics?.recent_transactions && liveAnalytics.recent_transactions.length > 0 && (
-            <div className="bg-[#111118] border border-white/10 rounded-2xl p-6 shadow-xl space-y-4">
-              <h3 className="font-display font-bold text-lg text-[#f0ede8] flex items-center gap-2">
-                <span>🧾</span> Giao Dịch Vé Đã Xác Nhận Gần Đây (PostgreSQL Live)
-              </h3>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs font-mono-data">
-                  <thead>
-                    <tr className="border-b border-white/10 text-[#a09e9a]">
-                      <th className="pb-3">MÃ VÉ</th>
-                      <th className="pb-3">KHÁCH HÀNG</th>
-                      <th className="pb-3">PHIM CHIẾU</th>
-                      <th className="pb-3">TỔNG TIỀN</th>
-                      <th className="pb-3">PHƯƠNG THỨC</th>
-                      <th className="pb-3">THỜI GIAN</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {liveAnalytics.recent_transactions.map((tx) => (
-                      <tr key={tx.id} className="hover:bg-white/5 transition-colors">
-                        <td className="py-3 font-bold text-[#e8b84b]">{tx.ticket_code}</td>
-                        <td className="py-3 text-[#f0ede8] font-sans font-bold">{tx.customer_name}</td>
-                        <td className="py-3 text-white font-sans">{tx.movie_title}</td>
-                        <td className="py-3 font-bold text-emerald-400">{tx.total_price.toLocaleString('vi-VN')} VNĐ</td>
-                        <td className="py-3 uppercase text-amber-300">{tx.payment_method}</td>
-                        <td className="py-3 text-[#a09e9a]">{tx.created_at}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
+        <AnalyticsAdminTab isDark={isDark} notify={notify} moviesCount={movies.length} />
       )}
 
+      
       {/* TAB 9: REFUNDS MANAGEMENT */}
       {activeTab === 'refunds' && (
-        <div className="space-y-6">
-          {/* Header Banner */}
-          <div className={`p-6 rounded-2xl border shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-colors ${
-            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
-          }`}>
-            <div>
-              <h3 className={`font-display font-bold text-xl flex items-center gap-2 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                <span>💸</span>
-                <span>Quản Lý Hoàn Tiền Vé Đã Hủy</span>
-              </h3>
-              <p className={`text-xs mt-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                Theo dõi trạng thái hoàn tiền cho các khách có nhu cầu huỷ vé
-              </p>
-            </div>
-          </div>
-
-          {/* Status, Payment Method & Date Filters Bar */}
-          <div className={`p-4 rounded-2xl border space-y-3.5 transition-colors ${
-            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200 shadow-sm'
-          }`}>
-            {/* Row 1: Status Filters + Payment Method + Reload button */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex flex-wrap items-center gap-4">
-                {/* Status Filters */}
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className={`text-xs font-bold mr-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Trạng thái:</span>
-                  {[
-                    { key: 'all', label: 'Tất cả' },
-                    { key: 'manual_required', label: '⚠️ Cần xử lý thủ công' },
-                    { key: 'success', label: '✓ Thành công' },
-                    { key: 'processing', label: '⏳ Đang xử lý' },
-                    { key: 'failed', label: '❌ Thất bại' },
-                  ].map((filter) => (
-                    <button
-                      key={filter.key}
-                      type="button"
-                      onClick={() => { setRefundStatusFilter(filter.key); setRefundPage(1); }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                        refundStatusFilter === filter.key
-                          ? 'bg-[#e8b84b]/20 text-[#e8b84b] border-[#e8b84b]/50 shadow-sm'
-                          : isDark
-                          ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
-                          : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      {filter.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className={`h-6 w-px hidden md:block ${isDark ? 'bg-white/10' : 'bg-slate-200'}`} />
-
-                {/* Payment Method Filters */}
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className={`text-xs font-bold mr-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>Phương thức:</span>
-                  {[
-                    { key: 'all', label: 'Tất cả P.Thức' },
-                    { key: 'cash', label: '💵 Tiền mặt' },
-                    { key: 'vnpay', label: '💳 VNPay' },
-                  ].map((pm) => (
-                    <button
-                      key={pm.key}
-                      type="button"
-                      onClick={() => { setRefundPmFilter(pm.key); setRefundPage(1); }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                        refundPmFilter === pm.key
-                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-sm'
-                          : isDark
-                          ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
-                          : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      {pm.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Reload button */}
-              <button
-                type="button"
-                onClick={fetchRefunds}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 cursor-pointer transition-all ${
-                  isDark ? 'bg-white/5 border-white/10 text-[#f0ede8] hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
-                }`}
-              >
-                🔄 Tải lại
-              </button>
-            </div>
-
-            <div className={`h-px w-full ${isDark ? 'bg-white/10' : 'bg-slate-100'}`} />
-
-            {/* Row 2: Date Picker Filter using CleanDatePicker */}
-            <div className="flex flex-wrap items-center gap-3">
-              <span className={`text-xs font-bold flex items-center gap-1 ${isDark ? 'text-[#a09e9a]' : 'text-slate-500'}`}>
-                <span>📅</span> Lịch lọc theo ngày:
-              </span>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="w-[180px]">
-                  <CleanDatePicker
-                    value={refundStartDate}
-                    onChange={(d) => { setRefundStartDate(d); setRefundPage(1); }}
-                    placeholder="Từ ngày..."
-                  />
-                </div>
-
-                <span className={`text-xs font-bold ${isDark ? 'text-[#a09e9a]' : 'text-slate-400'}`}>→</span>
-
-                <div className="w-[180px]">
-                  <CleanDatePicker
-                    value={refundEndDate}
-                    minDate={refundStartDate}
-                    onChange={(d) => { setRefundEndDate(d); setRefundPage(1); }}
-                    placeholder="Đến ngày..."
-                  />
-                </div>
-              </div>
-
-              {/* Date Presets */}
-              <div className="flex flex-wrap items-center gap-1.5 ml-auto sm:ml-2">
-                {[
-                  { key: 'today', label: 'Hôm nay' },
-                  { key: '7days', label: '7 ngày qua' },
-                  { key: '30days', label: '30 ngày qua' },
-                  { key: 'all', label: 'Tất cả ngày' },
-                ].map((preset) => {
-                  const isActive =
-                    (preset.key === 'all' && !refundStartDate && !refundEndDate) ||
-                    (preset.key === 'today' && refundStartDate === toLocalYYYYMMDD(new Date()) && refundEndDate === toLocalYYYYMMDD(new Date()))
-                  return (
-                    <button
-                      key={preset.key}
-                      type="button"
-                      onClick={() => setRefundDatePreset(preset.key as any)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                        isActive
-                          ? 'bg-[#e8b84b]/20 text-[#e8b84b] border-[#e8b84b]/50 shadow-sm'
-                          : isDark
-                          ? 'bg-white/5 border-white/10 text-[#a09e9a] hover:text-[#f0ede8]'
-                          : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Refund Transactions Table */}
-          <div className={`border rounded-2xl overflow-hidden shadow-xl transition-colors ${
-            isDark ? 'bg-[#111118] border-white/10' : 'bg-white border-slate-200'
-          }`}>
-            <div className="overflow-x-auto">
-              <table className="w-full text-center text-xs border-collapse">
-                <thead className={`font-mono-data uppercase border-b ${
-                  isDark ? 'bg-[#161622] text-[#f0ede8] border-white/10' : 'bg-slate-100 text-slate-700 border-slate-200'
-                }`}>
-                  <tr>
-                    <th className="p-3.5 text-center min-w-[170px]">Mã Vé & Khách Hàng</th>
-                    <th className="p-3.5 text-center min-w-[180px] max-w-[240px]">Bộ Phim</th>
-                    <th className="p-3.5 text-center min-w-[120px]">Phương Thức</th>
-                    <th className="p-3.5 text-center min-w-[180px] max-w-[240px]">Lý Do Hủy Vé</th>
-                    <th className="p-3.5 text-center min-w-[110px]">Số Tiền</th>
-                    <th className="p-3.5 text-center min-w-[160px]">Mã Hoàn Tiền</th>
-                    <th className="p-3.5 text-center min-w-[130px]">Trạng Thái</th>
-                    <th className="p-3.5 text-center min-w-[140px]">Thời Điểm</th>
-                    <th className="p-3.5 text-center min-w-[120px]">Ghi Chú</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {refundLoading ? (
-                    <tr>
-                      <td colSpan={9} className="p-10 text-center text-[#a09e9a]">
-                        <div className="text-2xl animate-spin inline-block mb-2">⏳</div>
-                        <p className="font-semibold">Đang tải danh sách hoàn tiền & hủy vé...</p>
-                      </td>
-                    </tr>
-                  ) : refunds.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="p-10 text-center text-[#a09e9a]">
-                        <p className="italic">Không có bản ghi hoàn tiền hoặc hủy vé nào phù hợp với bộ lọc.</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    refunds.map((r) => (
-                      <tr key={r.id} className={`hover:bg-white/[0.02] transition-colors ${
-                        isDark ? '' : 'hover:bg-slate-50'
-                      }`}>
-                        {/* Mã Vé & Khách Hàng */}
-                        <td className="p-3.5 align-middle text-left">
-                          <div className="font-mono-data font-bold text-[#e8b84b] text-xs">
-                            {r.ticket_code || `R#${r.reservation_id}`}
-                          </div>
-                          <div className={`font-semibold text-xs mt-0.5 ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`}>
-                            {r.user_full_name || 'Khách xem phim'}
-                          </div>
-                          <div className={`text-[10px] font-mono-data mt-0.5 ${isDark ? 'text-[#6e6c68]' : 'text-slate-400'}`}>
-                            {r.user_email}
-                          </div>
-                        </td>
-
-                        {/* Bộ Phim */}
-                        <td className="p-3.5 align-middle text-center max-w-[240px]">
-                          <p className={`font-bold text-xs truncate mx-auto ${isDark ? 'text-[#f0ede8]' : 'text-slate-900'}`} title={r.movie_title || 'N/A'}>
-                            {r.movie_title || 'N/A'}
-                          </p>
-                        </td>
-
-                        {/* Phương Thức Thanh Toán */}
-                        <td className="p-3.5 align-middle text-center whitespace-nowrap">
-                          {r.payment_method === 'cash' ? (
-                            <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30 inline-flex items-center gap-1 shadow-sm">
-                              <span>💵</span>
-                              <span>Tiền mặt</span>
-                            </span>
-                          ) : (
-                            <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30 inline-flex items-center gap-1 shadow-sm">
-                              <span>💳</span>
-                              <span>VNPay</span>
-                            </span>
-                          )}
-                        </td>
-
-                        {/* Lý Do Hủy Vé */}
-                        <td className="p-3.5 align-middle text-center max-w-[240px]">
-                          <div className={`p-2 rounded-lg border text-xs leading-snug mx-auto inline-block ${
-                            isDark ? 'bg-[#161622]/80 border-white/5 text-[#f0ede8]' : 'bg-slate-100/80 border-slate-200 text-slate-800'
-                          }`} title={r.cancellation_reason || 'Tôi không còn nhu cầu xem phim nữa'}>
-                            <span className="font-semibold">{r.cancellation_reason || 'Tôi không còn nhu cầu xem phim nữa'}</span>
-                          </div>
-                        </td>
-
-                        {/* Số Tiền */}
-                        <td className="p-3.5 align-middle text-center font-mono-data font-bold text-[#e8b84b] text-sm whitespace-nowrap">
-                          {fmt(r.amount)}
-                        </td>
-
-                        {/* Mã Hoàn Tiền */}
-                        <td className="p-3.5 align-middle text-center font-mono-data">
-                          <div className={`text-xs font-semibold tracking-wide ${isDark ? 'text-[#f0ede8]' : 'text-slate-700'}`}>
-                            {r.vnp_request_id}
-                          </div>
-                        </td>
-
-                        {/* Trạng Thái */}
-                        <td className="p-3.5 align-middle text-center whitespace-nowrap">
-                          {r.status === 'manual_required' && (
-                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 inline-flex items-center gap-1">
-                              <span>⚠️</span> Cần xử lý thủ công
-                            </span>
-                          )}
-                          {r.status === 'success' && (
-                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 inline-flex items-center gap-1">
-                              <span>✓</span> Đã hoàn tiền
-                            </span>
-                          )}
-                          {r.status === 'processing' && (
-                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30 inline-flex items-center gap-1">
-                              <span>⏳</span> Đang xử lý
-                            </span>
-                          )}
-                          {r.status === 'failed' && (
-                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 inline-flex items-center gap-1">
-                              <span>❌</span> Thất bại
-                            </span>
-                          )}
-                        </td>
-
-                        {/* Thời Điểm */}
-                        <td className="p-3.5 align-middle text-center font-mono-data text-xs text-[#a09e9a] whitespace-nowrap">
-                          {new Date(r.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}{' '}
-                          {new Date(r.created_at).toLocaleDateString('vi-VN')}
-                        </td>
-
-                        {/* Ghi Chú & Thao Tác */}
-                        <td className="p-3.5 align-middle text-center whitespace-nowrap">
-                          <div className="flex items-center justify-center gap-2">
-                            {r.status === 'manual_required' && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedRefund(r)
-                                    setResolveModalOpen(true)
-                                  }}
-                                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs cursor-pointer shadow-sm"
-                                >
-                                  Đánh dấu đã chuyển khoản
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRetryRefund(r)}
-                                  className="px-2.5 py-1.5 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 font-bold text-xs cursor-pointer"
-                                >
-                                  🔄 Thử lại qua VNPay
-                                </button>
-                              </>
-                            )}
-                            {r.status === 'success' && (
-                              <span className="text-xs font-semibold text-emerald-400 italic">
-                                Đã xử lý
-                              </span>
-                            )}
-                            {(r.status === 'manual_required' || r.status === 'failed') && (
-                              <span className="text-xs font-semibold text-amber-400 italic">
-                                Chưa xử lý
-                              </span>
-                            )}
-                            {r.status === 'processing' && (
-                              <span className="text-xs font-semibold text-blue-400 italic">
-                                Đang xử lý
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        <RefundsAdminTab isDark={isDark} notify={notify} />
       )}
 
+      
       {/* TAB: REVIEWS & RATINGS MODERATION */}
       {activeTab === 'reviews' && (
         <ReviewManageTab movies={movies} notify={notify} />
       )}
 
-      {/* Manual Resolve Refund Modal Component */}
-      <RefundResolveModal
-        refund={selectedRefund}
-        isOpen={resolveModalOpen}
-        onClose={() => {
-          setResolveModalOpen(false)
-          setSelectedRefund(null)
-        }}
-        onResolve={async (refundId, note) => {
-          try {
-            await apiClient.post(`/api/v1/admin/refunds/${refundId}/resolve`, {
-              admin_note: note,
-            })
-            notify('success', `Đã đánh dấu hoàn tiền thủ công cho đơn vé #${refundId}`)
-            await fetchRefunds()
-          } catch (err: any) {
-            notify('error', err.response?.data?.detail || 'Không thể cập nhật trạng thái hoàn tiền.')
-          }
-        }}
-      />
+    
 
       {/* AUTO-SCHEDULE MODAL */}
       {autoModalOpen && (
@@ -6801,7 +8825,7 @@ export default function AdminView() {
                       {nowShowing.length > 0 && (
                         <div className="space-y-2">
                           <div className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-emerald-500 flex items-center gap-1.5 font-mono-data">
+                            <span className="font-bold text-emerald-500 flex items-center gap-1.5">
                               <PlayCircle className="w-3.5 h-3.5 shrink-0" />
                               <span>PHIM ĐANG CHIẾU ({nowShowing.length})</span>
                             </span>
@@ -6840,7 +8864,7 @@ export default function AdminView() {
                       {comingSoon.length > 0 && (
                         <div className={cn('space-y-2', nowShowing.length > 0 && ('pt-3 border-t ' + (isDark ? 'border-white/10' : 'border-slate-200')))}>
                           <div className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-amber-500 flex items-center gap-1.5 font-mono-data">
+                            <span className="font-bold text-amber-500 flex items-center gap-1.5">
                               <Calendar className="w-3.5 h-3.5 shrink-0" />
                               <span>PHIM SẮP RA MẮT ({comingSoon.length})</span>
                             </span>
@@ -6879,7 +8903,7 @@ export default function AdminView() {
                       {ended.length > 0 && (
                         <div className={cn('space-y-2 pt-3 border-t', isDark ? 'border-white/10' : 'border-slate-200')}>
                           <div className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-slate-400 flex items-center gap-1.5 font-mono-data">
+                            <span className="font-bold text-slate-400 flex items-center gap-1.5">
                               <Archive className="w-3.5 h-3.5 shrink-0" />
                               <span>PHIM ĐÃ KẾT THÚC ({ended.length})</span>
                             </span>
@@ -7163,7 +9187,7 @@ export default function AdminView() {
                             'border-b sticky top-0 font-semibold',
                             isDark ? 'border-white/10 text-[#a09e9a] bg-[#111118]' : 'border-slate-200 text-slate-600 bg-slate-100'
                           )}>
-                            <th className="py-2.5 px-3 font-mono-data w-12 text-center">STT</th>
+                            <th className="py-2.5 px-3 font-bold w-12 text-center">STT</th>
                             <th className="py-2.5 px-3 min-w-[200px]">Phim</th>
                             <th className="py-2.5 px-3 w-[130px]">Phòng Chiếu</th>
                             <th className="py-2.5 px-3 w-[150px]">Ngày Chiếu</th>
@@ -7281,7 +9305,7 @@ export default function AdminView() {
                                 <td className="py-3 px-3 font-medium">
                                   <div className={cn('font-semibold', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>{item.movie_title}</div>
                                   {item.matched_genre && (
-                                    <span className="text-[10px] text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded font-mono-data inline-flex items-center gap-1 mt-1 font-semibold">
+                                    <span className="text-[10px] text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded inline-flex items-center gap-1 mt-1 font-semibold">
                                       <Sparkles className="w-2.5 h-2.5" />
                                       <span>Thể loại: {item.matched_genre}</span>
                                     </span>

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { getDateList } from '../lib/utils'
 import { ETicketModal } from '../components/features/ticket/ETicketModal'
+import { QrCode, Home, Check, Trophy } from 'lucide-react'
 
 const BOOKING_CODE = 'CVN-' + Math.random().toString(36).slice(2, 8).toUpperCase()
 const DATES = getDateList(7)
@@ -83,17 +84,17 @@ export default function ConfirmedView() {
     <div className="max-w-[560px] mx-auto px-6 py-20 text-center">
       {/* Success icon */}
       <div
-        className="rounded-full bg-[rgba(232,184,75,0.15)] border-2 border-[#e8b84b] flex items-center justify-center mx-auto mb-7 text-3xl"
+        className="rounded-full bg-[rgba(232,184,75,0.15)] border-2 border-[#e8b84b] flex items-center justify-center mx-auto mb-7 shadow-lg shadow-amber-500/10"
         style={{ width: 72, height: 72 }}
       >
-        ✓
+        <Check className="w-10 h-10 text-[#e8b84b] stroke-[3]" />
       </div>
 
-      <h2 className="font-display text-[36px] font-black tracking-tight mb-3">
+      <h2 className={cn('font-display text-[32px] sm:text-[36px] font-black tracking-tight mb-3', isDark ? 'text-[#f0ede8]' : 'text-slate-900')}>
         Đặt vé thành công!
       </h2>
-      <p className="text-[#a09e9a] text-[15px] leading-relaxed mb-6">
-        Vé của bạn cho <strong className="text-[#f0ede8]">{movie.title}</strong> lúc{' '}
+      <p className={cn('text-[15px] leading-relaxed mb-6', isDark ? 'text-[#a09e9a]' : 'text-slate-600')}>
+        Vé của bạn cho <strong className={isDark ? 'text-[#f0ede8]' : 'text-slate-900'}>{movie.title}</strong> lúc{' '}
         <strong className="text-[#e8b84b]">{showtime.time}</strong> đã được xác nhận.
         <br />
         Mã vé đã gửi về email của bạn.
@@ -101,8 +102,8 @@ export default function ConfirmedView() {
 
       {/* Loyalty Points Earned Banner */}
       {createdReservation?.total_price && Math.floor(Number(createdReservation.total_price) / 1000) > 0 && (
-        <div className="bg-[#e8b84b]/15 border border-[#e8b84b]/40 rounded-xl p-3.5 mb-6 flex items-center justify-center gap-2 text-sm text-[#e8b84b] font-medium">
-          <span className="text-xl">🏆</span>
+        <div className="bg-[#e8b84b]/15 border border-[#e8b84b]/40 rounded-2xl p-3.5 mb-6 flex items-center justify-center gap-2.5 text-xs sm:text-sm text-[#e8b84b] font-medium shadow-sm">
+          <Trophy className="w-5 h-5 text-[#e8b84b] shrink-0" />
           <span>
             Chúc mừng! Bạn đã nhận được <strong className="font-bold">+{Math.floor(Number(createdReservation.total_price) / 1000)} điểm</strong> thành viên cho giao dịch này.
           </span>
@@ -122,15 +123,6 @@ export default function ConfirmedView() {
           <h3 className="font-display font-bold text-xl text-[#e8b84b]">
             Thông tin vé đã thanh toán
           </h3>
-
-          <button
-            type="button"
-            onClick={() => setShowQRModal(true)}
-            className="bg-[#e8b84b] hover:bg-[#f0c868] text-[#09090e] font-bold px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1 shadow-md"
-          >
-            <span>📱</span>
-            <span>Xem Vé QR</span>
-          </button>
         </div>
 
         <div className="space-y-3">
@@ -143,23 +135,24 @@ export default function ConfirmedView() {
         </div>
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex flex-col sm:flex-row gap-3">
         <button
           type="button"
           onClick={() => setShowQRModal(true)}
-          className={`flex-1 font-bold py-3.5 rounded-xl text-sm transition-all border flex items-center justify-center gap-2 cursor-pointer shadow-sm ${
+          className={`flex-1 font-bold py-3.5 rounded-xl text-xs transition-all border flex items-center justify-center gap-2 cursor-pointer shadow-sm ${
             isDark ? 'bg-white/10 hover:bg-white/20 text-[#f0ede8] border-white/10' : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300'
           }`}
         >
-          <span>📱</span>
+          <QrCode className="w-4 h-4 text-[#e8b84b]" />
           <span>Mở Vé QR Vào Cổng</span>
         </button>
 
         <button
           onClick={handleReset}
-          className="flex-1 bg-[#e8b84b] text-[#09090e] border-0 rounded-xl py-3.5 text-sm font-bold cursor-pointer hover:bg-[#f5c759] hover:shadow-[0_8px_30px_rgba(232,184,75,0.4)] transition-all"
+          className="flex-1 bg-[#e8b84b] text-[#09090e] border-0 rounded-xl py-3.5 text-xs font-black cursor-pointer hover:bg-[#f5c759] hover:shadow-[0_8px_30px_rgba(232,184,75,0.4)] transition-all flex items-center justify-center gap-2"
         >
-          Quay lại →
+          <Home className="w-4 h-4" />
+          <span>Quay lại Trang Chủ</span>
         </button>
       </div>
 

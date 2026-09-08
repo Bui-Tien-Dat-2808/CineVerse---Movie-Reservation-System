@@ -22,9 +22,11 @@ import {
   ChevronDown,
   ChevronUp,
   Building2,
+  MapPin,
   Tag,
   ShieldCheck,
 } from 'lucide-react'
+import { CINEVERSE_CINEMAS, type CinemaLocation } from '../constants/cinemas'
 import { useBooking } from '../context/BookingContext'
 import { useAuth } from '../context/AuthContext'
 import { useMovie } from '../hooks/useMovies'
@@ -74,6 +76,11 @@ export default function CineVerseMovieView() {
   const synopsisRef = useRef<HTMLParagraphElement>(null)
   const [needsExpandButton, setNeedsExpandButton] = useState(false)
   const [holdError, setHoldError] = useState<string | null>(null)
+  const [selectedCinemaId, setSelectedCinemaId] = useState<string>(CINEVERSE_CINEMAS[0].id)
+  const currentCinema = useMemo(
+    () => CINEVERSE_CINEMAS.find((c) => c.id === selectedCinemaId) || CINEVERSE_CINEMAS[0],
+    [selectedCinemaId],
+  )
 
   const {
     inQueue,
@@ -716,9 +723,75 @@ export default function CineVerseMovieView() {
             {/* 2. BOOKING WORKFLOW (2-COLUMN GRID: SHOWTIME PICKER & SEAT MAP SIDE-BY-SIDE) */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
 
-              {/* LEFT COLUMN: Date Picker + Showtime Picker + Selected Tickets + Total & Buy */}
+              {/* LEFT COLUMN: Cinema Picker + Date Picker + Showtime Picker + Selected Tickets + Total & Buy */}
               <div className="lg:col-span-5 flex flex-col justify-between space-y-6">
                 
+                {/* Cinema / Theater Selector Section */}
+                <section aria-label="Chọn cụm rạp chiếu" className={cn(
+                  'p-5 rounded-2xl border space-y-3',
+                  isDark ? 'bg-[#12121c] border-white/10 shadow-lg' : 'bg-slate-50 border-slate-200'
+                )}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-amber-500" />
+                      <h2 className={cn('font-display text-xs font-bold uppercase tracking-wider', isDark ? 'text-amber-400' : 'text-amber-800')}>
+                        Chọn cụm rạp
+                      </h2>
+                    </div>
+                    <span className={cn('text-[11px] font-mono-data font-bold', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                      {currentCinema.city}
+                    </span>
+                  </div>
+
+                  {/* Cinema Selection Dropdown */}
+                  <div className="relative">
+                    <select
+                      id="movie-cinema-select"
+                      value={selectedCinemaId}
+                      onChange={(e) => setSelectedCinemaId(e.target.value)}
+                      className={cn(
+                        'w-full py-2.5 pl-3 pr-8 rounded-xl text-xs font-semibold appearance-none outline-none border transition-all cursor-pointer',
+                        isDark
+                          ? 'bg-[#181824] border-white/10 text-[#f0ede8] focus:border-amber-500'
+                          : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500 shadow-xs'
+                      )}
+                    >
+                      {CINEVERSE_CINEMAS.map((cinema) => (
+                        <option key={cinema.id} value={cinema.id}>
+                          {cinema.name} ({cinema.city})
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className={cn(
+                        'w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60',
+                        isDark ? 'text-white' : 'text-slate-700'
+                      )}
+                    />
+                  </div>
+
+                  {/* Cinema Address & Technologies Meta */}
+                  <div className="flex items-center justify-between gap-2 pt-1 text-[11px]">
+                    <span className={cn('flex items-center gap-1 truncate', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                      <MapPin className="w-3 h-3 text-amber-500 shrink-0" />
+                      <span className="truncate">{currentCinema.address}</span>
+                    </span>
+                    <div className="flex gap-1 shrink-0">
+                      {currentCinema.features.slice(0, 2).map((feat) => (
+                        <span
+                          key={feat}
+                          className={cn(
+                            'px-1.5 py-0.5 rounded text-[9px] font-mono-data font-bold uppercase border',
+                            isDark ? 'bg-white/5 border-white/10 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-800'
+                          )}
+                        >
+                          {feat}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
                 {/* Date Selector Header Bar */}
                 <section aria-label="Chọn ngày chiếu" className={cn(
                   'p-5 rounded-2xl border space-y-3',
@@ -861,9 +934,28 @@ export default function CineVerseMovieView() {
 
                                   <span className="font-mono-data text-sm sm:text-base font-extrabold">{st.time}</span>
 
-                                  <span className={cn('text-[10px] opacity-80 font-mono-data mt-0.5', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
-                                    {fmt(st.price)}
-                                  </span>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className={cn('text-[10px] opacity-80 font-mono-data', isDark ? 'text-[#a09e9a]' : 'text-slate-500')}>
+                                      {fmt(st.price)}
+                                    </span>
+                                  </div>
+
+                                  {st.availableSeats !== undefined && (
+                                    <span
+                                      className={cn(
+                                        'text-[9px] font-mono-data px-1.5 py-0.5 rounded mt-1 font-semibold border',
+                                        st.availableSeats <= 8
+                                          ? 'bg-rose-500/15 border-rose-500/30 text-rose-400 font-bold'
+                                          : isDark
+                                          ? 'bg-white/5 border-white/10 text-emerald-400'
+                                          : 'bg-emerald-50 border-emerald-200 text-emerald-700',
+                                      )}
+                                    >
+                                      {st.availableSeats <= 8
+                                        ? `Sắp hết (${st.availableSeats} chỗ)`
+                                        : `Còn ${st.availableSeats} chỗ`}
+                                    </span>
+                                  )}
                                 </button>
                               )
                             })}
@@ -1101,6 +1193,41 @@ export default function CineVerseMovieView() {
           }
         }}
       />
+      {/* Mobile / Tablet Sticky Booking Summary Bar (Cố định đáy màn hình, bấm 1 chạm tiện lợi) */}
+      {state.selectedShowtime && selectedTicketsList.length > 0 && (
+        <div
+          className={cn(
+            'fixed bottom-0 left-0 right-0 z-40 p-3.5 sm:p-4 lg:hidden border-t backdrop-blur-xl transition-all animate-slide-up shadow-2xl',
+            isDark
+              ? 'bg-[#0e0e16]/95 border-white/10 text-[#f0ede8]'
+              : 'bg-white/95 border-slate-200 text-slate-900',
+          )}
+        >
+          <div className="max-w-[640px] mx-auto flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 text-xs font-mono-data font-bold">
+                <span className="text-amber-500">{selectedTicketsList.length} vé:</span>
+                <span className="truncate max-w-[140px] sm:max-w-[220px]">
+                  {selectedTicketsList.map((t) => `${t.rowLabel}${t.colNumber}`).join(', ')}
+                </span>
+              </div>
+              <div className="font-display font-black text-lg text-emerald-400">
+                {fmt(currentTotalPrice)}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              id="mobile-buy-tickets-btn"
+              onClick={handleContinueToCheckout}
+              className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg flex items-center gap-2 shrink-0 cursor-pointer"
+            >
+              <span>Mua vé ngay</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

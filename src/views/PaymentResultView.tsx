@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   RotateCcw,
   Home,
-  Compass,
   Ticket,
   Film,
   Building2,
@@ -210,29 +209,15 @@ export default function PaymentResultView() {
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-3 pt-2">
-            <button
-              type="button"
-              onClick={() => navigate('/rap-chieu')}
-              className={cn(
-                'w-full py-3.5 rounded-xl text-xs font-black transition-all cursor-pointer border shadow-sm flex items-center justify-center gap-1.5',
-                isDark
-                  ? 'bg-white/5 hover:bg-white/10 text-[#f0ede8] border-white/10'
-                  : 'bg-slate-200 hover:bg-slate-300 text-slate-900 border-slate-300 font-bold'
-              )}
-            >
-              <Compass className="w-3.5 h-3.5" />
-              <span>Khám phá rạp khác</span>
-            </button>
-
+          {/* Single Action Button */}
+          <div className="pt-2">
             <button
               type="button"
               onClick={() => navigate('/')}
-              className="w-full py-3.5 rounded-xl text-xs font-black transition-all cursor-pointer bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-500 shadow-md flex items-center justify-center gap-1.5"
+              className="w-full py-3.5 rounded-xl text-xs font-black transition-all cursor-pointer bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-500 shadow-md flex items-center justify-center gap-2"
             >
-              <Home className="w-3.5 h-3.5" />
-              <span>Quay lại</span>
+              <Home className="w-4 h-4" />
+              <span>Quay lại Trang Chủ</span>
             </button>
           </div>
         </div>

@@ -93,15 +93,21 @@ export default function MovieCard({ movie, onSelect }: MovieCardProps) {
             <Clock className="w-3 h-3 opacity-70" />
             <span>{movie.duration}</span>
           </span>
-          <span className="flex items-center gap-1 font-mono-data text-[#e8b84b] font-bold">
-            <Star className="w-3 h-3 fill-[#e8b84b] text-[#e8b84b]" />
-            <span>{movie.avg_rating ? movie.avg_rating.toFixed(1) : (movie.score || '5.0')}</span>
-            {movie.total_reviews !== undefined && movie.total_reviews > 0 && (
-              <span className={cn('text-[10px] font-normal', isDark ? 'text-[#a09e9a]' : 'text-slate-400')}>
-                ({movie.total_reviews})
-              </span>
-            )}
-          </span>
+          {movie.avg_rating && movie.avg_rating > 0 ? (
+            <span className="flex items-center gap-1 font-mono-data text-[#e8b84b] font-bold">
+              <Star className="w-3 h-3 fill-[#e8b84b] text-[#e8b84b]" />
+              <span>{movie.avg_rating.toFixed(1)}</span>
+              {movie.total_reviews !== undefined && movie.total_reviews > 0 && (
+                <span className={cn('text-[10px] font-normal', isDark ? 'text-[#a09e9a]' : 'text-slate-400')}>
+                  ({movie.total_reviews})
+                </span>
+              )}
+            </span>
+          ) : (
+            <span className={cn('text-[11px] font-medium italic', isDark ? 'text-[#6e6c68]' : 'text-slate-400')}>
+              Chưa có đánh giá
+            </span>
+          )}
         </div>
       </div>
     </div>

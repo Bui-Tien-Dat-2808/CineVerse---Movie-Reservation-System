@@ -32,3 +32,8 @@ export async function adjustUserPoints(payload: { user_id: number; points: numbe
   const { data } = await apiClient.post('/api/v1/loyalty/adjust', payload)
   return data
 }
+
+export async function fetchUserLoyaltyDetail(userId: number): Promise<LoyaltyStatus> {
+  const { data } = await apiClient.get<LoyaltyStatus>(`/api/v1/loyalty/users/${userId}`)
+  return data
+}

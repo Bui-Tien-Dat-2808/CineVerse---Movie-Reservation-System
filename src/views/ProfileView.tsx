@@ -63,7 +63,7 @@ export default function ProfileView() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab') as 'profile' | 'history' | 'transactions' | 'vouchers' | 'loyalty' | null
 
-  const { user, isAuthenticated, logout, updateUserProfile } = useAuth()
+  const { user, isAuthenticated, isAuthLoading, logout, updateUserProfile } = useAuth()
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
@@ -154,6 +154,10 @@ export default function ProfileView() {
       setTxEndDate(formatDate(now))
     }
   }
+
+  useEffect(() => {
+    setTxPage(1)
+  }, [txStartDate, txEndDate, txQuickPreset])
 
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault()
@@ -363,13 +367,24 @@ const CANCELLATION_REASONS = [
     }
   }
 
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+          <span className="font-mono-data text-xs text-[#a09e9a] tracking-wider uppercase">Đang tải thông tin...</span>
+        </div>
+      </div>
+    )
+  }
+
   if (!isAuthenticated) {
     return (
       <div className="max-w-[1280px] mx-auto px-6 py-20 text-center">
         <p className="text-[#a09e9a] mb-4">Vui lòng đăng nhập để xem thông tin cá nhân và lịch sử đặt vé.</p>
         <button
           onClick={() => navigate('/')}
-          className="bg-[#e8b84b] text-[#09090e] px-6 py-2.5 rounded font-bold text-xs"
+          className="bg-[#e8b84b] text-[#09090e] px-6 py-2.5 rounded-xl font-bold text-xs cursor-pointer"
         >
           Trở về Trang chủ
         </button>
@@ -381,7 +396,7 @@ const CANCELLATION_REASONS = [
     r.payment_method === 'cash' ||
     (typeof r.notes === 'string' && r.notes.toLowerCase().includes('tiền mặt'))
 
-  const filteredReservations = reservations.filter((r) => {
+  const filteredReservations = (reservations || []).filter((r) => {
     if (historyFilter === 'confirmed') return r.status === 'confirmed' || isCashReservation(r)
     if (historyFilter === 'cancelled') return r.status === 'cancelled'
     if (historyFilter === 'pending') return r.status === 'pending' && !isCashReservation(r)
@@ -414,10 +429,6 @@ const CANCELLATION_REASONS = [
     (txPage - 1) * txPageSize,
     txPage * txPageSize
   )
-
-  useEffect(() => {
-    setTxPage(1)
-  }, [txStartDate, txEndDate, txQuickPreset])
 
   return (
     <div className="max-w-[1000px] mx-auto px-6 py-10 pb-20">
@@ -893,7 +904,7 @@ const CANCELLATION_REASONS = [
           ) : (
             <div className="space-y-4">
               {filteredReservations.map((item) => {
-                const seatsList = item.reservation_seats
+                const seatsList = (item.reservation_seats || [])
                   .map((s) => s.seat_label ?? `R${s.row_label}C${s.col_number}`)
                   .join(', ')
 
@@ -994,11 +1005,22 @@ const CANCELLATION_REASONS = [
                                   : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
                               }`}
                             >
-                              {item.refund_status === 'success'
-                                ? '✓ Đã hoàn tiền'
-                                : item.refund_status === 'failed'
-                                ? '⚠️ Hoàn tiền thất bại'
-                                : '⏳ Đang xử lý hoàn tiền'}
+                              {item.refund_status === 'success' ? (
+                                <>
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  <span>Đã hoàn tiền</span>
+                                </>
+                              ) : item.refund_status === 'failed' ? (
+                                <>
+                                  <AlertCircle className="w-3 h-3" />
+                                  <span>Hoàn tiền thất bại</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Clock className="w-3 h-3" />
+                                  <span>Đang xử lý hoàn tiền</span>
+                                </>
+                              )}
                             </span>
                           )}
 
@@ -1349,13 +1371,13 @@ const CANCELLATION_REASONS = [
                     <span>Lịch sử tích lũy & giao dịch điểm</span>
                   </h4>
 
-                  {loyaltyData.transactions.length === 0 ? (
+                  {(!loyaltyData.transactions || loyaltyData.transactions.length === 0) ? (
                     <div className={`rounded-2xl border py-10 text-center text-xs ${isDark ? 'text-[#a09e9a] border-white/10 bg-[#09090e]' : 'text-slate-500 border-slate-200 bg-slate-50'}`}>
                       Chưa có giao dịch điểm nào được ghi nhận.
                     </div>
                   ) : (
                     <div className="space-y-2.5">
-                      {loyaltyData.transactions.map((tx) => (
+                      {(loyaltyData.transactions || []).map((tx) => (
                         <div
                           key={tx.id}
                           className={`rounded-2xl border p-4 flex items-center justify-between transition-all duration-150 ${

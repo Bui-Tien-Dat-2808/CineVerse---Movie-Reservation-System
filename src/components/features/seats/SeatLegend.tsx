@@ -9,10 +9,11 @@ export default function SeatLegend({ seats }: SeatLegendProps) {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
-  const hasStandard = !seats || seats.length === 0 || seats.some((s) => !s.seat_type || s.seat_type.toLowerCase() === 'standard')
-  const hasVip = !seats || seats.length === 0 || seats.some((s) => s.seat_type?.toLowerCase() === 'vip')
-  const hasCouple = !seats || seats.length === 0 || seats.some((s) => s.seat_type?.toLowerCase() === 'couple')
-  const hasKids = !seats || seats.length === 0 || seats.some((s) => s.seat_type?.toLowerCase() === 'kids')
+  const hasSeats = Boolean(seats && seats.length > 0)
+  const hasStandard = hasSeats ? seats!.some((s) => !s.seat_type || s.seat_type.toLowerCase() === 'standard') : true
+  const hasVip = Boolean(hasSeats && seats!.some((s) => s.seat_type?.toLowerCase() === 'vip'))
+  const hasCouple = Boolean(hasSeats && seats!.some((s) => s.seat_type?.toLowerCase() === 'couple'))
+  const hasKids = Boolean(hasSeats && seats!.some((s) => s.seat_type?.toLowerCase() === 'kids'))
 
   const items: { bg: string; border: string; label: string; show: boolean }[] = [
     {
@@ -30,13 +31,13 @@ export default function SeatLegend({ seats }: SeatLegendProps) {
     {
       bg: isDark ? 'rgba(236,72,153,0.15)' : '#fce7f3',
       border: isDark ? 'rgba(236,72,153,0.5)' : '#f472b6',
-      label: 'Ghế đôi (💑)',
+      label: 'Ghế đôi (Sweetbox)',
       show: hasCouple,
     },
     {
       bg: isDark ? 'rgba(20,184,166,0.15)' : '#ccfbf1',
       border: isDark ? 'rgba(20,184,166,0.5)' : '#2dd4bf',
-      label: 'Ghế Trẻ em (🎈)',
+      label: 'Ghế trẻ em',
       show: hasKids,
     },
     {

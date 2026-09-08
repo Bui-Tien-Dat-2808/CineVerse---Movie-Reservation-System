@@ -4,6 +4,10 @@ import {
   ChevronRight,
   ArrowRight,
   Sparkles,
+  Play,
+  X,
+  Star,
+  Film,
 } from 'lucide-react'
 import { useTheme } from '../../../context/ThemeContext'
 import type { Movie } from '../../../types'
@@ -16,14 +20,22 @@ interface HeroBannerProps {
 
 const SLIDE_INTERVAL_MS = 5000 // tự động lướt sau 5 giây
 
-function buildTitle(title: string) {
-  const words = title.trim().split(' ')
-  if (words.length <= 2) {
-    return { first: '', last: title }
+
+function getYouTubeEmbedUrl(url?: string): string | null {
+  if (!url) return null
+  try {
+    if (url.includes('youtube.com/embed/')) {
+      return url.includes('autoplay') ? url : `${url}?autoplay=1&rel=0`
+    }
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/
+    const match = url.match(regExp)
+    if (match && match[2].length === 11) {
+      return `https://www.youtube.com/embed/${match[2]}?autoplay=1&rel=0`
+    }
+    return url
+  } catch {
+    return url
   }
-  const firstPart = words.slice(0, -2).join(' ')
-  const lastPart = words.slice(-2).join(' ')
-  return { first: firstPart, last: lastPart }
 }
 
 export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
@@ -32,6 +44,7 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
 
   const [current, setCurrent] = useState(0)
   const [isTransitioning, setIsTransitioning] = useState(false)
+  const [isTrailerOpen, setIsTrailerOpen] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const goTo = useCallback(
@@ -51,28 +64,31 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
     goTo(next)
   }, [current, movies.length, goTo])
 
-  // Auto-slide
+  // Auto-slide (pause when trailer modal is open)
   useEffect(() => {
-    if (movies.length <= 1) return
+    if (movies.length <= 1 || isTrailerOpen) return
     timerRef.current = setInterval(goNext, SLIDE_INTERVAL_MS)
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [goNext, movies.length])
+  }, [goNext, movies.length, isTrailerOpen])
 
   function handleDotClick(index: number) {
     if (timerRef.current) clearInterval(timerRef.current)
     goTo(index)
-    timerRef.current = setInterval(goNext, SLIDE_INTERVAL_MS)
+    if (!isTrailerOpen) {
+      timerRef.current = setInterval(goNext, SLIDE_INTERVAL_MS)
+    }
   }
 
   if (!movies.length) return null
 
   const movie = movies[current]
-  const { first, last } = buildTitle(movie.title)
   const posterImg = movie.img.startsWith('https://image.tmdb.org')
     ? movie.img
     : 'https://images.unsplash.com/photo-1534996858221-380b92700493?w=800&h=1200&fit=crop&auto=format'
+
+  const trailerEmbedUrl = getYouTubeEmbedUrl(movie.trailerUrl)
 
   return (
     <div
@@ -123,8 +139,8 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
         <div className="max-w-[1280px] mx-auto px-6 w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           {/* Left Column: Movie Info & CTAs */}
           <div className="lg:col-span-7 z-10">
-            {/* Genre · Duration */}
-            <div className="flex gap-3 items-center mb-4 flex-wrap">
+            {/* Badges row: Phim đang chiếu + Age Rating + Actual Rating */}
+            <div className="flex gap-2.5 items-center mb-4 flex-wrap">
               <span
                 className={cn(
                   'text-xs font-mono-data uppercase tracking-wider rounded px-2.5 py-1 font-bold border',
@@ -135,6 +151,27 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
               >
                 Phim đang chiếu
               </span>
+
+              {movie.rating && movie.rating !== 'N/A' && (
+                <span className="text-xs font-mono-data uppercase tracking-wider rounded px-2.5 py-1 font-black bg-[#e8b84b] text-[#09090e] shadow-sm">
+                  {movie.rating}
+                </span>
+              )}
+
+              {movie.avg_rating && movie.avg_rating > 0 && (
+                <span
+                  className={cn(
+                    'text-xs font-mono-data rounded px-2.5 py-1 font-bold border flex items-center gap-1.5',
+                    isLight
+                      ? 'bg-white/80 border-slate-300 text-amber-700 shadow-sm'
+                      : 'bg-white/5 border-white/15 text-[#e8b84b]',
+                  )}
+                >
+                  <Star className="w-3.5 h-3.5 fill-[#e8b84b] text-[#e8b84b]" />
+                  <span>{movie.avg_rating.toFixed(1)} / 5</span>
+                </span>
+              )}
+
               <span
                 className={cn(
                   'text-[13px]',
@@ -143,6 +180,7 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
               >
                 {movie.genre.join(' · ')}
               </span>
+
               {movie.duration && movie.duration !== 'N/A' && (
                 <>
                   <span className={isLight ? 'text-slate-400' : 'text-white/25'}>·</span>
@@ -158,20 +196,15 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
               )}
             </div>
 
-            {/* Title */}
+            {/* Title - Đồng nhất 1 khối màu chuẩn điện ảnh, ngắt dòng tự nhiên */}
             <h1
-              className="font-display font-black leading-[1.05] mb-5 tracking-tight"
-              style={{ fontSize: 'clamp(36px, 5vw, 68px)' }}
-            >
-              {first && (
-                <>
-                  <span className={isLight ? 'text-slate-900' : 'text-[#f0ede8]'}>{first}</span>
-                  <br />
-                </>
+              className={cn(
+                'font-display font-black leading-[1.08] mb-5 tracking-tight max-w-[620px]',
+                isLight ? 'text-slate-900' : 'text-[#f0ede8]',
               )}
-              <em className={cn('not-italic', isLight ? 'text-amber-600' : 'text-[#e8b84b]')}>
-                {last}
-              </em>
+              style={{ fontSize: 'clamp(36px, 5vw, 64px)' }}
+            >
+              {movie.title}
             </h1>
 
             {/* Synopsis */}
@@ -186,14 +219,14 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
               </p>
             )}
 
-            {/* CTA Buttons */}
-            <div className="flex gap-3">
+            {/* CTA Buttons: Đặt vé ngay & Xem Trailer (Hai chức năng hoàn toàn khác nhau) */}
+            <div className="flex gap-3 flex-wrap items-center">
               <button
                 id="hero-book-btn"
                 type="button"
                 onClick={() => onBookNow(movie)}
                 className={cn(
-                  'rounded-xl px-8 py-3.5 text-sm font-black cursor-pointer tracking-wide transition-all duration-200 hover:-translate-y-0.5 shadow-lg flex items-center gap-2',
+                  'rounded-xl px-7 py-3.5 text-sm font-black cursor-pointer tracking-wide transition-all duration-200 hover:-translate-y-0.5 shadow-lg flex items-center gap-2',
                   isLight
                     ? 'bg-amber-500 text-white hover:bg-amber-600 shadow-amber-500/25'
                     : 'bg-[#e8b84b] text-[#09090e] hover:shadow-[0_8px_24px_rgba(232,184,75,0.4)]',
@@ -201,6 +234,21 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
               >
                 <span>Đặt vé ngay</span>
                 <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <button
+                id="hero-trailer-btn"
+                type="button"
+                onClick={() => setIsTrailerOpen(true)}
+                className={cn(
+                  'rounded-xl px-6 py-3.5 text-sm font-bold cursor-pointer tracking-wide transition-all duration-200 border flex items-center gap-2 hover:-translate-y-0.5',
+                  isLight
+                    ? 'bg-white/80 hover:bg-white text-slate-800 border-slate-300 shadow-sm'
+                    : 'bg-white/10 hover:bg-white/20 text-white border-white/15 shadow-md',
+                )}
+              >
+                <Play className="w-4 h-4 fill-current opacity-80" />
+                <span>Xem Trailer</span>
               </button>
             </div>
           </div>
@@ -349,6 +397,72 @@ export default function HeroBanner({ movies, onBookNow }: HeroBannerProps) {
           >
             <ChevronRight className="w-4 h-4" />
           </button>
+        </div>
+      )}
+
+      {/* Centered Trailer Modal (Chuẩn 16:9, Căn giữa 100%, Phù hợp cả 2 chế độ sáng/tối) */}
+      {isTrailerOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 bg-black/85 backdrop-blur-md animate-fade-in"
+          onClick={() => setIsTrailerOpen(false)}
+        >
+          <div
+            className={cn(
+              'relative w-full max-w-4xl rounded-2xl overflow-hidden border shadow-2xl transition-all',
+              isLight ? 'bg-white border-slate-200' : 'bg-[#111118] border-white/20',
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div
+              className={cn(
+                'flex items-center justify-between px-5 py-3.5 border-b',
+                isLight ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-[#161622]',
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <Play className="w-4 h-4 text-[#e8b84b] fill-current" />
+                <h3
+                  className={cn(
+                    'font-display font-bold text-sm truncate max-w-[400px] md:max-w-[600px]',
+                    isLight ? 'text-slate-900' : 'text-white',
+                  )}
+                >
+                  Trailer Chính Thức: {movie.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTrailerOpen(false)}
+                className={cn(
+                  'p-1.5 rounded-lg transition-colors cursor-pointer',
+                  isLight ? 'text-slate-600 hover:bg-slate-200' : 'text-white/80 hover:bg-white/10',
+                )}
+                aria-label="Đóng trailer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 16:9 Video Area */}
+            <div className="relative aspect-video w-full bg-black">
+              {trailerEmbedUrl ? (
+                <iframe
+                  src={trailerEmbedUrl}
+                  title={`Trailer ${movie.title}`}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="w-full h-full border-0"
+                />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-white/70 p-6 text-center">
+                  <Film className="w-12 h-12 mb-3 text-amber-500/80" />
+                  <p className="font-semibold text-sm">Trailer chính thức đang được cập nhật</p>
+                  <p className="text-xs text-white/40 mt-1">Vui lòng quay lại sau</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

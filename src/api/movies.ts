@@ -66,7 +66,7 @@ export function mapMovieItem(m: MovieListItem): Movie {
       ? `${Math.floor(m.duration_minutes / 60)}h ${m.duration_minutes % 60}m`
       : '1h 45m',
     rating: m.rating && m.rating !== 'N/A' ? m.rating : '',
-    score: m.avg_rating ? m.avg_rating.toFixed(1) : (m.total_reviews ? '5.0' : '8.5'),
+    score: m.avg_rating && m.avg_rating > 0 ? m.avg_rating.toFixed(1) : '',
     avg_rating: m.avg_rating,
     total_reviews: m.total_reviews ?? 0,
     year: m.release_date ? new Date(m.release_date).getFullYear() : 2026,

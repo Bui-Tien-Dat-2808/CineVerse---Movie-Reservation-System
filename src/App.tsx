@@ -1,4 +1,4 @@
-import { useEffect, lazy, Suspense } from 'react'
+import React, { useEffect, lazy, Suspense, Component, type ErrorInfo, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { BookingProvider } from './context/BookingContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -7,6 +7,75 @@ import Footer from './components/layout/Footer'
 import AuthModal from './components/features/auth/AuthModal'
 import HomeView from './views/HomeView'
 import { ThemeProvider } from './context/ThemeContext'
+
+interface ErrorBoundaryProps {
+  children: ReactNode
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean
+  error: Error | null
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('CineVerse App ErrorBoundary caught error:', error, errorInfo)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#09090e] text-[#f0ede8] flex items-center justify-center p-6">
+          <div className="max-w-md w-full p-8 rounded-2xl border border-white/10 bg-[#111118] text-center space-y-4 shadow-2xl">
+            <div className="w-12 h-12 mx-auto rounded-xl bg-amber-500/10 text-[#e8b84b] flex items-center justify-center font-bold text-xl">
+              !
+            </div>
+            <h2 className="font-display font-bold text-lg text-white">Đã xảy ra lỗi tải giao diện</h2>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Hệ thống đã ghi nhận sự cố. Vui lòng nhấn nút bên dưới để tải lại trang hoặc quay lại trang chủ.
+            </p>
+            {this.state.error?.message && (
+              <div className="p-3 rounded-lg bg-black/40 border border-white/5 text-[11px] font-mono-data text-rose-400 text-left overflow-x-auto">
+                {this.state.error.message}
+              </div>
+            )}
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="flex-1 py-2.5 bg-[#e8b84b] hover:bg-[#d9a738] text-[#09090e] font-bold text-xs rounded-xl cursor-pointer transition-colors"
+              >
+                Tải lại trang
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  this.setState({ hasError: false, error: null })
+                  window.location.href = '/admin?tab=rooms'
+                }}
+                className="py-2.5 px-4 bg-white/5 hover:bg-white/10 text-white font-medium text-xs rounded-xl border border-white/10 cursor-pointer transition-colors"
+              >
+                Thử lại
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
+}
+
 
 // Lazy-loaded routes for code splitting
 const DetailView = lazy(() => import('./views/DetailView'))
@@ -36,7 +105,9 @@ export default function App() {
       <ThemeProvider>
         <AuthProvider>
           <BookingProvider>
-            <AppShell />
+            <ErrorBoundary>
+              <AppShell />
+            </ErrorBoundary>
           </BookingProvider>
         </AuthProvider>
       </ThemeProvider>

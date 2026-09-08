@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useBooking } from '../context/BookingContext'
 import { useNowShowingMovies } from '../hooks/useMovies'
 import type { Movie } from '../types'
+import { AlertCircle } from 'lucide-react'
 import HeroBanner from '../components/features/home/HeroBanner'
 import SearchBar from '../components/features/home/SearchBar'
 import MovieGrid from '../components/features/home/MovieGrid'
@@ -46,8 +47,9 @@ export default function HomeView() {
 
       {isError && (
         <div className="max-w-[1280px] mx-auto px-6 py-8 text-center">
-          <div className="bg-[rgba(192,57,43,0.1)] border border-[rgba(192,57,43,0.3)] text-[#e07060] rounded-xl p-6 text-xs font-mono-data inline-block">
-            ⚠ Không thể tải danh sách phim từ máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.
+          <div className="bg-[rgba(192,57,43,0.1)] border border-[rgba(192,57,43,0.3)] text-[#e07060] rounded-xl p-4 text-xs font-mono-data inline-flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-[#e07060]" />
+            <span>Không thể tải danh sách phim từ máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.</span>
           </div>
         </div>
       )}

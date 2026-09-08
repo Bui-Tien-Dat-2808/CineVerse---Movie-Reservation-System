@@ -114,6 +114,7 @@ export default function CheckoutView() {
   const HOLD_DURATION_SECONDS = 900 // 15 minutes hold window synchronized with backend
 
   // Countdown timer state persisted across page reloads
+  const [isTimeoutModalOpen, setIsTimeoutModalOpen] = useState(false)
   const [timeLeft, setTimeLeft] = useState<number>(() => {
     if (!showtime) return HOLD_DURATION_SECONDS
     const key = `cineverse_hold_start_${showtime.id}`
@@ -139,10 +140,10 @@ export default function CheckoutView() {
       return
     }
 
-    if (!movie || !showtime || state.selectedSeats.size === 0) {
+    if (!isTimeoutModalOpen && (!movie || !showtime || state.selectedSeats.size === 0)) {
       navigate(movie ? `/movie/${movie.id}` : '/', { replace: true })
     }
-  }, [isAuthenticated, isAuthLoading, movie, showtime, state.selectedSeats, navigate, openAuthModal])
+  }, [isAuthenticated, isAuthLoading, movie, showtime, state.selectedSeats, navigate, openAuthModal, isTimeoutModalOpen])
 
   // Countdown timer effect
   useEffect(() => {
@@ -161,17 +162,48 @@ export default function CheckoutView() {
     return () => clearInterval(timer)
   }, [timeLeft])
 
-  // Handle timeout: notify and release held seats safely
+  // Handle timeout: notify via Centered Modal and release held seats safely
   useEffect(() => {
     if (timeLeft === 0 && showtime) {
-      alert('Hết thời gian giữ chỗ! Ghế của bạn đã được giải phóng để nhường cho khách hàng khác.')
+      setIsTimeoutModalOpen(true)
       performReleaseSeats().finally(() => {
         clearSeats()
         clearConcessions()
-        navigate(movie ? `/movie/${movie.id}` : '/')
       })
     }
-  }, [timeLeft, showtime, navigate, movie?.id, clearSeats, clearConcessions, performReleaseSeats])
+  }, [timeLeft, showtime, clearSeats, clearConcessions, performReleaseSeats])
+
+  if (isTimeoutModalOpen) {
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div className={cn(
+          "max-w-md w-full rounded-2xl p-6 sm:p-8 text-center shadow-2xl border space-y-5",
+          isDark ? "bg-[#111118] border-white/10 text-[#f0ede8]" : "bg-white border-slate-200 text-slate-900"
+        )}>
+          <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-500 flex items-center justify-center mx-auto">
+            <Clock className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="font-display font-black text-xl uppercase tracking-wide">
+              Hết Thời Gian Giữ Ghế
+            </h3>
+            <p className={cn("text-xs leading-relaxed", isDark ? "text-[#a09e9a]" : "text-slate-600")}>
+              Thời gian giữ ghế tạm thời (15 phút) của bạn đã kết thúc. Các vị trí ghế đã được tự động giải phóng để nhường cho khán giả khác. Vui lòng chọn lại suất chiếu và vị trí ghế.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setIsTimeoutModalOpen(false)
+              navigate(movie ? `/movie/${movie.id}` : '/')
+            }}
+            className="w-full py-3 px-5 rounded-xl bg-[#e8b84b] hover:bg-[#d4a537] text-slate-950 font-display font-black text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-amber-500/20"
+          >
+            Quay lại chọn suất chiếu & ghế
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (!movie || !showtime || state.selectedSeats.size === 0) {
     return null
@@ -373,20 +405,42 @@ export default function CheckoutView() {
         </h2>
       </div>
 
-      {/* Seat hold countdown timer banner (Sticky on scroll) */}
+      {/* Seat hold countdown timer banner (Sticky on scroll with dynamic urgency color) */}
       <div
         className={cn(
-          'sticky top-16 sm:top-20 z-40 backdrop-blur-xl border rounded-2xl p-3.5 sm:p-4 mb-6 flex items-center justify-between shadow-2xl transition-all duration-200',
-          isDark
+          'sticky top-16 sm:top-20 z-40 backdrop-blur-xl border rounded-2xl p-3.5 sm:p-4 mb-6 flex items-center justify-between shadow-2xl transition-all duration-300',
+          timeLeft <= 120
+            ? isDark
+              ? 'bg-rose-950/90 border-rose-500/60 text-rose-300 shadow-[0_0_24px_rgba(244,63,94,0.3)] animate-pulse'
+              : 'bg-rose-50/95 border-rose-400 text-rose-950 shadow-lg animate-pulse'
+            : isDark
             ? 'bg-[#111118]/95 border-amber-500/40 text-amber-400 shadow-[0_0_20px_rgba(232,184,75,0.15)]'
             : 'bg-amber-50/95 border-amber-300 text-amber-950 font-bold shadow-lg'
         )}
       >
         <div className="flex items-center gap-2.5 text-xs sm:text-sm font-bold">
-          <Clock className="w-4 h-4 text-amber-500 animate-pulse" />
-          <span>Thời gian giữ ghế còn lại:</span>
+          <Clock
+            className={cn(
+              'w-4 h-4 animate-pulse',
+              timeLeft <= 120 ? 'text-rose-400' : 'text-amber-500',
+            )}
+          />
+          <span>
+            {timeLeft <= 120
+              ? 'Khẩn cấp! Thời gian giữ ghế sắp hết:'
+              : 'Thời gian giữ ghế còn lại:'}
+          </span>
         </div>
-        <span className={cn('font-mono-data font-black text-xl sm:text-2xl tracking-widest', isDark ? 'text-amber-400' : 'text-amber-700')}>
+        <span
+          className={cn(
+            'font-mono-data font-black text-xl sm:text-2xl tracking-widest',
+            timeLeft <= 120
+              ? 'text-rose-400 font-extrabold'
+              : isDark
+              ? 'text-amber-400'
+              : 'text-amber-700',
+          )}
+        >
           {formattedTime}
         </span>
       </div>
