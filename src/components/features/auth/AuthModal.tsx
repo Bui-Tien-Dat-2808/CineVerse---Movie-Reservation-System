@@ -612,6 +612,7 @@ export default function AuthModal() {
                     value={loginCaptchaAnswer}
                     onChange={(e) => setLoginCaptchaAnswer(e.target.value.toUpperCase())}
                     placeholder="Nhập mã..."
+                    className={`flex-1 min-w-0 h-[40px] px-2.5 border rounded-xl text-xs font-mono font-bold tracking-widest text-center uppercase outline-none transition-colors ${inputStyle}`}
                     className={`flex-1 min-w-0 h-[42px] px-2.5 border rounded-xl text-xs font-mono font-bold tracking-widest text-center uppercase outline-none transition-colors ${inputStyle}`}
                   />
                 </div>
@@ -849,6 +850,7 @@ export default function AuthModal() {
                     value={regCaptchaAnswer}
                     onChange={(e) => setRegCaptchaAnswer(e.target.value.toUpperCase())}
                     placeholder="Nhập mã..."
+                    className={`flex-1 min-w-0 h-[40px] px-2.5 border rounded-xl text-xs font-mono font-bold tracking-widest text-center uppercase outline-none transition-colors ${inputStyle}`}
                     className={`flex-1 min-w-0 h-[42px] px-2.5 border rounded-xl text-xs font-mono font-bold tracking-widest text-center uppercase outline-none transition-colors ${inputStyle}`}
                   />
                 </div>
